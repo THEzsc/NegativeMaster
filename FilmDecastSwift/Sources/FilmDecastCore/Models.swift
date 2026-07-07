@@ -80,9 +80,12 @@ public struct DevelopParams: Codable, Equatable {
     public var mode: FilmMode
     /// 白平衡方式
     public var wb: WBMode
-    /// 白平衡取样点（0~1 归一化，方向调整后、裁切前的坐标；
-    /// 非 nil 时取该点 11x11 邻域中值做中性化，优先于 wb 模式）
+    /// 白平衡取样点（旧设置兼容）：0~1 归一化，方向调整后、裁切前的坐标；
+    /// 非 nil 时取该点 11x11 邻域中值做中性化，优先于 wb 模式。
     public var wbPoint: CGPoint?
+    /// 白平衡取样框：0~1 归一化，方向调整后、裁切前的坐标；
+    /// 非 nil 时取框内平均颜色做中性化，优先于 wbPoint 与 wb 模式。
+    public var wbRect: CropRectN?
     /// 输出 gamma（>1 提亮中间调），默认 1.8
     public var gamma: Double
     /// 对比度 S 曲线强度（-1~1），默认 0.08
@@ -112,6 +115,7 @@ public struct DevelopParams: Codable, Equatable {
                 mode: FilmMode = .colorNegative,
                 wb: WBMode = .grayWorld,
                 wbPoint: CGPoint? = nil,
+                wbRect: CropRectN? = nil,
                 gamma: Double = 1.8,
                 contrast: Double = 0.08,
                 saturation: Double = 1.0,
@@ -130,6 +134,7 @@ public struct DevelopParams: Codable, Equatable {
         self.mode = mode
         self.wb = wb
         self.wbPoint = wbPoint
+        self.wbRect = wbRect
         self.gamma = gamma
         self.contrast = contrast
         self.saturation = saturation

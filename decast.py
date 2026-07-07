@@ -256,18 +256,34 @@ def unsharp_luma(P, amount, radius):
     return np.clip(P + delta[..., None], 0.0, 1.0)
 
 
-def wb_from_point(P, px, py, half=5):
-    """白点取样白平衡：取 (px,py) 周围 11x11 的每通道中值，
-    算出把该点拉中性的通道系数（clip 到 0.4~2.5）并应用到整幅。"""
+def wb_from_sample(P, rect=None, px=None, py=None, half=5):
+    """白点取样白平衡。
+
+    新版 UI 传 rect：取框选范围内每通道平均值，减少单点噪声影响。
+    旧参数文件可能只有 px/py：仍按 11x11 邻域取中值以保持兼容。
+    """
     hh, ww = P.shape[:2]
-    px = min(max(int(px), 0), ww - 1)
-    py = min(max(int(py), 0), hh - 1)
-    x0, x1 = max(0, px - half), min(ww, px + half + 1)
-    y0, y1 = max(0, py - half), min(hh, py + half + 1)
-    med = np.median(P[y0:y1, x0:x1].reshape(-1, 3), axis=0)
-    g = float(med.mean())
-    scale = np.clip(g / np.clip(med, 1e-4, None), 0.4, 2.5)
+    if rect is not None:
+        x0, y0, x1, y1 = rect
+        x0 = min(max(int(x0), 0), ww - 1)
+        x1 = min(max(int(x1), x0 + 1), ww)
+        y0 = min(max(int(y0), 0), hh - 1)
+        y1 = min(max(int(y1), y0 + 1), hh)
+        color = P[y0:y1, x0:x1].reshape(-1, 3).mean(axis=0)
+    else:
+        px = min(max(int(px), 0), ww - 1)
+        py = min(max(int(py), 0), hh - 1)
+        x0, x1 = max(0, px - half), min(ww, px + half + 1)
+        y0, y1 = max(0, py - half), min(hh, py + half + 1)
+        color = np.median(P[y0:y1, x0:x1].reshape(-1, 3), axis=0)
+    g = float(color.mean())
+    scale = np.clip(g / np.clip(color, 1e-4, None), 0.4, 2.5)
     return np.clip(P * scale.astype(P.dtype), 0.0, 1.0)
+
+
+def wb_from_point(P, px, py, half=5):
+    """兼容旧调用：取点附近 11x11 中值做白平衡。"""
+    return wb_from_sample(P, px=px, py=py, half=half)
 
 
 # --------------------------------------------------------------------------- #
@@ -688,10 +704,24 @@ def convert_base(lin, args):
     vin_rect = stats_rect if (stats_rect and not crop_rect) else None
 
     # 白点取样坐标：0~1 比例，基于「方向调整后的整幅图」（与 crop_rect 同一坐标系），
-    # 这里换算成裁切后图像里的像素坐标
+    # 这里换算成裁切后图像里的像素坐标。新版 UI 传 wb_rect，旧参数可继续传 wb_point。
+    wb_rect = getattr(args, "wb_rect", None)
     wb_point = getattr(args, "wb_point", None)
+    wb_sample_rect = None
     wb_px = None
-    if wb_point is not None and mode != "bw":
+    if wb_rect is not None and mode != "bw":
+        if isinstance(wb_rect, dict):
+            x0, y0, x1, y1 = (wb_rect.get("x0"), wb_rect.get("y0"),
+                              wb_rect.get("x1"), wb_rect.get("y1"))
+        else:
+            x0, y0, x1, y1 = wb_rect
+        x0, y0, x1, y1 = [float(v) for v in (x0, y0, x1, y1)]
+        xa = int(round(min(x0, x1) * w)) - off_x
+        xb = int(round(max(x0, x1) * w)) - off_x
+        ya = int(round(min(y0, y1) * h)) - off_y
+        yb = int(round(max(y0, y1) * h)) - off_y
+        wb_sample_rect = (xa, ya, xb, yb)
+    elif wb_point is not None and mode != "bw":
         wb_px = (int(round(float(wb_point[0]) * w)) - off_x,
                  int(round(float(wb_point[1]) * h)) - off_y)
 
@@ -773,8 +803,10 @@ def convert_base(lin, args):
 
         P = np.clip(P, 0.0, 1.0)
 
-    # 4) 白平衡：取样点优先于灰世界
-    if wb_px is not None:
+    # 4) 白平衡：框选/取样点优先于灰世界
+    if wb_sample_rect is not None:
+        P = wb_from_sample(P, rect=wb_sample_rect)
+    elif wb_px is not None:
         P = wb_from_point(P, wb_px[0], wb_px[1])
 
     if getattr(args, "_ref_cdfs", None) is not None:
@@ -784,7 +816,7 @@ def convert_base(lin, args):
     else:
         # 灰世界白平衡（在已反转的正片上做，去掉残留偏色）
         # 只用「中间调」像素估计：排除接近黑的片基/边框和过曝高光，更稳健
-        if wb_px is None and getattr(args, "wb", "gray") == "gray":
+        if wb_sample_rect is None and wb_px is None and getattr(args, "wb", "gray") == "gray":
             flat = P.reshape(-1, 3)
             lum = flat @ np.array([0.299, 0.587, 0.114], dtype=flat.dtype)
             mask = (lum > 0.15) & (lum < 0.9)
@@ -1109,6 +1141,10 @@ def main():
                     dest="wb_point",
                     help="白点取样白平衡 x,y（0~1 比例，基于方向调整后的整幅图，"
                          "与 --crop-rect 同一坐标系）；设了它就取代灰世界")
+    ap.add_argument("--wb-rect", type=parse_rect_f, default=None,
+                    dest="wb_rect",
+                    help="框选范围白平衡 x0,y0,x1,y1（0~1 比例，取平均颜色，"
+                         "优先于 --wb-point）")
     ap.add_argument("--temp", type=float, default=0.0,
                     help="色温 -100~100（>0 偏暖 R↑B↓），默认 0；"
                          "--match 模式下跳过")

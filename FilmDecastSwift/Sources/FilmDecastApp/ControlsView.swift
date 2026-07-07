@@ -88,23 +88,27 @@ struct ControlsView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                 }
-                .disabled(state.params.wbPoint != nil)
+                .disabled(state.params.wbPoint != nil || state.params.wbRect != nil)
 
                 HStack(spacing: 8) {
-                    Toggle("取白点", isOn: $state.wbPicking)
+                    Toggle("框选白点", isOn: $state.wbPicking)
                         .toggleStyle(.button)
-                        .help("开启后点击预览画面，把该处采样为中性灰")
+                        .help("开启后在预览画面拖框，把框内平均颜色采样为中性灰")
                     Button("清除白点") { state.clearWhitePoint() }
-                        .disabled(state.params.wbPoint == nil)
+                        .disabled(state.params.wbPoint == nil && state.params.wbRect == nil)
                     Spacer()
-                    if let p = state.params.wbPoint {
+                    if let r = state.params.wbRect {
+                        Text(String(format: "%.2f×%.2f", r.x1 - r.x0, r.y1 - r.y0))
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    } else if let p = state.params.wbPoint {
                         Text(String(format: "(%.2f, %.2f)", p.x, p.y))
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
                 }
-                if state.params.wbPoint != nil {
-                    Text("已设白点：优先于灰世界白平衡")
+                if state.params.wbPoint != nil || state.params.wbRect != nil {
+                    Text("已设白点取样：优先于灰世界白平衡")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -261,6 +265,14 @@ struct ControlsView: View {
                 }
                 .disabled(state.checkedFiles.isEmpty || state.isExporting)
                 .help("每张按其记忆的参数导出；没调过的用默认参数")
+
+                Button {
+                    state.applyCurrentParamsToRoll()
+                } label: {
+                    Text("当前参数套整卷").frame(maxWidth: .infinity)
+                }
+                .disabled(state.selectedFile == nil)
+                .help("有勾选则套用到勾选文件；没有勾选则套用到当前过滤列表")
 
                 if let p = state.batchProgress {
                     ProgressView(value: p)

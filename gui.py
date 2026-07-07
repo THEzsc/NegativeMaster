@@ -51,7 +51,7 @@ DEFAULTS = dict(
     wb="gray", gamma=1.8, contrast=0.08, saturation=1.0,
     denoise=0.0, rotate=0, flip="none",
     mode="color", temp=0.0, tint=0.0,
-    sharpen=0.0, sharpen_radius=2.0, wb_point=None,
+    sharpen=0.0, sharpen_radius=2.0, wb_point=None, wb_rect=None,
     # LR 风格精调
     exposure=0.0, highlights=0.0, shadows=0.0, whites=0.0, blacks=0.0,
     curve=None, curve_r=None, curve_g=None, curve_b=None,
@@ -72,7 +72,7 @@ CACHE = {"path": None, "full": None, "prev": None, "scale": 1.0,
 
 # 影响管线前半（convert_base）的参数——它们变了才重算 base 缓存
 BASE_PARAM_KEYS = ("mode", "rotate", "flip", "black_pct", "white_pct",
-                   "wb", "wb_point", "temp", "tint", "gamma", "contrast",
+                   "wb", "wb_point", "wb_rect", "temp", "tint", "gamma", "contrast",
                    "margin", "base_rect", "input_gamma")
 
 
@@ -438,6 +438,8 @@ body{margin:0;font:14px/1.5 -apple-system,"PingFang SC",sans-serif;background:va
 .h[data-h=sw]{left:calc(var(--hz)/-2);bottom:calc(var(--hz)/-2);cursor:nesw-resize}
 .h[data-h=se]{right:calc(var(--hz)/-2);bottom:calc(var(--hz)/-2);cursor:nwse-resize}
 #cropdim{position:absolute;left:0;top:-22px;font:11px monospace;color:var(--acc);background:#000a;padding:1px 5px;border-radius:3px;white-space:nowrap}
+#wbsel{position:absolute;box-sizing:border-box;border:2px solid var(--acc);background:rgba(224,162,74,.16);
+  display:none;pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
 #panel{width:340px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto}
 #panel h1{font-size:15px;margin:0;padding:14px 16px;border-bottom:1px solid var(--line)}
 details.sec{border-bottom:1px solid var(--line)}
@@ -479,6 +481,7 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
   </div>
   <div id="empty">← 右侧载入一张负片开始<br><small>支持 ARW/ARQ/CR2/NEF/TIF/JPG… · 滚轮缩放 · 双击 2x</small></div>
   <div id="imgwrap"><img id="img">
+    <div id="wbsel"></div>
     <div id="crop"><div id="cropdim"></div>
       <div class="h" data-h="nw"></div><div class="h" data-h="ne"></div>
       <div class="h" data-h="sw"></div><div class="h" data-h="se"></div>
@@ -564,10 +567,10 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
     <label class="row">色调 <span class="v" id="vtint"></span></label>
     <input type="range" id="tint" min="-100" max="100" step="1">
     <div class="btnrow" style="margin-top:8px">
-      <button class="pill" id="wbpick">取白点</button>
+      <button class="pill" id="wbpick">框选白点</button>
       <button id="wbclear">清除白点</button>
       <span class="hint" style="margin:auto 0" id="wbinfo">白点: 未设</span></div>
-    <div class="hint">开启后点击图上应为中性灰/白的位置；取样白点优先于灰世界</div>
+    <div class="hint">开启后拖框圈出应为中性灰/白的区域；取框内平均色，优先于灰世界</div>
   </div></details>
 
   <details class="sec" open><summary>裁切画幅（拖动裁切框可自由定位）</summary><div class="bd">
@@ -646,6 +649,7 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
     <div class="btnrow" style="margin-top:6px">
       <button id="savepar" style="flex:1">保存参数</button>
       <button id="reset" style="flex:1">恢复默认</button></div>
+    <button id="applyroll" style="width:100%;margin-top:6px">当前参数套整卷</button>
     <label class="row" style="margin-top:12px">批量导出（勾选的文件）</label>
     <div class="btnrow">
       <input type="text" id="batchout" placeholder="输出目录（留空=各自同目录/去色罩输出/）" style="flex:1;width:auto">
@@ -662,7 +666,7 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
 const HJ={"Content-Type":"application/json"};
 const D={crop:0,black_pct:0.5,white_pct:99.7,wb:"gray",gamma:1.8,contrast:0.08,
   saturation:1.0,denoise:0,rotate:0,flip:"none",raw_denoise:false,use_match:false,
-  mode:"color",temp:0,tint:0,sharpen:0,sharpen_radius:2.0,wb_point:null,
+  mode:"color",temp:0,tint:0,sharpen:0,sharpen_radius:2.0,wb_point:null,wb_rect:null,
   exposure:0,highlights:0,shadows:0,whites:0,blacks:0,vibrance:0,vignette:0,
   curve:null,curve_r:null,curve_g:null,curve_b:null,hsl:{}};
 const dclone=o=>JSON.parse(JSON.stringify(o));  // D 里有嵌套对象，复制要用深拷贝
@@ -687,7 +691,7 @@ function fitWrap(){
   const im=$("img"), st=$("stage");
   const a=(im.naturalWidth&&im.naturalHeight)?im.naturalWidth/im.naturalHeight:imgAspect();
   let w=st.clientWidth-24, h=w/a; if(h>st.clientHeight-24){h=st.clientHeight-24;w=h*a;}
-  const wr=$("imgwrap"); wr.style.width=w+"px"; wr.style.height=h+"px"; drawCrop();
+  const wr=$("imgwrap"); wr.style.width=w+"px"; wr.style.height=h+"px"; drawCrop(); drawWBRect();
 }
 function drawCrop(){
   const c=$("crop");
@@ -695,6 +699,20 @@ function drawCrop(){
   c.style.width=((cropN.x1-cropN.x0)*100)+"%"; c.style.height=((cropN.y1-cropN.y0)*100)+"%";
   const wh=dispWH();
   $("cropdim").textContent=Math.round((cropN.x1-cropN.x0)*wh[0])+"×"+Math.round((cropN.y1-cropN.y0)*wh[1]);
+}
+function normalizedRect(a,b,minSize=0.015){
+  let x0=clamp(Math.min(a.x,b.x),0,1), x1=clamp(Math.max(a.x,b.x),0,1);
+  let y0=clamp(Math.min(a.y,b.y),0,1), y1=clamp(Math.max(a.y,b.y),0,1);
+  if(x1-x0<minSize){const cx=(x0+x1)/2; x0=clamp(cx-minSize/2,0,1-minSize); x1=x0+minSize;}
+  if(y1-y0<minSize){const cy=(y0+y1)/2; y0=clamp(cy-minSize/2,0,1-minSize); y1=y0+minSize;}
+  return {x0:+x0.toFixed(4),y0:+y0.toFixed(4),x1:+x1.toFixed(4),y1:+y1.toFixed(4)};
+}
+function drawWBRect(rect){
+  const r=rect||P.wb_rect, el=$("wbsel");
+  if(!r){ el.style.display="none"; return; }
+  el.style.display="block";
+  el.style.left=(r.x0*100)+"%"; el.style.top=(r.y0*100)+"%";
+  el.style.width=((r.x1-r.x0)*100)+"%"; el.style.height=((r.y1-r.y0)*100)+"%";
 }
 function applyFormat(name){
   curFmt=name; aspect=FMT[name]; if(aspect&&orient==="port") aspect=1/aspect;
@@ -760,24 +778,25 @@ $("imgwrap").addEventListener("dblclick",e=>{
 $("fitbtn").onclick=resetView;
 
 // ---- 取白点 ----
-let pickWB=false;
+let pickWB=false, wbdrag=null;
 function setPickWB(on){
   pickWB=on; $("wbpick").classList.toggle("on",on);
   $("imgwrap").style.cursor=on?"crosshair":"";
+  if(!on&&wbdrag){wbdrag=null; drawWBRect();}
 }
 $("wbpick").onclick=()=>setPickWB(!pickWB);
-$("wbclear").onclick=()=>{P.wb_point=null;refl();render();};
+$("wbclear").onclick=()=>{P.wb_point=null;P.wb_rect=null;drawWBRect();refl();render();};
 
 // ---- 裁切框拖拽 / 平移 / 取白点点击 ----
 let drag=null;
 function cropDown(e){
   const wr=$("imgwrap"), r=wr.getBoundingClientRect();
   if(pickWB){
-    // 取白点：这一次点击换算成「方向后整幅」0~1 坐标，不进入裁切框拖拽
-    const nx=clamp((e.clientX-r.left)/r.width,0,1);
-    const ny=clamp((e.clientY-r.top)/r.height,0,1);
-    P.wb_point=[+nx.toFixed(4),+ny.toFixed(4)];
-    setPickWB(false); refl(); render();
+    // 框选白点：拖出一个范围，后端取范围内平均色，避免噪点/颗粒导致单点不准
+    const pt={x:clamp((e.clientX-r.left)/r.width,0,1),y:clamp((e.clientY-r.top)/r.height,0,1)};
+    wbdrag={start:pt,cur:pt};
+    drawWBRect(normalizedRect(pt,pt));
+    wr.setPointerCapture(e.pointerId);
     e.preventDefault(); return;
   }
   const onCrop=!!(e.target.dataset&&e.target.dataset.h)||!!e.target.closest("#crop");
@@ -792,6 +811,12 @@ function cropDown(e){
   wr.setPointerCapture(e.pointerId); e.preventDefault();
 }
 function cropMove(e){
+  if(wbdrag){
+    const wr=$("imgwrap"), r=wr.getBoundingClientRect();
+    wbdrag.cur={x:clamp((e.clientX-r.left)/r.width,0,1),y:clamp((e.clientY-r.top)/r.height,0,1)};
+    drawWBRect(normalizedRect(wbdrag.start,wbdrag.cur));
+    e.preventDefault(); return;
+  }
   if(!drag) return;
   if(drag.mode==="pan"){
     TX=drag.tx+(e.clientX-drag.cx); TY=drag.ty+(e.clientY-drag.cy);
@@ -814,7 +839,16 @@ function cropMove(e){
   cropN=n; drawCrop();
   render();  // 拖框实时渲染（合并请求，不排队）
 }
-function cropUp(){ if(drag){const need=drag.mode!=="pan"&&drag.moved; drag=null; if(need) render();} }
+function cropUp(){
+  if(wbdrag){
+    P.wb_rect=normalizedRect(wbdrag.start,wbdrag.cur);
+    P.wb_point=null;
+    wbdrag=null;
+    setPickWB(false); drawWBRect(); refl(); render();
+    return;
+  }
+  if(drag){const need=drag.mode!=="pan"&&drag.moved; drag=null; if(need) render();}
+}
 function cropRect(){ return [cropN.x0,cropN.y0,cropN.x1,cropN.y1]; }
 
 // ---- 曲线编辑器（单调 PCHIP，与后端算法一致）----
@@ -964,7 +998,13 @@ function refl(){
   $("ftif").classList.toggle("on",fmt==="tif");
   $("fjpg").classList.toggle("on",fmt==="jpg");
   $("qrow").style.display=fmt==="jpg"?"":"none";
-  $("wbinfo").textContent=P.wb_point?("白点: "+P.wb_point.map(v=>v.toFixed(3)).join(", ")):"白点: 未设";
+  if(P.wb_rect){
+    const wh=dispWH();
+    $("wbinfo").textContent="白点框: "+Math.round((P.wb_rect.x1-P.wb_rect.x0)*wh[0])+"×"+Math.round((P.wb_rect.y1-P.wb_rect.y0)*wh[1]);
+  }else{
+    $("wbinfo").textContent=P.wb_point?("白点: "+P.wb_point.map(v=>v.toFixed(3)).join(", ")):"白点: 未设";
+  }
+  drawWBRect();
   drawCurve(); hslSync();  // 曲线/HSL 编辑器随 P 同步（预设/记忆参数恢复时也会刷新）
 }
 
@@ -1147,10 +1187,32 @@ function loadFile(path){
 function saveSettings(path,silent){
   if(!path) return;
   fetch("/api/settings",{method:"POST",headers:HJ,
-    body:JSON.stringify({path:path,data:{P:P,cropN:cropN,curFmt:curFmt,orient:orient}})})
+    body:JSON.stringify({path:path,data:currentSettings()})})
     .then(r=>r.json()).then(d=>{ if(!silent) stat(d.ok?"✓ 参数已保存":"✗ "+d.err); });
 }
+function currentSettings(){
+  return {P:P,cropN:cropN,curFmt:curFmt,orient:orient};
+}
 $("savepar").onclick=()=>{ if(!curFile){stat("先载入图片");return;} saveSettings(curFile,false); };
+$("applyroll").onclick=async()=>{
+  if(!curFile){stat("先载入图片并调好参数");return;}
+  let items=[...document.querySelectorAll("#files .fitem")].filter(el=>el.querySelector(".fck").checked);
+  if(!items.length) items=[...document.querySelectorAll("#files .fitem")].filter(el=>el.style.display!=="none");
+  if(!items.length){stat("当前列表没有文件");return;}
+  const scope=[...document.querySelectorAll("#files .fitem")].some(el=>el.querySelector(".fck").checked)?"勾选文件":"当前列表";
+  if(!confirm("把当前完整参数套用到"+scope+"的 "+items.length+" 张？")) return;
+  const data=currentSettings();
+  let ok=0;
+  for(const el of items){
+    try{
+      const r=await fetch("/api/settings",{method:"POST",headers:HJ,
+        body:JSON.stringify({path:el.dataset.path,data:data})});
+      const d=await r.json();
+      if(d.ok) ok++;
+    }catch(_){}
+  }
+  stat("整卷参数已保存："+ok+"/"+items.length);
+};
 
 // ---- 参照匹配 ----
 $("usematch").addEventListener("mousedown",()=>{ const v=$("ref").value.trim();

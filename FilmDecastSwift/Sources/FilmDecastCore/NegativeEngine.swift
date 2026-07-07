@@ -196,10 +196,13 @@ public final class NegativeEngine {
         let isBW = params.mode == .bwNegative
         let matching = params.useMatch && matchRef != nil && !isBW
 
-        // 4) 白平衡（在已反转的正片上做；取样点优先于灰世界；
+        // 4) 白平衡（在已反转的正片上做；框选/取样点优先于灰世界；
         //    灰世界在 match 模式下跳过，同 decast.py）
         if !isBW {
-            if let point = params.wbPoint {
+            if let rect = params.wbRect {
+                applyRectWhiteBalance(&P, width: w, height: h,
+                                      rect: rect, cropRect: params.cropRect)
+            } else if let point = params.wbPoint {
                 applyPointWhiteBalance(&P, width: w, height: h,
                                        point: point, cropRect: params.cropRect)
             } else if params.wb == .grayWorld && !matching {
@@ -485,6 +488,51 @@ public final class NegativeEngine {
     // 白平衡
     // ------------------------------------------------------------------ //
 
+    /// 框选白平衡：取框内每通道平均值，把这一块拉成中性灰。
+    /// rect 是「方向后、裁切前」的归一化坐标，这里映射进裁切后的图。
+    private static func applyRectWhiteBalance(_ P: inout [Float],
+                                              width: Int, height: Int,
+                                              rect: CropRectN, cropRect: CropRectN?) {
+        var x0 = min(rect.x0, rect.x1)
+        var x1 = max(rect.x0, rect.x1)
+        var y0 = min(rect.y0, rect.y1)
+        var y1 = max(rect.y0, rect.y1)
+        if let cropRect {
+            let cx0 = min(cropRect.x0, cropRect.x1), cx1 = max(cropRect.x0, cropRect.x1)
+            let cy0 = min(cropRect.y0, cropRect.y1), cy1 = max(cropRect.y0, cropRect.y1)
+            if cx1 - cx0 > 1e-6 {
+                x0 = (x0 - cx0) / (cx1 - cx0)
+                x1 = (x1 - cx0) / (cx1 - cx0)
+            }
+            if cy1 - cy0 > 1e-6 {
+                y0 = (y0 - cy0) / (cy1 - cy0)
+                y1 = (y1 - cy0) / (cy1 - cy0)
+            }
+        }
+        x0 = min(max(x0, 0), 1); x1 = min(max(x1, 0), 1)
+        y0 = min(max(y0, 0), 1); y1 = min(max(y1, 0), 1)
+        let xa = min(max(Int(min(x0, x1) * Double(width)), 0), width - 1)
+        let xb = min(max(Int(ceil(max(x0, x1) * Double(width))), xa + 1), width)
+        let ya = min(max(Int(min(y0, y1) * Double(height)), 0), height - 1)
+        let yb = min(max(Int(ceil(max(y0, y1) * Double(height))), ya + 1), height)
+
+        var mean = [Float](repeating: 0, count: 3)
+        var count: Float = 0
+        for y in ya..<yb {
+            let row = y * width
+            for x in xa..<xb {
+                let i = (row + x) * 3
+                mean[0] += P[i]
+                mean[1] += P[i + 1]
+                mean[2] += P[i + 2]
+                count += 1
+            }
+        }
+        guard count > 0 else { return }
+        for c in 0..<3 { mean[c] /= count }
+        applyWhiteBalanceScales(&P, sampleColor: mean, pixelCount: width * height)
+    }
+
     /// 取样点白平衡：取该点 11x11 邻域每通道中值，把这一点拉成中性灰。
     /// point 是「方向后、裁切前」的归一化坐标，这里映射进裁切后的图。
     private static func applyPointWhiteBalance(_ P: inout [Float],
@@ -524,13 +572,19 @@ public final class NegativeEngine {
                                 : 0.5 * (win[m / 2 - 1] + win[m / 2])
         }
 
-        let g = (med[0] + med[1] + med[2]) / 3
+        applyWhiteBalanceScales(&P, sampleColor: med, pixelCount: width * height)
+    }
+
+    private static func applyWhiteBalanceScales(_ P: inout [Float],
+                                                sampleColor: [Float],
+                                                pixelCount: Int) {
+        let g = (sampleColor[0] + sampleColor[1] + sampleColor[2]) / 3
         var scales = [Float](repeating: 1, count: 3)
         for c in 0..<3 {
-            let s = g / max(med[c], 1e-4)
+            let s = g / max(sampleColor[c], 1e-4)
             scales[c] = min(max(s, 0.4), 2.5)   // 防止极端取样点造成爆色（同 decast.py）
         }
-        multiplyChannels(&P, scales: scales, pixelCount: width * height)
+        multiplyChannels(&P, scales: scales, pixelCount: pixelCount)
         clip01(&P)
     }
 

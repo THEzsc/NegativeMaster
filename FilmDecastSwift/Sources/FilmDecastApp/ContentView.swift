@@ -107,6 +107,8 @@ struct SidebarView: View {
 
 struct PreviewView: View {
     @EnvironmentObject var state: AppState
+    @State private var wbDragStart: CGPoint?
+    @State private var wbDragCurrent: CGPoint?
 
     /// 当前应显示的图（按住看负片时切到负片原图）
     private var currentImage: CGImage? {
@@ -145,18 +147,18 @@ struct PreviewView: View {
                 .resizable()
                 .interpolation(.medium)
                 .frame(width: fw, height: fh)
-                // 取白点模式：点击采样（坐标 = 方向后、裁切前的归一化坐标）
-                .gesture(
-                    SpatialTapGesture()
-                        .onEnded { v in
-                            let pt = CGPoint(x: min(max(v.location.x / fw, 0), 1),
-                                             y: min(max(v.location.y / fh, 0), 1))
-                            state.pickWhitePoint(atNormalized: pt)
-                        },
-                    including: state.wbPicking && !state.showNegative ? .all : .none)
 
-            // 白点标记
-            if let p = state.params.wbPoint, !state.showNegative {
+            // 白点取样框
+            if !state.showNegative, let rect = currentWBRect {
+                Rectangle()
+                    .fill(Color.yellow.opacity(0.16))
+                    .overlay(Rectangle().stroke(Color.yellow, lineWidth: 1.5))
+                    .frame(width: max(1, CGFloat(rect.x1 - rect.x0) * fw),
+                           height: max(1, CGFloat(rect.y1 - rect.y0) * fh))
+                    .position(x: CGFloat(rect.x0 + rect.x1) * fw / 2,
+                              y: CGFloat(rect.y0 + rect.y1) * fh / 2)
+                    .allowsHitTesting(false)
+            } else if let p = state.params.wbPoint, !state.showNegative {
                 Circle()
                     .stroke(Color.yellow, lineWidth: 1.5)
                     .frame(width: 14, height: 14)
@@ -173,9 +175,64 @@ struct PreviewView: View {
                 }
                 .allowsHitTesting(!state.wbPicking)
             }
+
+            if state.wbPicking && !state.showNegative {
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .gesture(whiteRectGesture(width: fw, height: fh))
+            }
         }
         .frame(width: fw, height: fh)
         .position(x: avail.width / 2, y: avail.height / 2)
+    }
+
+    private var currentWBRect: CropRectN? {
+        if let s = wbDragStart, let c = wbDragCurrent {
+            return normalizedRect(from: s, to: c)
+        }
+        return state.params.wbRect
+    }
+
+    private func whiteRectGesture(width: CGFloat, height: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { v in
+                let p = normalizedPoint(v.location, width: width, height: height)
+                if wbDragStart == nil { wbDragStart = p }
+                wbDragCurrent = p
+            }
+            .onEnded { v in
+                let end = normalizedPoint(v.location, width: width, height: height)
+                let start = wbDragStart ?? end
+                let rect = normalizedRect(from: start, to: end)
+                wbDragStart = nil
+                wbDragCurrent = nil
+                state.pickWhiteRect(rect)
+            }
+    }
+
+    private func normalizedPoint(_ p: CGPoint, width: CGFloat, height: CGFloat) -> CGPoint {
+        CGPoint(x: min(max(p.x / width, 0), 1),
+                y: min(max(p.y / height, 0), 1))
+    }
+
+    private func normalizedRect(from a: CGPoint, to b: CGPoint) -> CropRectN {
+        let minSize = 0.015
+        var x0 = min(Double(a.x), Double(b.x))
+        var x1 = max(Double(a.x), Double(b.x))
+        var y0 = min(Double(a.y), Double(b.y))
+        var y1 = max(Double(a.y), Double(b.y))
+        if x1 - x0 < minSize {
+            let cx = (x0 + x1) / 2
+            x0 = min(max(cx - minSize / 2, 0), 1 - minSize)
+            x1 = x0 + minSize
+        }
+        if y1 - y0 < minSize {
+            let cy = (y0 + y1) / 2
+            y0 = min(max(cy - minSize / 2, 0), 1 - minSize)
+            y1 = y0 + minSize
+        }
+        return CropRectN(x0: x0, y0: y0, x1: x1, y1: y1)
     }
 
     private var placeholder: some View {
@@ -203,7 +260,7 @@ struct PreviewView: View {
                 .truncationMode(.middle)
             Spacer()
             if state.wbPicking {
-                Text("点击画面取白点…")
+                Text("拖框取白点…")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }

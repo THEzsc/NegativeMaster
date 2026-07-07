@@ -15,10 +15,11 @@ The repository includes two front ends over the same processing idea:
 - Standard image input: `.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`, `.bmp`, `.webp`.
 - Density-space orange-mask removal and inversion.
 - Crop tools, rotation, mirroring, auto frame detection, and aspect presets.
+- Box-based white balance sampling that averages the selected area to reduce grain/noise error.
 - Lightroom-style finishing controls: exposure, highlights, shadows, whites, blacks, curves, HSL, vibrance, vignette, sharpening, and chroma denoise.
 - Histogram matching against a reference positive scan.
 - 16-bit TIFF and JPEG export, with batch export in the UI.
-- Per-image parameter memory and reusable presets.
+- Per-image parameter memory, reusable presets, and whole-roll parameter application.
 
 ## Install
 
@@ -54,6 +55,10 @@ python3 -m venv .venv
 Open `http://127.0.0.1:8765` if the browser does not open automatically.
 
 The UI lets you browse a folder, load a negative, adjust the conversion while previewing, save presets, and export a single frame or a checked batch.
+
+Use **box white balance** when a neutral area is noisy or grainy: enable the white-balance picker, drag a rectangle over a neutral gray/white region, and the converter will average the selected area instead of trusting one pixel.
+
+Use **apply current settings to roll** after tuning one frame. If files are checked, only those files receive the current parameters; otherwise the current file list is treated as the roll. Batch export can then use the saved per-file parameters.
 
 ## CLI
 
@@ -120,6 +125,8 @@ This makes the core inversion predictable and keeps color correction separate fr
 | `--black-pct`, `--white-pct` | Auto black/white point percentiles | `0.5`, `99.7` |
 | `--base-rect x,y,w,h` | Use a film-base rectangle for mask anchoring | auto |
 | `--wb` | `gray` or `none` | `gray` |
+| `--wb-rect x0,y0,x1,y1` | Use the average color in a normalized rectangle for white balance | none |
+| `--wb-point x,y` | Legacy point white balance, using a small neighborhood | none |
 | `--gamma` | Output gamma; higher brightens midtones | `1.8` |
 | `--contrast` | S-curve contrast, -1 to 1 | `0.08` |
 | `--saturation` | Saturation multiplier | `1.0` |

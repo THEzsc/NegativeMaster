@@ -454,17 +454,47 @@ final class AppState: ObservableObject {
     // 白点取样
     // --------------------------------------------------------------------- //
 
-    /// 点击预览取白点（norm 是方向后、裁切前的 0~1 坐标，正合引擎语义）
+    /// 点击预览取白点（兼容旧单点语义；新 UI 默认使用 pickWhiteRect）
     func pickWhitePoint(atNormalized pt: CGPoint) {
         wbPicking = false
+        params.wbRect = nil
         params.wbPoint = pt
         statusText = String(format: "白点取样：(%.3f, %.3f)", pt.x, pt.y)
     }
 
-    func clearWhitePoint() {
-        guard params.wbPoint != nil else { return }
+    /// 框选范围取白点（norm 是方向后、裁切前的 0~1 坐标，正合引擎语义）
+    func pickWhiteRect(_ rect: CropRectN) {
+        wbPicking = false
         params.wbPoint = nil
+        params.wbRect = rect
+        statusText = String(format: "白点取样框：(%.3f, %.3f) - (%.3f, %.3f)",
+                            rect.x0, rect.y0, rect.x1, rect.y1)
+    }
+
+    func clearWhitePoint() {
+        guard params.wbPoint != nil || params.wbRect != nil else { return }
+        params.wbPoint = nil
+        params.wbRect = nil
         statusText = "已清除白点取样"
+    }
+
+    /// 把当前完整调整参数保存到整卷：有勾选则套勾选，否则套当前过滤列表。
+    func applyCurrentParamsToRoll() {
+        let targets = checkedFiles.isEmpty ? filteredFiles : checkedFiles.sorted {
+            $0.path.localizedStandardCompare($1.path) == .orderedAscending
+        }
+        guard !targets.isEmpty else {
+            statusText = "当前列表没有可套用的文件"
+            return
+        }
+        if let data = try? JSONEncoder().encode(params) {
+            for url in targets {
+                UserDefaults.standard.set(data, forKey: Self.paramsKey(for: url))
+            }
+            statusText = "已将当前参数套用到 \(targets.count) 张"
+        } else {
+            statusText = "✗ 参数编码失败"
+        }
     }
 
     // --------------------------------------------------------------------- //
