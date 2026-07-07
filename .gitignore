@@ -1,0 +1,28 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Runtime state
+settings/
+gui.log
+*.log
+
+# Swift Package Manager / Xcode
+FilmDecastSwift/.build/
+FilmDecastSwift/.swiftpm/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Local images and scan samples
+示例/
+examples/
+samples/
+exports/
+output/
+
+# OS/editor noise
+.DS_Store
+*.swp
+*.swo

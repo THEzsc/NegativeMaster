@@ -1,0 +1,20 @@
+{
+  "contrast": 0.18,
+  "vibrance": 18,
+  "saturation": 1.05,
+  "whites": 6,
+  "blacks": -6,
+  "sharpen": 0.8,
+  "hsl": {
+    "blue": {
+      "s": 12
+    },
+    "aqua": {
+      "s": 10
+    },
+    "green": {
+      "s": 8,
+      "l": -4
+    }
+  }
+}

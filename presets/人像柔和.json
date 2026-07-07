@@ -1,0 +1,17 @@
+{
+  "gamma": 1.9,
+  "contrast": 0.02,
+  "highlights": -15,
+  "shadows": 12,
+  "vibrance": 6,
+  "sharpen": 0.4,
+  "hsl": {
+    "orange": {
+      "s": -6,
+      "l": 8
+    },
+    "red": {
+      "s": -4
+    }
+  }
+}
