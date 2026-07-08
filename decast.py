@@ -594,11 +594,11 @@ def detect_film_rect(lin_oriented):
         if rl < 0.3 * hh or cl < 0.3 * ww:
             return fallback
 
-        # 向内收 1%，并做边界保护
-        x0 = max(0.0, cs / ww + 0.01)
-        x1 = min(1.0, (ce + 1) / ww - 0.01)
-        y0 = max(0.0, rs / hh + 0.01)
-        y1 = min(1.0, (re + 1) / hh - 0.01)
+        # 向内收 2%（宁可略紧不留边框），并做边界保护
+        x0 = max(0.0, cs / ww + 0.02)
+        x1 = min(1.0, (ce + 1) / ww - 0.02)
+        y0 = max(0.0, rs / hh + 0.02)
+        y1 = min(1.0, (re + 1) / hh - 0.02)
         if x1 - x0 < 0.2 or y1 - y0 < 0.2:
             return fallback
         return [round(x0, 4), round(y0, 4), round(x1, 4), round(y1, 4)]
@@ -838,6 +838,35 @@ def convert_base(lin, args):
         wb_px = (int(round(float(wb_point[0]) * w)) - off_x,
                  int(round(float(wb_point[1]) * h)) - off_y)
 
+    # darktable negadoctor 式引导取样（都可选，缺省走自动流程）：
+    #   film_base_rect 片基 → 去色罩锚点；shadow_rect 暗部 → 黑点；
+    #   highlight_rect 亮部 → 白点。坐标同 wb_rect（方向调整后整幅 0~1 比例）。
+    def _sample_lin_median(rect):
+        if rect is None:
+            return None
+        if isinstance(rect, dict):
+            x0, y0, x1, y1 = (rect.get("x0"), rect.get("y0"),
+                              rect.get("x1"), rect.get("y1"))
+        else:
+            x0, y0, x1, y1 = rect
+        x0, y0, x1, y1 = [float(v) for v in (x0, y0, x1, y1)]
+        xa = int(round(min(x0, x1) * w)) - off_x
+        xb = int(round(max(x0, x1) * w)) - off_x
+        ya = int(round(min(y0, y1) * h)) - off_y
+        yb = int(round(max(y0, y1) * h)) - off_y
+        hh2, ww2 = lin.shape[:2]
+        xa = max(0, min(xa, ww2 - 1)); xb = max(xa + 1, min(xb, ww2))
+        ya = max(0, min(ya, hh2 - 1)); yb = max(ya + 1, min(yb, hh2))
+        return np.median(np.clip(lin[ya:yb, xa:xb], eps, 1.0)
+                         .reshape(-1, 3), axis=0)
+
+    _fb = _sample_lin_median(getattr(args, "film_base_rect", None))
+    _sh = _sample_lin_median(getattr(args, "shadow_rect", None))
+    _hl = _sample_lin_median(getattr(args, "highlight_rect", None))
+    film_base_density = None if _fb is None else -np.log10(_fb)
+    shadow_density = None if _sh is None else -np.log10(_sh)
+    highlight_density = None if _hl is None else -np.log10(_hl)
+
     use_margin = (getattr(args, "margin", 0) > 0
                   and not crop_rect and not stats_rect)
 
@@ -896,20 +925,31 @@ def convert_base(lin, args):
         P = np.empty_like(D)
         base_density = None
         if getattr(args, "base_rect", None):
-            # 用指定片基矩形（橙色片基，无影像区）锚定色罩黑点
+            # 老参数：像素坐标片基矩形（橙色片基，无影像区）锚定色罩黑点
             x, y, bw, bh = args.base_rect
             patch = np.clip(lin[y:y + bh, x:x + bw], eps, 1.0)
             base_lin = np.median(patch.reshape(-1, 3), axis=0)
             base_density = -np.log10(base_lin)  # 每通道片基密度 = 黑点
 
+        # 黑点优先级：暗部取样 > 片基取样(新/老) > 自动百分位
+        # 白点优先级：亮部取样 > 自动百分位
         for c in range(3):
             Dc = D[..., c]
             col = Dv[..., c].reshape(-1)
-            if base_density is not None:
+            if shadow_density is not None:
+                bp = shadow_density[c]
+            elif film_base_density is not None:
+                bp = film_base_density[c]
+            elif base_density is not None:
                 bp = base_density[c]
             else:
                 bp = np.percentile(col, black_pct)
-            wp = np.percentile(col, white_pct)
+            if highlight_density is not None:
+                wp = highlight_density[c]
+            else:
+                wp = np.percentile(col, white_pct)
+            if wp < bp:            # 取样反了也不崩坏：黑白点自动摆正
+                bp, wp = wp, bp
             if wp - bp < 1e-6:
                 wp = bp + 1e-6
             P[..., c] = (Dc - bp) / (wp - bp)

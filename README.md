@@ -16,6 +16,7 @@ The repository includes two front ends over the same processing idea:
 - Density-space orange-mask removal and inversion.
 - Crop tools, rotation, mirroring, auto frame detection, auto straighten (deskew), and aspect presets.
 - Box-based white balance sampling that averages the selected area to reduce grain/noise error.
+- darktable-negadoctor-style guided sampling (optional): box-select the film base (mask removal), a shadow region (black point), and a highlight region (white point) to override the automatic per-channel levels. Falls back to the automatic path when left unset.
 - Lightroom-style finishing controls: exposure, highlights, shadows, whites, blacks, curves, HSL, vibrance, vignette, sharpening, and chroma denoise.
 - Histogram matching against a reference positive scan.
 - 16-bit TIFF and JPEG export, with batch export in the UI.

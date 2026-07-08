@@ -52,6 +52,7 @@ DEFAULTS = dict(
     denoise=0.0, rotate=0, flip="none", level_angle=0.0,
     mode="color", temp=0.0, tint=0.0,
     sharpen=0.0, sharpen_radius=2.0, wb_point=None, wb_rect=None,
+    film_base_rect=None, shadow_rect=None, highlight_rect=None,
     # LR 风格精调
     exposure=0.0, highlights=0.0, shadows=0.0, whites=0.0, blacks=0.0,
     curve=None, curve_r=None, curve_g=None, curve_b=None,
@@ -74,7 +75,8 @@ CACHE = {"path": None, "full": None, "prev": None, "scale": 1.0,
 BASE_PARAM_KEYS = ("mode", "rotate", "flip", "level_angle",
                    "black_pct", "white_pct",
                    "wb", "wb_point", "wb_rect", "temp", "tint", "gamma", "contrast",
-                   "margin", "base_rect", "input_gamma")
+                   "margin", "base_rect", "input_gamma",
+                   "film_base_rect", "shadow_rect", "highlight_rect")
 
 
 def _base_cache_key(params, cr):
@@ -444,6 +446,10 @@ body{margin:0;font:14px/1.5 -apple-system,"PingFang SC",sans-serif;background:va
 #cropdim{position:absolute;left:0;top:-22px;font:11px monospace;color:var(--acc);background:#000a;padding:1px 5px;border-radius:3px;white-space:nowrap}
 #wbsel{position:absolute;box-sizing:border-box;border:2px solid var(--acc);background:rgba(224,162,74,.16);
   display:none;pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
+.ssel{position:absolute;box-sizing:border-box;display:none;pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.55)}
+#basesel{border:2px solid #e0a24a;background:rgba(224,162,74,.13)}
+#shadowsel{border:2px solid #5aa0ff;background:rgba(90,160,255,.13)}
+#hlsel{border:2px solid #ffe14a;background:rgba(255,225,74,.11)}
 #panel{width:340px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto}
 #panel h1{font-size:15px;margin:0;padding:14px 16px;border-bottom:1px solid var(--line)}
 details.sec{border-bottom:1px solid var(--line)}
@@ -486,6 +492,9 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
   <div id="empty">← 右侧载入一张负片开始<br><small>支持 ARW/ARQ/CR2/NEF/TIF/JPG… · 滚轮缩放 · 双击 2x</small></div>
   <div id="imgwrap"><img id="img">
     <div id="wbsel"></div>
+    <div id="basesel" class="ssel"></div>
+    <div id="shadowsel" class="ssel"></div>
+    <div id="hlsel" class="ssel"></div>
     <div id="crop"><div id="cropdim"></div>
       <div class="h" data-h="nw"></div><div class="h" data-h="ne"></div>
       <div class="h" data-h="sw"></div><div class="h" data-h="se"></div>
@@ -594,6 +603,18 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
       <button id="cropreset">重置框</button></div>
   </div></details>
 
+  <details class="sec"><summary>引导取样（darktable 式 · 可选）</summary><div class="bd">
+    <div class="hint">在图上框选取样来覆盖自动色阶：<b style="color:#e0a24a">片基</b>去色罩 ·
+      <b style="color:#5aa0ff">暗部</b>定黑场 · <b style="color:#ffe14a">亮部</b>定白场；留空即用自动。
+      照片范围用上面的裁切框。</div>
+    <div class="btnrow" style="margin-top:6px">
+      <button class="pill" id="pbase">框选片基</button>
+      <button class="pill" id="pshadow">框选暗部</button>
+      <button class="pill" id="phl">框选亮部</button>
+      <button id="sclear">清除取样</button></div>
+    <span class="hint" id="sinfo">取样: 未设</span>
+  </div></details>
+
   <details class="sec" open><summary>方向</summary><div class="bd">
     <div class="btnrow">
       <button id="rotL">↶ 左转</button><button id="rotR">↷ 右转</button>
@@ -671,6 +692,7 @@ const HJ={"Content-Type":"application/json"};
 const D={crop:0,black_pct:0.5,white_pct:99.7,wb:"gray",gamma:1.8,contrast:0.08,
   saturation:1.0,denoise:0,rotate:0,flip:"none",raw_denoise:false,use_match:false,
   mode:"color",temp:0,tint:0,sharpen:0,sharpen_radius:2.0,wb_point:null,wb_rect:null,
+  film_base_rect:null,shadow_rect:null,highlight_rect:null,
   exposure:0,highlights:0,shadows:0,whites:0,blacks:0,vibrance:0,vignette:0,
   curve:null,curve_r:null,curve_g:null,curve_b:null,hsl:{}};
 const dclone=o=>JSON.parse(JSON.stringify(o));  // D 里有嵌套对象，复制要用深拷贝
@@ -695,7 +717,7 @@ function fitWrap(){
   const im=$("img"), st=$("stage");
   const a=(im.naturalWidth&&im.naturalHeight)?im.naturalWidth/im.naturalHeight:imgAspect();
   let w=st.clientWidth-24, h=w/a; if(h>st.clientHeight-24){h=st.clientHeight-24;w=h*a;}
-  const wr=$("imgwrap"); wr.style.width=w+"px"; wr.style.height=h+"px"; drawCrop(); drawWBRect();
+  const wr=$("imgwrap"); wr.style.width=w+"px"; wr.style.height=h+"px"; drawCrop(); drawWBRect(); drawSamples();
 }
 function drawCrop(){
   const c=$("crop");
@@ -786,10 +808,42 @@ let pickWB=false, wbdrag=null;
 function setPickWB(on){
   pickWB=on; $("wbpick").classList.toggle("on",on);
   $("imgwrap").style.cursor=on?"crosshair":"";
+  if(on&&typeof pickS!=="undefined"&&pickS){ pickS=null;
+    for(const k in SBTN) $(SBTN[k]).classList.remove("on"); }
   if(!on&&wbdrag){wbdrag=null; drawWBRect();}
 }
 $("wbpick").onclick=()=>setPickWB(!pickWB);
 $("wbclear").onclick=()=>{P.wb_point=null;P.wb_rect=null;drawWBRect();refl();render();};
+
+// ---- 引导取样：片基 / 暗部 / 亮部（拖框，覆盖自动色阶）----
+let pickS=null, sdrag=null;
+const SSEL={film_base_rect:"basesel",shadow_rect:"shadowsel",highlight_rect:"hlsel"};
+const SBTN={film_base_rect:"pbase",shadow_rect:"pshadow",highlight_rect:"phl"};
+const SNAME={film_base_rect:"片基",shadow_rect:"暗部",highlight_rect:"亮部"};
+function setPickS(key){
+  pickS=(pickS===key)?null:key;
+  for(const k in SBTN) $(SBTN[k]).classList.toggle("on",pickS===k);
+  if(pickS) setPickWB(false);
+  $("imgwrap").style.cursor=pickS?"crosshair":"";
+  if(!pickS&&sdrag){sdrag=null; drawSamples();}
+}
+function drawSbox(key,rect){
+  const el=$(SSEL[key]), r=rect||P[key];
+  if(!r){el.style.display="none";return;}
+  el.style.display="block";
+  el.style.left=(r.x0*100)+"%"; el.style.top=(r.y0*100)+"%";
+  el.style.width=((r.x1-r.x0)*100)+"%"; el.style.height=((r.y1-r.y0)*100)+"%";
+}
+function drawSamples(){ for(const k in SSEL) drawSbox(k); }
+function sInfo(){
+  const set=Object.keys(SSEL).filter(k=>P[k]).map(k=>SNAME[k]);
+  $("sinfo").textContent="取样: "+(set.length?set.join(" / "):"未设");
+}
+$("pbase").onclick=()=>setPickS("film_base_rect");
+$("pshadow").onclick=()=>setPickS("shadow_rect");
+$("phl").onclick=()=>setPickS("highlight_rect");
+$("sclear").onclick=()=>{P.film_base_rect=P.shadow_rect=P.highlight_rect=null;
+  drawSamples();sInfo();render();};
 
 // ---- 裁切框拖拽 / 平移 / 取白点点击 ----
 let drag=null;
@@ -800,6 +854,13 @@ function cropDown(e){
     const pt={x:clamp((e.clientX-r.left)/r.width,0,1),y:clamp((e.clientY-r.top)/r.height,0,1)};
     wbdrag={start:pt,cur:pt};
     drawWBRect(normalizedRect(pt,pt));
+    wr.setPointerCapture(e.pointerId);
+    e.preventDefault(); return;
+  }
+  if(pickS){
+    const pt={x:clamp((e.clientX-r.left)/r.width,0,1),y:clamp((e.clientY-r.top)/r.height,0,1)};
+    sdrag={start:pt,cur:pt};
+    drawSbox(pickS,normalizedRect(pt,pt));
     wr.setPointerCapture(e.pointerId);
     e.preventDefault(); return;
   }
@@ -819,6 +880,12 @@ function cropMove(e){
     const wr=$("imgwrap"), r=wr.getBoundingClientRect();
     wbdrag.cur={x:clamp((e.clientX-r.left)/r.width,0,1),y:clamp((e.clientY-r.top)/r.height,0,1)};
     drawWBRect(normalizedRect(wbdrag.start,wbdrag.cur));
+    e.preventDefault(); return;
+  }
+  if(sdrag){
+    const wr=$("imgwrap"), r=wr.getBoundingClientRect();
+    sdrag.cur={x:clamp((e.clientX-r.left)/r.width,0,1),y:clamp((e.clientY-r.top)/r.height,0,1)};
+    drawSbox(pickS,normalizedRect(sdrag.start,sdrag.cur));
     e.preventDefault(); return;
   }
   if(!drag) return;
@@ -849,6 +916,13 @@ function cropUp(){
     P.wb_point=null;
     wbdrag=null;
     setPickWB(false); drawWBRect(); refl(); render();
+    return;
+  }
+  if(sdrag){
+    const key=pickS;
+    P[key]=normalizedRect(sdrag.start,sdrag.cur);
+    sdrag=null; setPickS(null);
+    drawSbox(key); sInfo(); render();
     return;
   }
   if(drag){const need=drag.mode!=="pan"&&drag.moved; drag=null; if(need) render();}
@@ -1008,7 +1082,7 @@ function refl(){
   }else{
     $("wbinfo").textContent=P.wb_point?("白点: "+P.wb_point.map(v=>v.toFixed(3)).join(", ")):"白点: 未设";
   }
-  drawWBRect();
+  drawWBRect(); drawSamples(); sInfo();
   drawCurve(); hslSync();  // 曲线/HSL 编辑器随 P 同步（预设/记忆参数恢复时也会刷新）
 }
 
