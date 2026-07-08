@@ -788,6 +788,42 @@ def _tone_curve(P, gamma, contrast):
     return P
 
 
+def negadoctor(lin, dmin, args):
+    """darktable negadoctor 负转正（逐通道），比线性密度拉伸更"胶片化"：
+    密度相对片基 Dmin 取对数、D_max 定反差、相纸 gamma、外加高光指数柔化(soft-clip)。
+
+    darktable 的默认参数假定扫描件已归一化到片基≈1、且密度范围完整；翻拍负片往往偏暗、
+    动态范围压缩，直接套会一片死黑。因此这里在保持公式结构的前提下做**逐通道自动曝光**：
+    让最亮的场景（负片最密处）映到接近白，顺带把橙色色罩当作各通道增益一并中和。
+    nd_exposure 作为全局亮度增益微调（默认 1.0），nd_gamma 控制反差。"""
+    THR = 2.3283e-10
+    Dmax = float(getattr(args, "nd_dmax", 2.046))
+    offset = float(getattr(args, "nd_offset", -0.05))
+    black = float(getattr(args, "nd_black", 0.0755))
+    gamma = float(getattr(args, "nd_gamma", 4.0))
+    softclip = float(getattr(args, "nd_softclip", 0.75))
+    gain = float(getattr(args, "nd_exposure", 1.0))
+    dmin = np.asarray(dmin, dtype=np.float32).reshape(1, 1, 3)
+    x = np.maximum(lin.astype(np.float32), THR)
+    log_density = np.log10(x / dmin)                      # 相对片基的密度（逐通道）
+    corrected = log_density / Dmax + offset               # wb_high=wb_low=1
+    ten = np.power(10.0, corrected)
+    # 标量自动曝光：按亮度取最亮场景（负片最密处）映到接近印相白点；
+    # 用同一系数缩放三通道，不动色彩平衡（残留偏色交给后面的灰世界白平衡）。
+    view = stats_view(ten).reshape(-1, 3)
+    ten_lo = float(np.percentile(view @ np.array([0.299, 0.587, 0.114],
+                                                 dtype=view.dtype), 0.5))
+    auto_exp = 1.0 / max(1.0 + black - ten_lo, 1e-3)
+    exp = auto_exp * gain
+    print_lin = np.maximum(exp * (1.0 + black - ten), 0.0)
+    pg = np.power(print_lin, gamma)
+    scc = max(1.0 - softclip, 1e-4)
+    out = np.where(pg > softclip,
+                   softclip + (1.0 - np.exp(-(pg - softclip) / scc)) * scc,
+                   pg)
+    return np.clip(out, 0.0, 1.0)
+
+
 def convert_base(lin, args):
     """管线前半（重活）：方向 → 裁切 → (按 mode 反转/拉伸)
     → 白平衡(取样点优先于灰世界) → 色温/色调
@@ -944,6 +980,19 @@ def convert_base(lin, args):
         if wp - bp < 1e-6:
             wp = bp + 1e-6
         P = np.clip((lin - bp) / (wp - bp), 0.0, 1.0)
+    elif getattr(args, "negadoctor", False):
+        # 彩色负片 · negadoctor 引擎（可选）：先定每通道片基 Dmin，再套 darktable 公式
+        N = np.clip(lin, eps, 1.0)
+        if film_base_density is not None:           # 片基取样最准
+            dmin = np.power(10.0, -film_base_density)
+        elif getattr(args, "base_rect", None):
+            x, y, bw, bh = args.base_rect
+            dmin = np.median(np.clip(lin[y:y + bh, x:x + bw], eps, 1.0)
+                             .reshape(-1, 3), axis=0)
+        else:                                       # 自动：片基≈负片最亮（高百分位）
+            Vv = _trim_margin(np.clip(stats_view(stats_lin), eps, 1.0))
+            dmin = np.percentile(Vv.reshape(-1, 3), 99.5, axis=0)
+        P = negadoctor(N, dmin, args)
     else:
         # 彩色负片：密度空间去色罩 + 反转（原有算法，保持不变）
         N = np.clip(lin, eps, 1.0)
@@ -1013,9 +1062,10 @@ def convert_base(lin, args):
         P = apply_temp_tint(P, getattr(args, "temp", 0.0),
                             getattr(args, "tint", 0.0))
 
-        # 6) 影调：gamma + 对比度 S 曲线
-        P = _tone_curve(P, getattr(args, "gamma", 1.8),
-                        getattr(args, "contrast", 0.08))
+        # 6) 影调：gamma + 对比度 S 曲线（negadoctor 自带相纸 gamma/柔化，故跳过）
+        if not getattr(args, "negadoctor", False):
+            P = _tone_curve(P, getattr(args, "gamma", 1.8),
+                            getattr(args, "contrast", 0.08))
 
     return np.clip(P, 0.0, 1.0), vin_rect
 
@@ -1319,6 +1369,21 @@ def main():
                          "（已显式给 --crop-rect 时不生效）")
     ap.add_argument("--auto-level", action="store_true", dest="auto_level",
                     help="自动校平：检测画面倾斜角并旋正（和 --auto-crop 一起用最好）")
+    ap.add_argument("--negadoctor", action="store_true", dest="negadoctor",
+                    help="用 darktable negadoctor 负转正引擎（默认关；彩负模式生效，"
+                         "自带相纸 gamma/高光柔化，跳过普通 gamma/对比度）")
+    ap.add_argument("--nd-gamma", type=float, default=2.4, dest="nd_gamma",
+                    help="negadoctor 相纸反差 gamma（1~8，越大越硬），默认 2.4")
+    ap.add_argument("--nd-exposure", type=float, default=1.0, dest="nd_exposure",
+                    help="negadoctor 亮度增益微调（自动曝光基础上乘，默认 1.0）")
+    ap.add_argument("--nd-dmax", type=float, default=2.046, dest="nd_dmax",
+                    help="negadoctor 片基最大密度 D_max（0.1~6），默认 2.046")
+    ap.add_argument("--nd-offset", type=float, default=-0.05, dest="nd_offset",
+                    help="negadoctor 扫描曝光偏移（-1~1），默认 -0.05")
+    ap.add_argument("--nd-black", type=float, default=0.0755, dest="nd_black",
+                    help="negadoctor 相纸黑（-0.5~0.5），默认 0.0755")
+    ap.add_argument("--nd-softclip", type=float, default=0.75, dest="nd_softclip",
+                    help="negadoctor 高光柔化（1e-4~1），默认 0.75")
     ap.add_argument("--level-angle", type=float, default=0.0, dest="level_angle",
                     help="手动旋转/拉直角度（度，正=逆时针）；会自动内缩去黑角")
 

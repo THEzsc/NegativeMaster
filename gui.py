@@ -51,6 +51,8 @@ DEFAULTS = dict(
     black_pct=0.5, white_pct=99.7,
     wb="gray", gamma=1.8, contrast=0.08, saturation=1.0,
     denoise=0.0, rotate=0, flip="none", level_angle=0.0,
+    negadoctor=False, nd_gamma=2.4, nd_exposure=1.0,
+    nd_dmax=2.046, nd_offset=-0.05, nd_black=0.0755, nd_softclip=0.75,
     mode="color", temp=0.0, tint=0.0,
     sharpen=0.0, sharpen_radius=2.0, wb_point=None, wb_rect=None,
     film_base_rect=None, shadow_rect=None, highlight_rect=None,
@@ -77,7 +79,9 @@ BASE_PARAM_KEYS = ("mode", "rotate", "flip", "level_angle",
                    "black_pct", "white_pct",
                    "wb", "wb_point", "wb_rect", "temp", "tint", "gamma", "contrast",
                    "margin", "base_rect", "input_gamma",
-                   "film_base_rect", "shadow_rect", "highlight_rect")
+                   "film_base_rect", "shadow_rect", "highlight_rect",
+                   "negadoctor", "nd_gamma", "nd_exposure",
+                   "nd_dmax", "nd_offset", "nd_black", "nd_softclip")
 
 
 def _base_cache_key(params, cr):
@@ -1287,6 +1291,13 @@ input[type=range]:hover::-moz-range-thumb {
       <button class="pill on" data-m="color">彩负</button>
       <button class="pill" data-m="bw">黑白</button>
       <button class="pill" data-m="positive">正片</button></div>
+    <div class="btnrow" style="margin-top:6px">
+      <button class="pill" id="ndtoggle" title="darktable negadoctor 负转正引擎（彩负模式）">negadoctor 引擎</button></div>
+    <div id="ndrow" style="display:none">
+      <label class="row">相纸反差 <span class="v" id="vnd_gamma"></span></label>
+      <input type="range" id="nd_gamma" min="1" max="8" step="0.1">
+      <label class="row">亮度增益 <span class="v" id="vnd_exposure"></span></label>
+      <input type="range" id="nd_exposure" min="0.3" max="3" step="0.05"></div>
     <label class="row">曝光 EV <span class="v" id="vexposure"></span></label>
     <input type="range" id="exposure" min="-3" max="3" step="0.05">
     <label class="row">高光 <span class="v" id="vhighlights"></span></label>
@@ -1505,6 +1516,7 @@ input[type=range]:hover::-moz-range-thumb {
 const HJ={"Content-Type":"application/json"};
 const D={crop:0,black_pct:0.5,white_pct:99.7,wb:"gray",gamma:1.8,contrast:0.08,
   saturation:1.0,denoise:0,rotate:0,flip:"none",level_angle:0,raw_denoise:false,use_match:false,
+  negadoctor:false,nd_gamma:2.4,nd_exposure:1.0,
   mode:"color",temp:0,tint:0,sharpen:0,sharpen_radius:2.0,wb_point:null,wb_rect:null,
   film_base_rect:null,shadow_rect:null,highlight_rect:null,
   exposure:0,highlights:0,shadows:0,whites:0,blacks:0,vibrance:0,vignette:0,
@@ -1518,7 +1530,8 @@ const PKEYS=["black_pct","white_pct","wb","gamma","contrast","saturation",
 let P=dclone(D), curFile=null, fmt="tif", timer=null, loaded=false;
 const $=id=>document.getElementById(id);
 const SL=["gamma","contrast","saturation","denoise","sharpen","black_pct","white_pct","temp","tint",
-  "exposure","highlights","shadows","whites","blacks","vibrance","vignette"];
+  "exposure","highlights","shadows","whites","blacks","vibrance","vignette",
+  "nd_gamma","nd_exposure"];
 
 // ---- 裁切框（比例坐标，可自由定位 + 画幅比例锁定）----
 let cropN={x0:.06,y0:.06,x1:.94,y1:.94};
@@ -1889,6 +1902,8 @@ $("hslreset").onclick=()=>{ P.hsl={}; hslSync(); sched(); };
 function refl(){
   for(const k of SL){ $(k).value=P[k]; $("v"+k).textContent=P[k]; }
   document.querySelectorAll("#modes button").forEach(b=>b.classList.toggle("on",b.dataset.m===P.mode));
+  $("ndtoggle").classList.toggle("on",P.negadoctor);
+  $("ndrow").style.display=P.negadoctor?"":"none";
   $("wbgray").classList.toggle("on",P.wb==="gray");
   $("wbnone").classList.toggle("on",P.wb==="none");
   $("fliph").classList.toggle("on",P.flip==="h");
@@ -1992,6 +2007,7 @@ document.querySelectorAll("#modes button").forEach(b=>b.onclick=()=>{
   refl(); render();});
 $("wbgray").onclick=()=>{P.wb="gray";refl();render()};
 $("wbnone").onclick=()=>{P.wb="none";refl();render()};
+$("ndtoggle").onclick=()=>{P.negadoctor=!P.negadoctor;refl();render();};
 // 镜像/旋转：裁切框 + 各取样框(白点/片基/暗部/亮部)一起变换；
 // 镜像还翻转旋转角方向——让「对图片的所有修改」都跟着图一起走，不错位。
 function rFlipH(r){ return r?{x0:1-r.x1,y0:r.y0,x1:1-r.x0,y1:r.y1}:r; }

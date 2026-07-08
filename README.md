@@ -131,6 +131,8 @@ This makes the core inversion predictable and keeps color correction separate fr
 | `--rotate` | Clockwise rotation: 0, 90, 180, 270 | `0` |
 | `--flip` | `none`, `h`, or `v` | `none` |
 | `--mode` | `color`, `bw`, or `positive` | `color` |
+| `--negadoctor` | Use the darktable-negadoctor film print engine (off by default; color mode) | off |
+| `--nd-gamma`, `--nd-exposure` | negadoctor paper grade and brightness gain | `2.4`, `1.0` |
 | `--black-pct`, `--white-pct` | Auto black/white point percentiles | `0.5`, `99.7` |
 | `--base-rect x,y,w,h` | Use a film-base rectangle for mask anchoring | auto |
 | `--wb` | `gray` or `none` | `gray` |
