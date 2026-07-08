@@ -1489,7 +1489,7 @@ input[type=range]:hover::-moz-range-thumb {
   </div></details>
 
   <details class="sec" open><summary>载入行为</summary><div class="bd">
-    <label class="row"><span><input type="checkbox" id="resetdefault" checked style="width:auto;margin-right:6px">载入每张时重置为默认参数（含水平翻转）</span></label>
+    <label class="row"><span><input type="checkbox" id="resetdefault" style="width:auto;margin-right:6px">载入即重置为默认参数（不勾选＝恢复该图已存参数）</span></label>
   </div></details>
   <div id="status"></div>
 </div>
