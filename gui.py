@@ -525,6 +525,11 @@ INDEX_HTML = r"""<!doctype html>
 body{margin:0;font:14px/1.5 -apple-system,"PingFang SC",sans-serif;background:var(--bg);color:var(--fg);height:100vh;display:flex}
 #stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;overflow:hidden;position:relative}
 #stagebar{position:absolute;left:12px;top:12px;display:flex;gap:6px;align-items:center;z-index:5}
+#rotpad{position:absolute;left:12px;bottom:12px;z-index:6;display:none;align-items:center;gap:4px;
+  background:#000b;padding:5px 8px;border-radius:9px;border:1px solid var(--line);font-size:12px}
+#rotpad button{padding:2px 7px;font-size:12px;line-height:1.3}
+#rotpad .rl{color:var(--mut);margin-right:2px}
+#rotpad #angleval{min-width:34px;text-align:right;font-family:monospace;color:var(--acc)}
 #zoominfo{color:var(--mut);font:12px monospace}
 #imgwrap{position:relative;display:none;background:#111;box-shadow:0 6px 30px #0008;touch-action:none;user-select:none}
 #img{display:block;width:100%;height:100%}
@@ -586,6 +591,15 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
     <span id="zoominfo"></span>
   </div>
   <div id="empty">← 右侧载入一张负片开始<br><small>支持 ARW/ARQ/CR2/NEF/TIF/JPG… · 滚轮缩放 · 双击 2x</small></div>
+  <div id="rotpad">
+    <span class="rl">旋转</span>
+    <button id="rotm1" title="逆时针 1°">−1°</button>
+    <button id="rotm01" title="逆时针 0.1°">−.1</button>
+    <span id="angleval">0.0</span>°
+    <button id="rotp01" title="顺时针 0.1°">+.1</button>
+    <button id="rotp1" title="顺时针 1°">+1°</button>
+    <button id="rot0" title="归零">⟲</button>
+  </div>
   <div id="imgwrap"><img id="img">
     <div id="wbsel"></div>
     <div id="basesel" class="ssel"></div>
@@ -694,7 +708,7 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
     <div class="btnrow" style="margin-top:6px">
       <button class="pill on" id="oland">横 ▭</button>
       <button class="pill" id="oport">竖 ▯</button>
-      <button id="autocrop">自动框正</button>
+      <button id="autocrop">自动框</button>
       <button id="cropfull">占满</button>
       <button id="cropreset">重置框</button></div>
   </div></details>
@@ -716,10 +730,7 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
       <button id="rotL">↶ 左转</button><button id="rotR">↷ 右转</button>
       <button class="pill" id="fliph">镜像 H</button>
       <button class="pill" id="flipv">翻转 V</button></div>
-    <label class="row">旋转 / 拉直 <span class="v" id="vlevel_angle"></span>°
-      <button id="levelreset" style="margin-left:auto;font-size:11px;padding:1px 8px">归零</button></label>
-    <input type="range" id="level_angle" min="-45" max="45" step="0.1">
-    <div class="hint">任意角度旋正；导出会自动内缩去黑角。「自动框正」会填入检测到的角度。
+    <div class="hint">拍歪了用左下角「旋转」按钮微调（自动内缩去黑角）；镜像/旋转会带着裁切框与取样框一起变换。
       快捷键：r 右转 · R 左转 · f 镜像 · e 导出 · 空格按住看负片</div>
   </div></details>
 
@@ -804,7 +815,7 @@ const PKEYS=["black_pct","white_pct","wb","gamma","contrast","saturation",
 let P=dclone(D), curFile=null, fmt="tif", timer=null, loaded=false;
 const $=id=>document.getElementById(id);
 const SL=["gamma","contrast","saturation","denoise","sharpen","black_pct","white_pct","temp","tint",
-  "exposure","highlights","shadows","whites","blacks","vibrance","vignette","level_angle"];
+  "exposure","highlights","shadows","whites","blacks","vibrance","vignette"];
 
 // ---- 裁切框（比例坐标，可自由定位 + 画幅比例锁定）----
 let cropN={x0:.06,y0:.06,x1:.94,y1:.94};
@@ -1182,7 +1193,7 @@ function refl(){
   }else{
     $("wbinfo").textContent=P.wb_point?("白点: "+P.wb_point.map(v=>v.toFixed(3)).join(", ")):"白点: 未设";
   }
-  drawWBRect(); drawSamples(); sInfo();
+  drawWBRect(); drawSamples(); sInfo(); updAngle();
   drawCurve(); hslSync();  // 曲线/HSL 编辑器随 P 同步（预设/记忆参数恢复时也会刷新）
 }
 
@@ -1256,11 +1267,32 @@ document.querySelectorAll("#modes button").forEach(b=>b.onclick=()=>{
   refl(); render();});
 $("wbgray").onclick=()=>{P.wb="gray";refl();render()};
 $("wbnone").onclick=()=>{P.wb="none";refl();render()};
-$("fliph").onclick=()=>{P.flip=P.flip==="h"?"none":"h";refl();render()};
-$("flipv").onclick=()=>{P.flip=P.flip==="v"?"none":"v";refl();render()};
-$("rotL").onclick=()=>{P.rotate=(P.rotate+270)%360;applyFormat(curFmt);render()};
-$("rotR").onclick=()=>{P.rotate=(P.rotate+90)%360;applyFormat(curFmt);render()};
-$("levelreset").onclick=()=>{P.level_angle=0;$("level_angle").value=0;$("vlevel_angle").textContent="0";render();};
+// 镜像/旋转：裁切框 + 各取样框(白点/片基/暗部/亮部)一起变换；
+// 镜像还翻转旋转角方向——让「对图片的所有修改」都跟着图一起走，不错位。
+function rFlipH(r){ return r?{x0:1-r.x1,y0:r.y0,x1:1-r.x0,y1:r.y1}:r; }
+function rFlipV(r){ return r?{x0:r.x0,y0:1-r.y1,x1:r.x1,y1:1-r.y0}:r; }
+function rRotCW(r){ return r?{x0:1-r.y1,y0:r.x0,x1:1-r.y0,y1:r.x1}:r; }   // 90°顺
+function rRotCCW(r){ return r?{x0:r.y0,y0:1-r.x1,x1:r.y1,y1:1-r.x0}:r; }  // 90°逆
+function transformRegions(fn){
+  cropN=fn(cropN)||cropN;
+  for(const k of ["wb_rect","film_base_rect","shadow_rect","highlight_rect"]) if(P[k]) P[k]=fn(P[k]);
+}
+$("fliph").onclick=()=>{P.flip=P.flip==="h"?"none":"h"; transformRegions(rFlipH);
+  P.level_angle=-(+P.level_angle||0); refl(); drawCrop(); render();};
+$("flipv").onclick=()=>{P.flip=P.flip==="v"?"none":"v"; transformRegions(rFlipV);
+  P.level_angle=-(+P.level_angle||0); refl(); drawCrop(); render();};
+$("rotL").onclick=()=>{P.rotate=(P.rotate+270)%360; transformRegions(rRotCCW);
+  applyFormat(curFmt); refl(); render();};
+$("rotR").onclick=()=>{P.rotate=(P.rotate+90)%360; transformRegions(rRotCW);
+  applyFormat(curFmt); refl(); render();};
+// 左下角旋转/拉直按钮
+function updAngle(){ const el=$("angleval"); if(el) el.textContent=(+(P.level_angle||0)).toFixed(1); }
+function nudgeAngle(d){ P.level_angle=clamp(Math.round(((+P.level_angle||0)+d)*10)/10,-45,45); updAngle(); render(); }
+$("rotm1").onclick=()=>nudgeAngle(-1);
+$("rotm01").onclick=()=>nudgeAngle(-0.1);
+$("rotp01").onclick=()=>nudgeAngle(0.1);
+$("rotp1").onclick=()=>nudgeAngle(1);
+$("rot0").onclick=()=>{P.level_angle=0; updAngle(); render();};
 $("raw_denoise").onchange=e=>{P.raw_denoise=e.target.checked;render()};
 $("usematch").onclick=()=>{P.use_match=!P.use_match;refl();render()};
 $("ftif").onclick=()=>{fmt="tif";refl()}; $("fjpg").onclick=()=>{fmt="jpg";refl()};
@@ -1281,14 +1313,14 @@ $("cropfull").onclick=()=>{cropN={x0:0,y0:0,x1:1,y1:1}; aspect?applyFormat(curFm
 $("cropreset").onclick=()=>{cropN={x0:.06,y0:.06,x1:.94,y1:.94}; aspect?applyFormat(curFmt):drawCrop(); render();};
 $("autocrop").onclick=()=>{
   if(!loaded){stat("先载入图片");return;}
-  stat("自动校平 + 检测画面区域…");
+  stat("自动检测画面区域…");
+  // 只框画面，不自动旋转（旋转用左下角按钮手动调，更可控）
   fetch("/api/autocrop",{method:"POST",headers:HJ,
-    body:JSON.stringify({rotate:P.rotate,flip:P.flip,level:true})}).then(r=>r.json()).then(d=>{
+    body:JSON.stringify({rotate:P.rotate,flip:P.flip,level:false})}).then(r=>r.json()).then(d=>{
       if(!d.ok){stat("✗ "+d.err);return;}
       const[x0,y0,x1,y1]=d.rect; cropN={x0,y0,x1,y1};
-      P.level_angle=d.angle||0;
-      curFmt="free"; syncFmtPills(); refl(); drawCrop(); render();
-      stat("已自动框选"+(P.level_angle?("，校平 "+P.level_angle.toFixed(2)+"°"):"（已水平）"));});
+      curFmt="free"; syncFmtPills(); drawCrop(); render();
+      stat("已自动框选画面");});
 };
 window.addEventListener("resize",()=>{ if(loaded) fitWrap(); });
 
@@ -1345,7 +1377,7 @@ function loadFile(path){
   fetch("/api/load",{method:"POST",headers:HJ,
     body:JSON.stringify({path,raw_denoise:P.raw_denoise})}).then(r=>r.json()).then(d=>{
       if(!d.ok){stat("✗ "+d.err);return;}
-      curFile=path; loaded=true; fullW=d.w; fullH=d.h;
+      curFile=path; loaded=true; fullW=d.w; fullH=d.h; $("rotpad").style.display="flex";
       $("meta").textContent=d.name+" · "+d.w+"×"+d.h;
       resetView();
       const applyRestore=(sd,label)=>{

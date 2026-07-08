@@ -594,11 +594,11 @@ def detect_film_rect(lin_oriented):
         if rl < 0.3 * hh or cl < 0.3 * ww:
             return fallback
 
-        # 向内收 2%（宁可略紧不留边框），并做边界保护
-        x0 = max(0.0, cs / ww + 0.02)
-        x1 = min(1.0, (ce + 1) / ww - 0.02)
-        y0 = max(0.0, rs / hh + 0.02)
-        y1 = min(1.0, (re + 1) / hh - 0.02)
+        # 向内收 3.5%（对齐用户手工框的松紧，宁可略紧不留边框），并做边界保护
+        x0 = max(0.0, cs / ww + 0.035)
+        x1 = min(1.0, (ce + 1) / ww - 0.035)
+        y0 = max(0.0, rs / hh + 0.035)
+        y1 = min(1.0, (re + 1) / hh - 0.035)
         if x1 - x0 < 0.2 or y1 - y0 < 0.2:
             return fallback
         return [round(x0, 4), round(y0, 4), round(x1, 4), round(y1, 4)]
