@@ -525,11 +525,22 @@ INDEX_HTML = r"""<!doctype html>
 body{margin:0;font:14px/1.5 -apple-system,"PingFang SC",sans-serif;background:var(--bg);color:var(--fg);height:100vh;display:flex}
 #stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;overflow:hidden;position:relative}
 #stagebar{position:absolute;left:12px;top:12px;display:flex;gap:6px;align-items:center;z-index:5}
-#rotpad{position:absolute;left:12px;bottom:12px;z-index:6;display:none;align-items:center;gap:4px;
+#rotpad{position:absolute;left:12px;bottom:12px;z-index:6;display:none;flex-wrap:wrap;
+  align-items:center;gap:4px;max-width:min(92%,520px);
   background:#000b;padding:5px 8px;border-radius:9px;border:1px solid var(--line);font-size:12px}
 #rotpad button{padding:2px 7px;font-size:12px;line-height:1.3}
 #rotpad .rl{color:var(--mut);margin-right:2px}
+#rotpad .sep{width:1px;height:16px;background:var(--line);margin:0 3px}
 #rotpad #angleval{min-width:34px;text-align:right;font-family:monospace;color:var(--acc)}
+#helpmodal{position:fixed;inset:0;z-index:50;display:none;background:#000b;align-items:center;justify-content:center;padding:24px}
+#helpcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;max-width:720px;max-height:86vh;overflow-y:auto;padding:20px 26px 26px;position:relative;line-height:1.65}
+#helpcard h2{margin:0 0 6px;font-size:18px}
+#helpcard h3{margin:15px 0 3px;font-size:13.5px;color:var(--acc)}
+#helpcard p,#helpcard li{font-size:13px;color:var(--fg);margin:2px 0}
+#helpcard ul{margin:2px 0;padding-left:18px}
+#helpcard kbd{background:#15161a;border:1px solid var(--line);border-radius:4px;padding:0 5px;font-family:monospace;font-size:12px}
+#helpclose{position:absolute;right:12px;top:10px;font-size:22px;line-height:1;background:none;border:none;color:var(--mut);cursor:pointer;padding:2px 6px}
+#helpbtn{background:var(--acc);color:#1b1d21;font-weight:600}
 #zoominfo{color:var(--mut);font:12px monospace}
 #imgwrap{position:relative;display:none;background:#111;box-shadow:0 6px 30px #0008;touch-action:none;user-select:none}
 #img{display:block;width:100%;height:100%}
@@ -586,19 +597,25 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
 <body>
 <div id="stage">
   <div id="stagebar">
+    <button id="helpbtn" title="功能说明">功能说明</button>
     <button id="fitbtn" title="恢复 1x 适合窗口">适合窗口</button>
     <button id="negbtn" title="按住显示原始负片（空格键同）">按住看负片</button>
     <span id="zoominfo"></span>
   </div>
   <div id="empty">← 右侧载入一张负片开始<br><small>支持 ARW/ARQ/CR2/NEF/TIF/JPG… · 滚轮缩放 · 双击 2x</small></div>
   <div id="rotpad">
-    <span class="rl">旋转</span>
+    <button id="rotL" title="左转 90°">↶</button>
+    <button id="rotR" title="右转 90°">↷</button>
+    <button class="pill" id="fliph" title="水平镜像 H">⇋</button>
+    <button class="pill" id="flipv" title="垂直翻转 V">⇅</button>
+    <span class="sep"></span>
+    <span class="rl">拉直</span>
     <button id="rotm1" title="逆时针 1°">−1°</button>
     <button id="rotm01" title="逆时针 0.1°">−.1</button>
     <span id="angleval">0.0</span>°
     <button id="rotp01" title="顺时针 0.1°">+.1</button>
     <button id="rotp1" title="顺时针 1°">+1°</button>
-    <button id="rot0" title="归零">⟲</button>
+    <button id="rot0" title="拉直归零">⟲</button>
   </div>
   <div id="imgwrap"><img id="img">
     <div id="wbsel"></div>
@@ -622,8 +639,7 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
       <button id="refresh">刷新</button></div>
     <div class="btnrow" style="margin-top:6px">
       <button class="pill" id="selall">全选</button>
-      <button class="pill" id="selnone">清空</button>
-      <span class="hint" style="margin:auto 0">勾选 = 批量导出对象</span></div>
+      <button class="pill" id="selnone">清空</button></div>
     <div id="files"></div>
     <div class="hint" id="meta"></div>
   </div></details>
@@ -665,7 +681,6 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
       <button class="pill" data-c="b">B</button>
       <button id="curvereset">重置本通道</button></div>
     <canvas id="curve" width="300" height="200" style="width:100%;height:auto;background:#141519;border:1px solid var(--line);border-radius:5px;margin-top:8px;touch-action:none"></canvas>
-    <div class="hint">空白处点击加点 · 拖动调整（端点只能上下）· 双击删点</div>
   </div></details>
 
   <details class="sec"><summary>HSL（八色）</summary><div class="bd">
@@ -677,11 +692,10 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
     <label class="row">明亮度 <span class="v" id="vhsll">0</span></label>
     <input type="range" id="hsll" min="-100" max="100" step="1" value="0">
     <div class="btnrow" style="margin-top:6px">
-      <button id="hslreset">重置全部 HSL</button>
-      <span class="hint" style="margin:auto 0">加粗 = 该色区有调整</span></div>
+      <button id="hslreset">重置全部 HSL</button></div>
   </div></details>
 
-  <details class="sec" open><summary>色彩（色温 / 白点）</summary><div class="bd">
+  <details class="sec" open><summary>色彩 / 白点</summary><div class="bd">
     <label class="row" style="margin-top:2px">白平衡</label>
     <div class="btnrow"><button class="pill" id="wbgray">灰世界</button>
       <button class="pill" id="wbnone">不做</button></div>
@@ -693,10 +707,9 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
       <button class="pill" id="wbpick">框选白点</button>
       <button id="wbclear">清除白点</button>
       <span class="hint" style="margin:auto 0" id="wbinfo">白点: 未设</span></div>
-    <div class="hint">开启后拖框圈出应为中性灰/白的区域；取框内平均色，优先于灰世界</div>
   </div></details>
 
-  <details class="sec" open><summary>裁切画幅（拖动裁切框可自由定位）</summary><div class="bd">
+  <details class="sec" open><summary>裁切画幅</summary><div class="bd">
     <div class="btnrow" id="fmts">
       <button class="pill on" data-f="free">自由</button>
       <button class="pill" data-f="135">135</button>
@@ -713,26 +726,15 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
       <button id="cropreset">重置框</button></div>
   </div></details>
 
-  <details class="sec"><summary>引导取样（darktable 式 · 可选）</summary><div class="bd">
-    <div class="hint">在图上框选取样来覆盖自动色阶：<b style="color:#e0a24a">片基</b>去色罩 ·
-      <b style="color:#5aa0ff">暗部</b>定黑场 · <b style="color:#ffe14a">亮部</b>定白场；留空即用自动。
-      照片范围用上面的裁切框。</div>
-    <div class="btnrow" style="margin-top:6px">
-      <button class="pill" id="pbase">框选片基</button>
-      <button class="pill" id="pshadow">框选暗部</button>
-      <button class="pill" id="phl">框选亮部</button>
+  <details class="sec"><summary>分区取样（片基 / 暗部 / 亮部）</summary><div class="bd">
+    <div class="btnrow" style="margin-top:2px">
+      <button class="pill" id="pbase" style="color:#e0a24a">框选片基</button>
+      <button class="pill" id="pshadow" style="color:#5aa0ff">框选暗部</button>
+      <button class="pill" id="phl" style="color:#ffe14a">框选亮部</button>
       <button id="sclear">清除取样</button></div>
     <span class="hint" id="sinfo">取样: 未设</span>
   </div></details>
 
-  <details class="sec" open><summary>方向</summary><div class="bd">
-    <div class="btnrow">
-      <button id="rotL">↶ 左转</button><button id="rotR">↷ 右转</button>
-      <button class="pill" id="fliph">镜像 H</button>
-      <button class="pill" id="flipv">翻转 V</button></div>
-    <div class="hint">拍歪了用左下角「旋转」按钮微调（自动内缩去黑角）；镜像/旋转会带着裁切框与取样框一起变换。
-      快捷键：r 右转 · R 左转 · f 镜像 · e 导出 · 空格按住看负片</div>
-  </div></details>
 
   <details class="sec" open><summary>降噪 / 锐化 / 晕影</summary><div class="bd">
     <label class="row">色度降噪 <span class="v" id="vdenoise"></span></label>
@@ -751,13 +753,12 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
     <input type="range" id="white_pct" min="97" max="100" step="0.1">
   </div></details>
 
-  <details class="sec"><summary>对齐参照（扫描件）</summary><div class="bd">
+  <details class="sec"><summary>扫描件配色匹配</summary><div class="bd">
     <input type="text" id="ref" placeholder="参照图路径（同一张/同卷成品）">
     <div class="btnrow" style="margin-top:6px">
       <button id="pickref">选择…</button>
       <button class="pill" id="usematch">应用匹配</button>
       <button id="clearref">清除</button></div>
-    <div class="hint">开启后覆盖上面的 gamma/对比度/白平衡/饱和度</div>
   </div></details>
 
   <details class="sec"><summary>预设（色调参数）</summary><div class="bd">
@@ -766,7 +767,6 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
       <input type="text" id="prename" placeholder="预设名" style="flex:1;width:auto">
       <button id="presave">存预设</button>
       <button id="predel">删预设</button></div>
-    <div class="hint">只含色调类参数（与 CLI --preset 共用），不含裁切/方向</div>
   </div></details>
 
   <details class="sec" open><summary>导出</summary><div class="bd">
@@ -785,7 +785,7 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
     <div class="btnrow" style="margin-top:6px">
       <button id="savepar" style="flex:1">保存参数</button>
       <button id="reset" style="flex:1">恢复默认</button></div>
-    <button id="applyroll" style="width:100%;margin-top:6px">当前参数套整卷</button>
+    <button id="applyroll" style="width:100%;margin-top:6px">套用当前参数到整卷</button>
     <label class="row" style="margin-top:12px">批量导出（勾选的文件）</label>
     <div class="btnrow">
       <input type="text" id="batchout" placeholder="输出目录（留空=各自同目录/去色罩输出/）" style="flex:1;width:auto">
@@ -796,6 +796,76 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
     <div id="blog"></div>
   </div></details>
   <div id="status"></div>
+</div>
+
+<div id="helpmodal">
+  <div id="helpcard">
+    <button id="helpclose" title="关闭">×</button>
+    <h2>功能说明</h2>
+    <p>把数码翻拍的彩色负片去色罩、反转成正片。左侧预览边看边调，参数自动记忆并写入照片旁的 XML 边车。</p>
+
+    <h3>载入与预览</h3>
+    <ul>
+      <li>左栏「选择底片」填文件夹或文件路径回车列出，点文件名载入。</li>
+      <li>滚轮缩放，双击 2×，「适合窗口」复位，按住空格（或「按住看负片」）看原始负片。</li>
+    </ul>
+
+    <h3>裁切画幅</h3>
+    <ul>
+      <li><b>自动框</b>：自动检测胶片画面区域并框好（只框不旋转）。</li>
+      <li>拖动裁切框四边/四角手动微调；可锁定 135 / 645 / 6×6 等画幅比例。</li>
+      <li>「占满」= 全画幅，「重置框」= 回到默认留边。</li>
+    </ul>
+
+    <h3>方向（左下角浮层）</h3>
+    <ul>
+      <li>↶ ↷ 转 90°；⇋ 水平镜像、⇅ 垂直翻转。</li>
+      <li>「拉直」按 ±1° / ±0.1° 微调倾斜，⟲ 归零；导出会自动内缩去掉旋转黑角。</li>
+      <li>镜像 / 旋转时，裁切框与所有取样框会一起变换，修改不会错位。</li>
+    </ul>
+
+    <h3>模式与影调</h3>
+    <ul>
+      <li>模式：彩色负片 / 黑白负片 / 正片（反转片）。</li>
+      <li>gamma、对比度、饱和度，以及曝光 / 高光 / 阴影 / 白色 / 黑色等细调。</li>
+    </ul>
+
+    <h3>色彩与白点</h3>
+    <ul>
+      <li>默认灰世界白平衡；色温 / 色调可手动偏移。</li>
+      <li>「框选白点」：在图上圈出应为中性灰/白的区域，取框内平均色做白平衡。</li>
+    </ul>
+
+    <h3>分区取样（片基 / 暗部 / 亮部）</h3>
+    <ul>
+      <li>在图上框选覆盖自动色阶：<b style="color:#e0a24a">片基</b>定去色罩基准、<b style="color:#5aa0ff">暗部</b>定黑场、<b style="color:#ffe14a">亮部</b>定白场。</li>
+      <li>都留空则走自动流程。</li>
+    </ul>
+
+    <h3>曲线 / HSL</h3>
+    <ul>
+      <li>曲线：空白处点击加点、拖动调整（端点只能上下）、双击删点。</li>
+      <li>HSL：八个色区分别调色相/饱和/明度，加粗的色区表示已调整。</li>
+    </ul>
+
+    <h3>降噪 / 锐化 / 晕影</h3>
+    <p>色度降噪去彩噪、亮度 USM 锐化、暗角。</p>
+
+    <h3>扫描件配色匹配</h3>
+    <p>给一张已调好的扫描件作参照，用直方图匹配把当前片子的色调 / 影调对齐过去（仅配色，不涉及裁切对齐）。开启后会覆盖上面的 gamma / 对比度 / 白平衡 / 饱和度。</p>
+
+    <h3>预设与批量</h3>
+    <ul>
+      <li>预设只保存色调类参数（不含裁切 / 方向），与命令行 <kbd>--preset</kbd> 共用。</li>
+      <li>「当前参数套整卷」把当前参数复制给整卷；「批量导出」按勾选文件导出，可优先用各自已存参数。</li>
+    </ul>
+
+    <h3>参数保存</h3>
+    <p>调整后自动写入照片旁的 <kbd>&lt;文件名&gt;.decast.xml</kbd> 边车，随照片一起搬移；重新载入自动恢复。</p>
+
+    <h3>快捷键</h3>
+    <p><kbd>r</kbd> 右转 · <kbd>R</kbd> 左转 · <kbd>f</kbd> 镜像 · <kbd>e</kbd> 导出 · <kbd>空格</kbd> 按住看负片</p>
+  </div>
 </div>
 
 <script>
@@ -1293,6 +1363,10 @@ $("rotm01").onclick=()=>nudgeAngle(-0.1);
 $("rotp01").onclick=()=>nudgeAngle(0.1);
 $("rotp1").onclick=()=>nudgeAngle(1);
 $("rot0").onclick=()=>{P.level_angle=0; updAngle(); render();};
+// 功能说明弹窗
+$("helpbtn").onclick=()=>{$("helpmodal").style.display="flex";};
+$("helpclose").onclick=()=>{$("helpmodal").style.display="none";};
+$("helpmodal").onclick=(e)=>{ if(e.target.id==="helpmodal") $("helpmodal").style.display="none"; };
 $("raw_denoise").onchange=e=>{P.raw_denoise=e.target.checked;render()};
 $("usematch").onclick=()=>{P.use_match=!P.use_match;refl();render()};
 $("ftif").onclick=()=>{fmt="tif";refl()}; $("fjpg").onclick=()=>{fmt="jpg";refl()};
@@ -1546,6 +1620,7 @@ $("batch").onclick=async()=>{
 
 // ---- 快捷键（输入框聚焦时忽略）----
 window.addEventListener("keydown",e=>{
+  if($("helpmodal").style.display==="flex"){ if(e.key==="Escape") $("helpmodal").style.display="none"; return; }
   const t=e.target.tagName;
   if(t==="INPUT"||t==="TEXTAREA"||t==="SELECT") return;
   if(e.key===" "){ e.preventDefault(); if(!e.repeat) showNeg(true); return; }
