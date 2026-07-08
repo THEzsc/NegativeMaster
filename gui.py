@@ -1478,6 +1478,7 @@ input[type=range]:hover::-moz-range-thumb {
       <button id="savepar" style="flex:1">保存参数</button>
       <button id="reset" style="flex:1">恢复默认</button></div>
     <button id="applyroll" style="width:100%;margin-top:6px">套用当前参数到整卷</button>
+    <button id="wbroll" style="width:100%;margin-top:4px">仅把白平衡套整卷（保留各自裁切等）</button>
     <label class="row" style="margin-top:12px">批量导出（勾选的文件）</label>
     <div class="btnrow">
       <input type="text" id="batchout" placeholder="输出目录（留空=各自同目录/去色罩输出/）" style="flex:1;width:auto">
@@ -2282,6 +2283,32 @@ $("applyroll").onclick=async()=>{
     }catch(_){}
   }
   stat("整卷参数已保存："+ok+"/"+items.length);
+};
+// 只把当前白平衡（色温/色调/白平衡模式）套给整卷，各自裁切/影调等保留
+$("wbroll").onclick=async()=>{
+  if(!curFile){stat("先调好白平衡");return;}
+  let items=[...document.querySelectorAll("#files .fitem")].filter(el=>el.querySelector(".fck").checked);
+  if(!items.length) items=[...document.querySelectorAll("#files .fitem")].filter(el=>el.style.display!=="none");
+  if(!items.length){stat("当前列表没有文件");return;}
+  if(!confirm("把当前白平衡（色温 "+P.temp+" / 色调 "+P.tint+"）套给 "+items.length+" 张？各自裁切/其它参数保留")) return;
+  const wb={temp:P.temp,tint:P.tint,wb:P.wb};
+  let ok=0;
+  for(const el of items){
+    const f=el.dataset.path;
+    try{
+      let data=null;
+      const sc=await(await fetch("/api/sidecar?path="+encodeURIComponent(f))).json();
+      if(sc.ok&&sc.data) data=sc.data;
+      else{ const s=await(await fetch("/api/settings?path="+encodeURIComponent(f))).json(); if(s.ok&&s.data) data=s.data; }
+      if(!data) data={P:dclone(D),cropN:{x0:.06,y0:.06,x1:.94,y1:.94},curFmt:"free",orient:"land"};
+      if(!data.P) data.P={};
+      Object.assign(data.P,wb);
+      await fetch("/api/sidecar",{method:"POST",headers:HJ,body:JSON.stringify({path:f,data})});
+      await fetch("/api/settings",{method:"POST",headers:HJ,body:JSON.stringify({path:f,data})});
+      ok++;
+    }catch(_){}
+  }
+  stat("整卷白平衡已套用："+ok+"/"+items.length+"（重新载入生效）");
 };
 
 // ---- 参照匹配 ----
