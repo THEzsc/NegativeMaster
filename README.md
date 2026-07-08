@@ -199,4 +199,3 @@ Runtime state such as `.venv/`, `settings/`, logs, Swift build products, and loc
 
 - **THEzsc** (Project Creator & Main Developer)
 - **Antigravity (Google DeepMind AI)** (AI Pair Programmer) — Assisted with frontend GUI visual redesign, slider styling, Canvas rendering optimizations (curves and histograms), SVG icon modernization, and SwiftUI build orchestration.
-
