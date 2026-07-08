@@ -167,8 +167,17 @@ public final class NegativeEngine {
         var work = orient(img, rotate: params.rotate,
                           flipH: params.flipH, flipV: params.flipV)
 
+        // 方向后、裁切前的整幅尺寸（引导取样把归一化坐标映回像素时要用）
+        let fullOrientW = work.width
+        let fullOrientH = work.height
+        var offX = 0
+        var offY = 0
+
         // 2) 裁切（归一化矩形，真正裁掉）
         if let rect = params.cropRect {
+            let (xa, ya, _, _) = rectPixels(rect, width: fullOrientW, height: fullOrientH)
+            offX = xa
+            offY = ya
             work = crop(work, rect: rect)
         }
         let w = work.width
@@ -176,11 +185,37 @@ public final class NegativeEngine {
         var P = work.pixels
 
         // 3) 按模式反转 / 拉伸
+        //    彩色负片可用引导取样（片基/暗部/亮部）覆盖各通道黑白点（负片密度空间）。
+        //    取样读的是裁切后的线性透过率（invert 前的 P），密度 = -log10(中值)。
+        var bpOverride: [Float?] = [nil, nil, nil]   // 黑点覆盖：暗部 > 片基
+        var wpOverride: [Float?] = [nil, nil, nil]   // 白点覆盖：亮部
+        if params.mode == .colorNegative {
+            let sampleCtx = (croppedW: w, croppedH: h,
+                             fullW: fullOrientW, fullH: fullOrientH,
+                             offX: offX, offY: offY)
+            let fbD = params.filmBaseRect.flatMap {
+                sampleDensityMedian(rect: $0, pixels: P, ctx: sampleCtx)
+            }
+            let shD = params.shadowRect.flatMap {
+                sampleDensityMedian(rect: $0, pixels: P, ctx: sampleCtx)
+            }
+            let hlD = params.highlightRect.flatMap {
+                sampleDensityMedian(rect: $0, pixels: P, ctx: sampleCtx)
+            }
+            for ch in 0..<3 {
+                if let shD { bpOverride[ch] = shD[ch] }
+                else if let fbD { bpOverride[ch] = fbD[ch] }
+                if let hlD { wpOverride[ch] = hlD[ch] }
+            }
+        }
+
         switch params.mode {
         case .colorNegative:
             invertColorNegative(&P, width: w, height: h,
                                 blackPct: Float(params.blackPct),
-                                whitePct: Float(params.whitePct))
+                                whitePct: Float(params.whitePct),
+                                bpOverride: bpOverride,
+                                wpOverride: wpOverride)
         case .bwNegative:
             invertBWNegative(&P, width: w, height: h,
                              blackPct: Float(params.blackPct),
@@ -212,10 +247,10 @@ public final class NegativeEngine {
 
         if matching {
             // 5a) 直方图匹配：转移参照扫描件的色调与色彩
-            //     （覆盖色温色调 / gamma / 对比度 / 饱和度）
+            //     （覆盖色温色调 / gamma / 对比度）
             applyHistogramMatch(&P, width: w, height: h, ref: matchRef!)
         } else {
-            // 5b) 手动影调（色温色调 / 饱和度只对彩色有意义）
+            // 5b) 手动影调（色温色调只对彩色有意义）
             if !isBW {
                 applyTemperatureTint(&P,
                                      temperature: Float(params.temperature),
@@ -223,24 +258,43 @@ public final class NegativeEngine {
             }
             applyGamma(&P, gamma: Float(params.gamma))
             applyContrast(&P, k: Float(params.contrast))
-            if !isBW {
-                applySaturation(&P, s: Float(params.saturation))
-            }
         }
 
-        // 6) 锐化：亮度 unsharp mask（只锐化亮度，不放大彩色噪声）
+        // ---------------------------------------------------------------- //
+        // 收尾（LR 精调）：对齐 decast.py apply_finishing，match / 非 match 都执行。
+        //   曝光/高光/阴影/白黑场 → 饱和度 → 锐化 → 色度降噪 → 晕影。
+        //   （曲线 / HSL / 鲜艳度 尚未移植，见文件末尾备注。）
+        // ---------------------------------------------------------------- //
+
+        // 6) 曝光/高光/阴影/白黑场（彩色与黑白都做；ratio 保色相，黑白仍 R==G==B）
+        applyToneAdjust(&P, width: w, height: h,
+                        exposure: Float(params.exposure),
+                        highlights: Float(params.highlights),
+                        shadows: Float(params.shadows),
+                        whites: Float(params.whites),
+                        blacks: Float(params.blacks))
+
+        // 7) 饱和度（仅彩色；match 模式也做——与 decast.py 一致，修正之前 match 跳过饱和度的偏差）
+        if !isBW {
+            applySaturation(&P, s: Float(params.saturation))
+        }
+
+        // 8) 锐化：亮度 unsharp mask（只锐化亮度，不放大彩色噪声）
         if params.sharpen > 1e-3 {
             applySharpen(&P, width: w, height: h,
                          amount: Float(params.sharpen),
                          radius: Int(params.sharpenRadius.rounded()))
         }
 
-        // 7) 色度降噪：去掉反转放大出来的彩色颗粒（尤其蓝通道）；
+        // 9) 色度降噪：去掉反转放大出来的彩色颗粒（尤其蓝通道）；
         //    黑白模式 R==G==B 无色度，跳过（同 decast.py）
         let dr = Int(params.denoise.rounded())
         if dr >= 1 && !isBW {
             applyChromaDenoise(&P, width: w, height: h, radius: dr)
         }
+
+        // 10) 晕影（最后做）：裁切后画面即参照，与导出裁切后一致
+        applyVignette(&P, width: w, height: h, amount: Float(params.vignette))
 
         clip01(&P)
         return LinearImage(width: w, height: h, pixels: P)
@@ -389,7 +443,9 @@ public final class NegativeEngine {
     /// 橙色色罩在密度空间是每通道固定偏移，减黑点即同时完成去色罩+反转。
     private static func invertColorNegative(_ P: inout [Float],
                                             width: Int, height: Int,
-                                            blackPct: Float, whitePct: Float) {
+                                            blackPct: Float, whitePct: Float,
+                                            bpOverride: [Float?] = [nil, nil, nil],
+                                            wpOverride: [Float?] = [nil, nil, nil]) {
         let n = width * height
         // 就地转密度：clip -> log10 -> 取负
         var lo = eps
@@ -407,10 +463,14 @@ public final class NegativeEngine {
         var samples = gatherChannelSamples(P, width: width, height: height, step: step)
 
         // 每通道 (D - bp) / (wp - bp)
+        //   黑点优先级：暗部/片基取样（bpOverride）> 自动百分位
+        //   白点优先级：亮部取样（wpOverride）> 自动百分位
+        //   取样反了也不崩坏：bp > wp 时自动摆正（同 decast.py）
         for c in 0..<3 {
             vDSP_vsort(&samples[c], vDSP_Length(samples[c].count), 1)
-            let bp = percentileSorted(samples[c], blackPct)
-            var wp = percentileSorted(samples[c], whitePct)
+            var bp = bpOverride[c] ?? percentileSorted(samples[c], blackPct)
+            var wp = wpOverride[c] ?? percentileSorted(samples[c], whitePct)
+            if wp < bp { swap(&bp, &wp) }
             if wp - bp < 1e-6 { wp = bp + 1e-6 }
             var scale = 1.0 / (wp - bp)
             var offset = -bp / (wp - bp)
@@ -694,6 +754,118 @@ public final class NegativeEngine {
                 buf[idx]     = min(max(y + (r - y) * s, 0), 1)
                 buf[idx + 1] = min(max(y + (g - y) * s, 0), 1)
                 buf[idx + 2] = min(max(y + (b - y) * s, 0), 1)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ //
+    // LR 精调：曝光/高光/阴影/白黑场 + 晕影（对齐 decast.py tone_adjust / apply_vignette）
+    // ------------------------------------------------------------------ //
+
+    /// LR 风格影调五件套（作用在显示值 0~1 上，逐字对齐 decast.py tone_adjust）。
+    ///   exposure：EV（-3~3），2^ev 增益。
+    ///   highlights/shadows：-100~100，权重 Y³(1-Y) / Y(1-Y)³，端点钉住。
+    ///   whites/blacks：-100~100，levels 式移动白/黑场端点。
+    /// 曝光与高光/阴影经亮度比值作用到 RGB（保色相）；白黑场按通道直接重映射。
+    private static func applyToneAdjust(_ P: inout [Float],
+                                        width: Int, height: Int,
+                                        exposure: Float, highlights: Float,
+                                        shadows: Float, whites: Float, blacks: Float) {
+        let ev = min(max(exposure, -3), 3)
+        let h = min(max(highlights, -100), 100) / 100
+        let s = min(max(shadows, -100), 100) / 100
+        let w = min(max(whites, -100), 100) / 100
+        let b = min(max(blacks, -100), 100) / 100
+        if abs(ev) < 1e-4 && abs(h) < 1e-3 && abs(s) < 1e-3
+            && abs(w) < 1e-3 && abs(b) < 1e-3 { return }
+        let eps: Float = 1e-6
+        let n = width * height
+        let doLuma = abs(ev) >= 1e-4 || abs(h) >= 1e-3 || abs(s) >= 1e-3
+        let gain = powf(2.0, ev)
+
+        if doLuma {
+            P.withUnsafeMutableBufferPointer { buf in
+                for i in 0..<n {
+                    let idx = i * 3
+                    let r = min(max(buf[idx], 0), 1)
+                    let g = min(max(buf[idx + 1], 0), 1)
+                    let bl = min(max(buf[idx + 2], 0), 1)
+                    let Y = min(max(0.299 * r + 0.587 * g + 0.114 * bl, 0), 1)
+                    var Y2 = Y * gain
+                    let Yc = min(max(Y2, 0), 1)
+                    if abs(s) >= 1e-3 {
+                        let om = 1 - Yc
+                        Y2 += (2.2 * s) * Yc * om * om * om     // 阴影：Y(1-Y)³
+                    }
+                    if abs(h) >= 1e-3 {
+                        Y2 += (2.2 * h) * (Yc * Yc * Yc) * (1 - Yc)  // 高光：Y³(1-Y)
+                    }
+                    let ratio = max(Y2, 0) / max(Y, eps)
+                    buf[idx]     = min(max(r * ratio, 0), 1)
+                    buf[idx + 1] = min(max(g * ratio, 0), 1)
+                    buf[idx + 2] = min(max(bl * ratio, 0), 1)
+                }
+            }
+        } else {
+            // 仅动白/黑场时，Python 先 out = clip(P)，这里就地夹一遍
+            clip01(&P)
+        }
+
+        // 白场/黑场：按通道 levels 重映射（能真正抬起纯黑/拉爆纯白）
+        let w0 = 0.30 * w
+        let b0 = 0.30 * b
+        if abs(w0) >= 1e-4 {
+            var scale = w0 > 0 ? 1.0 / max(1 - w0, 0.1) : (1 + w0)
+            P.withUnsafeMutableBufferPointer { buf in
+                vDSP_vsmul(buf.baseAddress!, 1, &scale, buf.baseAddress!, 1,
+                           vDSP_Length(buf.count))
+            }
+        }
+        if abs(b0) >= 1e-4 {
+            var scale: Float
+            var offset: Float
+            if b0 > 0 { scale = 1 - b0; offset = b0 }           // out = b0 + out*(1-b0)
+            else { scale = 1.0 / (1 + b0); offset = b0 / (1 + b0) } // out = (out+b0)/(1+b0)
+            P.withUnsafeMutableBufferPointer { buf in
+                vDSP_vsmsa(buf.baseAddress!, 1, &scale, &offset, buf.baseAddress!, 1,
+                           vDSP_Length(buf.count))
+            }
+        }
+        clip01(&P)
+    }
+
+    /// 晕影（对齐 decast.py apply_vignette，以当前画面为参照 rect=None）。
+    /// amount -100~100：<0 四角压暗，>0 提亮四角；中心 35% 半径内不受影响，
+    /// 向角落 smoothstep 平滑过渡。
+    private static func applyVignette(_ P: inout [Float],
+                                      width: Int, height: Int, amount: Float) {
+        let a = min(max(amount, -100), 100) / 100
+        if abs(a) < 1e-3 { return }
+        let cx = Float(width - 1) / 2
+        let cy = Float(height - 1) / 2
+        let rx = max(Float(width) / 2, 1)
+        let ry = max(Float(height) / 2, 1)
+        let invSqrt2: Float = 1.0 / sqrtf(2.0)
+        let k = a * 0.7
+        var xx = [Float](repeating: 0, count: width)
+        for x in 0..<width { let v = (Float(x) - cx) / rx; xx[x] = v * v }
+        P.withUnsafeMutableBufferPointer { buf in
+            xx.withUnsafeBufferPointer { xxp in
+                for y in 0..<height {
+                    let vy = (Float(y) - cy) / ry
+                    let yy = vy * vy
+                    let row = y * width
+                    for x in 0..<width {
+                        let r = sqrtf(yy + xxp[x]) * invSqrt2
+                        let t = min(max((r - 0.35) / 0.65, 0), 1)
+                        let fall = t * t * (3 - 2 * t)   // smoothstep
+                        let gain = 1 + k * fall
+                        let idx = (row + x) * 3
+                        buf[idx]     = min(max(buf[idx] * gain, 0), 1)
+                        buf[idx + 1] = min(max(buf[idx + 1] * gain, 0), 1)
+                        buf[idx + 2] = min(max(buf[idx + 2] * gain, 0), 1)
+                    }
+                }
             }
         }
     }
@@ -1128,6 +1300,51 @@ public final class NegativeEngine {
             }
         }
         return Y
+    }
+
+    /// negadoctor 式引导取样（对齐 decast.py _sample_lin_median + -log10）：
+    /// 取归一化矩形（方向后、裁切前坐标）在裁切后线性图内的每通道中值，
+    /// 转成密度（-log10）。返回 nil 表示区域退化。
+    private static func sampleDensityMedian(
+        rect: CropRectN,
+        pixels: [Float],
+        ctx: (croppedW: Int, croppedH: Int, fullW: Int, fullH: Int, offX: Int, offY: Int)
+    ) -> [Float]? {
+        let x0 = min(rect.x0, rect.x1), x1 = max(rect.x0, rect.x1)
+        let y0 = min(rect.y0, rect.y1), y1 = max(rect.y0, rect.y1)
+        var xa = Int((Double(ctx.fullW) * x0).rounded()) - ctx.offX
+        var xb = Int((Double(ctx.fullW) * x1).rounded()) - ctx.offX
+        var ya = Int((Double(ctx.fullH) * y0).rounded()) - ctx.offY
+        var yb = Int((Double(ctx.fullH) * y1).rounded()) - ctx.offY
+        xa = max(0, min(xa, ctx.croppedW - 1)); xb = max(xa + 1, min(xb, ctx.croppedW))
+        ya = max(0, min(ya, ctx.croppedH - 1)); yb = max(ya + 1, min(yb, ctx.croppedH))
+        guard xb > xa, yb > ya else { return nil }
+
+        let cap = (xb - xa) * (yb - ya)
+        var chans = [[Float]](repeating: [], count: 3)
+        for c in 0..<3 { chans[c].reserveCapacity(cap) }
+        pixels.withUnsafeBufferPointer { buf in
+            for y in ya..<yb {
+                let row = y * ctx.croppedW
+                for x in xa..<xb {
+                    let idx = (row + x) * 3
+                    chans[0].append(min(max(buf[idx], eps), 1))
+                    chans[1].append(min(max(buf[idx + 1], eps), 1))
+                    chans[2].append(min(max(buf[idx + 2], eps), 1))
+                }
+            }
+        }
+        var density = [Float](repeating: 0, count: 3)
+        for c in 0..<3 {
+            var arr = chans[c]
+            guard !arr.isEmpty else { return nil }
+            arr.sort()
+            let m = arr.count
+            let median = m % 2 == 1 ? arr[m / 2]
+                                    : 0.5 * (arr[m / 2 - 1] + arr[m / 2])
+            density[c] = -log10f(median)
+        }
+        return density
     }
 
     /// 三个通道分别乘系数（vDSP 跨步）

@@ -148,35 +148,34 @@ struct PreviewView: View {
                 .interpolation(.medium)
                 .frame(width: fw, height: fh)
 
-            // 白点取样框
-            if !state.showNegative, let rect = currentWBRect {
-                Rectangle()
-                    .fill(Color.yellow.opacity(0.16))
-                    .overlay(Rectangle().stroke(Color.yellow, lineWidth: 1.5))
-                    .frame(width: max(1, CGFloat(rect.x1 - rect.x0) * fw),
-                           height: max(1, CGFloat(rect.y1 - rect.y0) * fh))
-                    .position(x: CGFloat(rect.x0 + rect.x1) * fw / 2,
-                              y: CGFloat(rect.y0 + rect.y1) * fh / 2)
-                    .allowsHitTesting(false)
-            } else if let p = state.params.wbPoint, !state.showNegative {
-                Circle()
-                    .stroke(Color.yellow, lineWidth: 1.5)
-                    .frame(width: 14, height: 14)
-                    .position(x: p.x * fw, y: p.y * fh)
-                    .allowsHitTesting(false)
+            // 取样框（白平衡 / 片基 / 暗部 / 亮部）——已设的框各用一种颜色标注
+            if !state.showNegative {
+                sampleRectOverlays(fw: fw, fh: fh)
+                // 正在拖动中的框：用当前取样模式的颜色实时预览
+                if let rect = liveDragRect {
+                    sampleRect(rect, color: state.pickMode.overlayColor, fw: fw, fh: fh)
+                }
+                if let p = state.params.wbPoint,
+                   state.params.wbRect == nil, state.pickMode == .none {
+                    Circle()
+                        .stroke(Color.yellow, lineWidth: 1.5)
+                        .frame(width: 14, height: 14)
+                        .position(x: p.x * fw, y: p.y * fh)
+                        .allowsHitTesting(false)
+                }
             }
 
-            // 裁切框（看负片时隐藏，取白点时不拦截点击）
+            // 裁切框（看负片时隐藏，取样时不拦截点击）
             if !state.showNegative, let rect = state.params.cropRect {
                 CropOverlayView(rect: rect,
                                 normalizedAspect: state.cropAspectNormalized,
                                 pixelSize: state.orientedFullSize) { newRect in
                     state.commitCrop(newRect)
                 }
-                .allowsHitTesting(!state.wbPicking)
+                .allowsHitTesting(state.pickMode == .none)
             }
 
-            if state.wbPicking && !state.showNegative {
+            if state.pickMode != .none && !state.showNegative {
                 Rectangle()
                     .fill(Color.clear)
                     .contentShape(Rectangle())
@@ -187,11 +186,41 @@ struct PreviewView: View {
         .position(x: avail.width / 2, y: avail.height / 2)
     }
 
-    private var currentWBRect: CropRectN? {
+    /// 正在拖动中的取样框（未拖动时 nil；已提交的框由 sampleRectOverlays 画）
+    private var liveDragRect: CropRectN? {
         if let s = wbDragStart, let c = wbDragCurrent {
             return normalizedRect(from: s, to: c)
         }
-        return state.params.wbRect
+        return nil
+    }
+
+    /// 已提交的四个取样框（白平衡 / 片基 / 暗部 / 亮部）各画一个彩色矩形
+    @ViewBuilder
+    private func sampleRectOverlays(fw: CGFloat, fh: CGFloat) -> some View {
+        if let r = state.params.wbRect {
+            sampleRect(r, color: RectPickMode.whiteBalance.overlayColor, fw: fw, fh: fh)
+        }
+        if let r = state.params.filmBaseRect {
+            sampleRect(r, color: RectPickMode.filmBase.overlayColor, fw: fw, fh: fh)
+        }
+        if let r = state.params.shadowRect {
+            sampleRect(r, color: RectPickMode.shadow.overlayColor, fw: fw, fh: fh)
+        }
+        if let r = state.params.highlightRect {
+            sampleRect(r, color: RectPickMode.highlight.overlayColor, fw: fw, fh: fh)
+        }
+    }
+
+    private func sampleRect(_ rect: CropRectN, color: Color,
+                            fw: CGFloat, fh: CGFloat) -> some View {
+        Rectangle()
+            .fill(color.opacity(0.14))
+            .overlay(Rectangle().stroke(color, lineWidth: 1.5))
+            .frame(width: max(1, CGFloat(rect.x1 - rect.x0) * fw),
+                   height: max(1, CGFloat(rect.y1 - rect.y0) * fh))
+            .position(x: CGFloat(rect.x0 + rect.x1) * fw / 2,
+                      y: CGFloat(rect.y0 + rect.y1) * fh / 2)
+            .allowsHitTesting(false)
     }
 
     private func whiteRectGesture(width: CGFloat, height: CGFloat) -> some Gesture {
@@ -207,7 +236,7 @@ struct PreviewView: View {
                 let rect = normalizedRect(from: start, to: end)
                 wbDragStart = nil
                 wbDragCurrent = nil
-                state.pickWhiteRect(rect)
+                state.commitPickRect(rect)
             }
     }
 
@@ -259,10 +288,10 @@ struct PreviewView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
-            if state.wbPicking {
-                Text("拖框取白点…")
+            if state.pickMode != .none {
+                Text("拖框取样：\(state.pickMode.hint)…")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(state.pickMode.overlayColor)
             }
             if state.isRendering || state.isLoading {
                 ProgressView().controlSize(.small)
@@ -297,5 +326,33 @@ struct PreviewView: View {
                     .onEnded { _ in
                         state.setNegativePressed(false)
                     })
+    }
+}
+
+// ------------------------------------------------------------------------- //
+// 取样模式的界面配色 / 提示文案
+// ------------------------------------------------------------------------- //
+
+extension RectPickMode {
+    /// 取样框在预览里的标注颜色
+    var overlayColor: Color {
+        switch self {
+        case .whiteBalance: return .yellow
+        case .filmBase:     return .orange
+        case .shadow:       return .cyan
+        case .highlight:    return .green
+        case .none:         return .yellow
+        }
+    }
+
+    /// 状态栏提示词
+    var hint: String {
+        switch self {
+        case .whiteBalance: return "白点"
+        case .filmBase:     return "片基"
+        case .shadow:       return "暗部"
+        case .highlight:    return "亮部"
+        case .none:         return ""
+        }
     }
 }

@@ -18,9 +18,11 @@ struct ControlsView: View {
                 modeSection
                 histogramSection
                 toneSection
+                fineToneSection
                 colorSection
                 detailSection
                 advancedSection
+                guidedSampleSection
                 matchSection
                 cropSection
                 orientationSection
@@ -66,6 +68,28 @@ struct ControlsView: View {
             }
         }
         .disabled(state.params.useMatch && state.matchRefLoaded)
+    }
+
+    // ------------------------- 精调（LR 五件套 + 晕影） ------------------------- //
+
+    private var fineToneSection: some View {
+        GroupBox("精调（曝光 / 高光阴影 / 白黑场 / 晕影）") {
+            VStack(spacing: 6) {
+                SliderRow(title: "曝光 EV", value: $state.params.exposure,
+                          range: -3...3, step: 0.05)
+                SliderRow(title: "高光", value: $state.params.highlights,
+                          range: -100...100, step: 1, format: "%.0f")
+                SliderRow(title: "阴影", value: $state.params.shadows,
+                          range: -100...100, step: 1, format: "%.0f")
+                SliderRow(title: "白场", value: $state.params.whites,
+                          range: -100...100, step: 1, format: "%.0f")
+                SliderRow(title: "黑场", value: $state.params.blacks,
+                          range: -100...100, step: 1, format: "%.0f")
+                Divider()
+                SliderRow(title: "晕影（压暗 - 提亮四角）", value: $state.params.vignette,
+                          range: -100...100, step: 1, format: "%.0f")
+            }
+        }
     }
 
     // ------------------------- 色彩 ------------------------- //
@@ -140,6 +164,42 @@ struct ControlsView: View {
                           range: 97...100, step: 0.1, format: "%.1f")
             }
         }
+    }
+
+    // ------------------------- 引导取样（去色罩锚点） ------------------------- //
+
+    /// pickMode 的开关绑定：开 = 进入该取样模式，关 = 退出
+    private func pickBinding(_ mode: RectPickMode) -> Binding<Bool> {
+        Binding(get: { state.pickMode == mode },
+                set: { state.pickMode = $0 ? mode : .none })
+    }
+
+    private var guidedSampleSection: some View {
+        GroupBox("引导取样（覆盖各通道黑白点）") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("在预览里拖框：片基/暗部→黑点，亮部→白点（优先级 暗部 > 片基）")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Toggle("框片基", isOn: pickBinding(.filmBase))
+                        .toggleStyle(.button)
+                    Toggle("框暗部", isOn: pickBinding(.shadow))
+                        .toggleStyle(.button)
+                    Toggle("框亮部", isOn: pickBinding(.highlight))
+                        .toggleStyle(.button)
+                }
+                HStack(spacing: 6) {
+                    Button("清片基") { state.clearFilmBaseRect() }
+                        .disabled(state.params.filmBaseRect == nil)
+                    Button("清暗部") { state.clearShadowRect() }
+                        .disabled(state.params.shadowRect == nil)
+                    Button("清亮部") { state.clearHighlightRect() }
+                        .disabled(state.params.highlightRect == nil)
+                }
+                .controlSize(.small)
+            }
+        }
+        .disabled(state.params.mode != .colorNegative)
     }
 
     // ------------------------- 参照匹配 ------------------------- //

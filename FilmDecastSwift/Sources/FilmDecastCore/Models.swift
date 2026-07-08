@@ -106,6 +106,30 @@ public struct DevelopParams: Codable, Equatable {
     /// 启用后覆盖 gamma / 对比度 / 饱和度 / 色温色调）
     public var useMatch: Bool
 
+    // --- LR 风格精调（收尾阶段，对齐 decast.py tone_adjust / apply_vignette） --- //
+
+    /// 曝光 EV（-3~3），2^EV 增益（作用在显示值上，保色相）
+    public var exposure: Double
+    /// 高光（-100~100）：权重集中在高光区 Y³(1-Y)，>0 提亮 <0 压暗
+    public var highlights: Double
+    /// 阴影（-100~100）：权重集中在阴影区 Y(1-Y)³
+    public var shadows: Double
+    /// 白场（-100~100）：levels 式移动白场端点
+    public var whites: Double
+    /// 黑场（-100~100）：levels 式移动黑场端点（>0 抬黑褪色，<0 压黑）
+    public var blacks: Double
+    /// 晕影（-100~100）：<0 压暗四角，>0 提亮四角（以裁切后画面为参照）
+    public var vignette: Double
+
+    // --- negadoctor 式引导取样（可选；坐标系同 wbRect：方向后、裁切前 0~1 比例） --- //
+
+    /// 片基取样框：取框内线性中值 → 密度 → 覆盖各通道黑点（去色罩锚点）
+    public var filmBaseRect: CropRectN?
+    /// 暗部取样框：优先级高于片基，覆盖各通道黑点
+    public var shadowRect: CropRectN?
+    /// 亮部取样框：覆盖各通道白点
+    public var highlightRect: CropRectN?
+
     public init(cropRect: CropRectN? = nil,
                 rotate: Int = 0,
                 flipH: Bool = false,
@@ -124,7 +148,16 @@ public struct DevelopParams: Codable, Equatable {
                 denoise: Double = 0,
                 sharpen: Double = 0,
                 sharpenRadius: Double = 2,
-                useMatch: Bool = false) {
+                useMatch: Bool = false,
+                exposure: Double = 0,
+                highlights: Double = 0,
+                shadows: Double = 0,
+                whites: Double = 0,
+                blacks: Double = 0,
+                vignette: Double = 0,
+                filmBaseRect: CropRectN? = nil,
+                shadowRect: CropRectN? = nil,
+                highlightRect: CropRectN? = nil) {
         self.cropRect = cropRect
         self.rotate = rotate
         self.flipH = flipH
@@ -144,6 +177,52 @@ public struct DevelopParams: Codable, Equatable {
         self.sharpen = sharpen
         self.sharpenRadius = sharpenRadius
         self.useMatch = useMatch
+        self.exposure = exposure
+        self.highlights = highlights
+        self.shadows = shadows
+        self.whites = whites
+        self.blacks = blacks
+        self.vignette = vignette
+        self.filmBaseRect = filmBaseRect
+        self.shadowRect = shadowRect
+        self.highlightRect = highlightRect
+    }
+
+    /// 向后兼容的解码：缺失键取默认值（旧版持久化 JSON 没有新增字段也能读回）
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = DevelopParams()   // 默认值来源
+        func dec<T: Decodable>(_ key: CodingKeys, _ fallback: T) throws -> T {
+            try c.decodeIfPresent(T.self, forKey: key) ?? fallback
+        }
+        cropRect       = try c.decodeIfPresent(CropRectN.self, forKey: .cropRect)
+        rotate         = try dec(.rotate, d.rotate)
+        flipH          = try dec(.flipH, d.flipH)
+        flipV          = try dec(.flipV, d.flipV)
+        blackPct       = try dec(.blackPct, d.blackPct)
+        whitePct       = try dec(.whitePct, d.whitePct)
+        mode           = try dec(.mode, d.mode)
+        wb             = try dec(.wb, d.wb)
+        wbPoint        = try c.decodeIfPresent(CGPoint.self, forKey: .wbPoint)
+        wbRect         = try c.decodeIfPresent(CropRectN.self, forKey: .wbRect)
+        gamma          = try dec(.gamma, d.gamma)
+        contrast       = try dec(.contrast, d.contrast)
+        saturation     = try dec(.saturation, d.saturation)
+        temperature    = try dec(.temperature, d.temperature)
+        tint           = try dec(.tint, d.tint)
+        denoise        = try dec(.denoise, d.denoise)
+        sharpen        = try dec(.sharpen, d.sharpen)
+        sharpenRadius  = try dec(.sharpenRadius, d.sharpenRadius)
+        useMatch       = try dec(.useMatch, d.useMatch)
+        exposure       = try dec(.exposure, d.exposure)
+        highlights     = try dec(.highlights, d.highlights)
+        shadows        = try dec(.shadows, d.shadows)
+        whites         = try dec(.whites, d.whites)
+        blacks         = try dec(.blacks, d.blacks)
+        vignette       = try dec(.vignette, d.vignette)
+        filmBaseRect   = try c.decodeIfPresent(CropRectN.self, forKey: .filmBaseRect)
+        shadowRect     = try c.decodeIfPresent(CropRectN.self, forKey: .shadowRect)
+        highlightRect  = try c.decodeIfPresent(CropRectN.self, forKey: .highlightRect)
     }
 
     /// 默认参数（与 decast.py 命令行默认值一致）

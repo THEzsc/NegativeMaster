@@ -44,6 +44,15 @@ enum CropFormat: String, CaseIterable, Identifiable {
     }
 }
 
+/// 预览里「拖框取样」的目标（一次只激活一个）
+enum RectPickMode: Equatable {
+    case none
+    case whiteBalance   // 白平衡取样框
+    case filmBase       // 片基取样框（去色罩黑点锚点）
+    case shadow         // 暗部取样框（黑点，优先于片基）
+    case highlight      // 亮部取样框（白点）
+}
+
 /// 导出格式（界面选择用，导出时转成 ImageExporter 的 ExportFormat）
 enum ExportFileFormat: String, CaseIterable, Identifiable {
     case tiff16
@@ -135,8 +144,14 @@ final class AppState: ObservableObject {
             applyCropFormat()
         }
     }
-    /// 「取白点」模式：开启后点击预览采样
-    @Published var wbPicking = false
+    /// 预览拖框取样模式（白平衡 / 片基 / 暗部 / 亮部；.none = 不取样）
+    @Published var pickMode: RectPickMode = .none
+
+    /// 「取白点」模式（兼容旧调用点）：读写映射到 pickMode
+    var wbPicking: Bool {
+        get { pickMode == .whiteBalance }
+        set { pickMode = newValue ? .whiteBalance : .none }
+    }
 
     // ------------------------- 参照匹配 ------------------------- //
 
@@ -197,7 +212,7 @@ final class AppState: ObservableObject {
         suppressSideEffects = true
         cropFormat = .free
         cropLandscape = true
-        wbPicking = false
+        pickMode = .none
         suppressSideEffects = false
         params = Self.initialParams()   // didSet -> 持久化 + 渲染
         statusText = "已恢复默认参数"
@@ -281,7 +296,7 @@ final class AppState: ObservableObject {
         negativeCG = nil
         negativeToken = ""
         showNegative = false
-        wbPicking = false
+        pickMode = .none
 
         loadTask = Task { [weak self] in
             let result = await Task.detached(priority: .userInitiated)
@@ -456,7 +471,7 @@ final class AppState: ObservableObject {
 
     /// 点击预览取白点（兼容旧单点语义；新 UI 默认使用 pickWhiteRect）
     func pickWhitePoint(atNormalized pt: CGPoint) {
-        wbPicking = false
+        pickMode = .none
         params.wbRect = nil
         params.wbPoint = pt
         statusText = String(format: "白点取样：(%.3f, %.3f)", pt.x, pt.y)
@@ -464,7 +479,7 @@ final class AppState: ObservableObject {
 
     /// 框选范围取白点（norm 是方向后、裁切前的 0~1 坐标，正合引擎语义）
     func pickWhiteRect(_ rect: CropRectN) {
-        wbPicking = false
+        pickMode = .none
         params.wbPoint = nil
         params.wbRect = rect
         statusText = String(format: "白点取样框：(%.3f, %.3f) - (%.3f, %.3f)",
@@ -476,6 +491,53 @@ final class AppState: ObservableObject {
         params.wbPoint = nil
         params.wbRect = nil
         statusText = "已清除白点取样"
+    }
+
+    // --------------------------------------------------------------------- //
+    // 引导取样（片基 / 暗部 / 亮部）——复用白点的拖框流程
+    // --------------------------------------------------------------------- //
+
+    /// 预览里拖框结束后统一提交：按当前 pickMode 写入对应参数
+    func commitPickRect(_ rect: CropRectN) {
+        switch pickMode {
+        case .whiteBalance:
+            pickWhiteRect(rect)
+        case .filmBase:
+            pickMode = .none
+            params.filmBaseRect = rect
+            statusText = String(format: "片基取样框：(%.3f, %.3f)-(%.3f, %.3f)",
+                                rect.x0, rect.y0, rect.x1, rect.y1)
+        case .shadow:
+            pickMode = .none
+            params.shadowRect = rect
+            statusText = String(format: "暗部取样框：(%.3f, %.3f)-(%.3f, %.3f)",
+                                rect.x0, rect.y0, rect.x1, rect.y1)
+        case .highlight:
+            pickMode = .none
+            params.highlightRect = rect
+            statusText = String(format: "亮部取样框：(%.3f, %.3f)-(%.3f, %.3f)",
+                                rect.x0, rect.y0, rect.x1, rect.y1)
+        case .none:
+            break
+        }
+    }
+
+    func clearFilmBaseRect() {
+        guard params.filmBaseRect != nil else { return }
+        params.filmBaseRect = nil
+        statusText = "已清除片基取样"
+    }
+
+    func clearShadowRect() {
+        guard params.shadowRect != nil else { return }
+        params.shadowRect = nil
+        statusText = "已清除暗部取样"
+    }
+
+    func clearHighlightRect() {
+        guard params.highlightRect != nil else { return }
+        params.highlightRect = nil
+        statusText = "已清除亮部取样"
     }
 
     /// 把当前完整调整参数保存到整卷：有勾选则套勾选，否则套当前过滤列表。

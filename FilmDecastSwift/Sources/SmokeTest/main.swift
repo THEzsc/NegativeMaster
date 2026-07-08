@@ -147,6 +147,58 @@ check(maxBWDiff < 1e-6,
       String(format: "黑白输出三通道最大差 %.2e（应为 0）", maxBWDiff))
 
 // ------------------------------------------------------------------------- //
+// 5) 精调：曝光提亮 / 晕影压暗亮角 / 黑白仍严格 R==G==B
+// ------------------------------------------------------------------------- //
+
+func meanLuma(_ img: LinearImage) -> Float {
+    var s: Float = 0
+    for i in 0..<(img.width * img.height) { s += luma(img, i) }
+    return s / Float(img.width * img.height)
+}
+
+print("[5] 精调：曝光 / 晕影 / 白黑场")
+
+var pExp = pColor; pExp.exposure = 1.0
+let outExp = NegativeEngine.develop(negative, params: pExp)
+let midE0 = luma(outColor, n / 2)
+let midE1 = luma(outExp, n / 2)
+check(midE1 > midE0 + 0.05,
+      String(format: "曝光 +1EV 提亮中间调（%.4f > %.4f）", midE1, midE0))
+
+var pVig = pColor; pVig.vignette = -100
+let outVig = NegativeEngine.develop(negative, params: pVig)
+let cornerBase = luma(outColor, n - 1)   // 右下角亮点
+let cornerVig = luma(outVig, n - 1)
+check(cornerVig < cornerBase - 0.3,
+      String(format: "晕影 -100 明显压暗亮角（%.4f < %.4f）", cornerVig, cornerBase))
+
+var pBWFine = DevelopParams()
+pBWFine.mode = .bwNegative
+pBWFine.exposure = 0.8; pBWFine.highlights = 40; pBWFine.shadows = -20
+pBWFine.whites = 15; pBWFine.blacks = 10; pBWFine.vignette = -50
+let outBWFine = NegativeEngine.develop(negative, params: pBWFine)
+var maxBWFineDiff: Float = 0
+for i in 0..<n {
+    let r = outBWFine.pixels[i * 3], g = outBWFine.pixels[i * 3 + 1], b = outBWFine.pixels[i * 3 + 2]
+    maxBWFineDiff = max(maxBWFineDiff, max(r, g, b) - min(r, g, b))
+}
+check(maxBWFineDiff < 1e-5,
+      String(format: "黑白 + 精调后仍严格 R==G==B（%.2e）", maxBWFineDiff))
+
+// ------------------------------------------------------------------------- //
+// 6) 引导取样：暗部框取「亮场」→ 黑点抬高 → 整体压暗
+// ------------------------------------------------------------------------- //
+
+print("[6] 引导取样：shadowRect 覆盖各通道黑点")
+var pGuide = pColor
+pGuide.shadowRect = CropRectN(x0: 0.9, y0: 0.9, x1: 1.0, y1: 1.0)  // 右下=最亮场（高密度）
+let outGuide = NegativeEngine.develop(negative, params: pGuide)
+let mBase = meanLuma(outColor)
+let mGuide = meanLuma(outGuide)
+check(mGuide < mBase - 0.1,
+      String(format: "shadowRect 取亮场把黑点抬高，整体明显压暗（%.4f < %.4f）", mGuide, mBase))
+
+// ------------------------------------------------------------------------- //
 
 print("共 \(checkCount) 项断言全部通过")
 print("PASS")
