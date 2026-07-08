@@ -109,6 +109,18 @@ def make_opts(params):
     return ns
 
 
+def color_to_temp_tint(color):
+    """把一块「应为中性」的取样色换算成 色温/色调 值（与 decast.apply_temp_tint
+    的通道增益模型对应，k=0.3、均值归一），供框选白点后回填两条滑杆。"""
+    c = np.clip(np.asarray(color, dtype=np.float64), 1e-4, None)
+    d = c.mean() / c                 # 中和到中性所需的每通道增益
+    dn = d / d.mean()                # 均值归一（apply_temp_tint 也做了归一）
+    k = 0.3
+    temp = float(np.clip((dn[0] - dn[2]) / (2 * k) * 100.0, -100, 100))
+    tint = float(np.clip((1.0 - dn[1]) / k * 100.0, -100, 100))
+    return round(temp, 1), round(tint, 1)
+
+
 def to_jpeg(arr_float):
     im = Image.fromarray((np.clip(arr_float, 0, 1) * 255 + 0.5).astype(np.uint8), "RGB")
     buf = io.BytesIO()
@@ -354,6 +366,39 @@ def api_autocrop():
     return jsonify(ok=True, rect=rect, angle=round(float(ang), 2))
 
 
+@app.route("/api/wbtemp", methods=["POST"])
+def api_wbtemp():
+    """框选中性灰后：在「未白平衡」的正片上取该框平均色，换算成 色温/色调 返回。"""
+    if CACHE["prev"] is None:
+        return jsonify(ok=False, err="先载入图片"), 400
+    params = dict(request.json or {})
+    rect = params.get("wb_rect")
+    if not rect:
+        return jsonify(ok=False, err="没有白点框"), 400
+    try:
+        load_full(CACHE["path"], params.get("raw_denoise", False))
+    except Exception as e:
+        return jsonify(ok=False, err=str(e)), 500
+    opts = make_opts(params)
+    opts.crop = 0.0
+    opts.crop_rect = None
+    opts.stats_rect = params.get("crop_rect")   # 预览：整幅显示、按裁切框算色阶
+    opts.wb = "none"; opts.wb_rect = None; opts.wb_point = None
+    opts.temp = 0.0; opts.tint = 0.0
+    opts._ref_cdfs = None                        # 不做匹配，取纯反转色
+    Pb, _ = decast.convert_base(CACHE["prev"], opts)
+    h, w = Pb.shape[:2]
+    if isinstance(rect, dict):
+        x0, y0, x1, y1 = rect["x0"], rect["y0"], rect["x1"], rect["y1"]
+    else:
+        x0, y0, x1, y1 = rect
+    xa = max(0, int(min(x0, x1) * w)); xb = max(xa + 1, int(max(x0, x1) * w))
+    ya = max(0, int(min(y0, y1) * h)); yb = max(ya + 1, int(max(y0, y1) * h))
+    color = Pb[ya:yb, xa:xb].reshape(-1, 3).mean(axis=0)
+    temp, tint = color_to_temp_tint(color)
+    return jsonify(ok=True, temp=temp, tint=tint)
+
+
 @app.route("/api/pick")
 def api_pick():
     """弹 macOS 原生选择对话框（osascript）。mode=dir 选文件夹 /
@@ -569,7 +614,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 24px 24px 64px;   /* 底部预留底栏空间，避免遮挡照片 */
   overflow: hidden;
   position: relative;
   background: radial-gradient(circle at center, #161823 0%, #08090e 100%);
@@ -1232,7 +1277,7 @@ input[type=range]:hover::-moz-range-thumb {
     <button class="navbtn" id="previmg" title="上一张 (←)">‹</button>
     <select id="fileselect" title="选择底片"></select>
     <div class="rotgroup">
-      <button id="autocrop" title="自动检测胶片画面区域并框选">自动框</button>
+      <button id="autocrop" title="自动检测胶片画面区域并框选">Auto</button>
       <span class="sep"></span>
       <button id="rotL" title="左转 90°">↶</button>
       <button id="rotR" title="右转 90°">↷</button>
@@ -1349,8 +1394,10 @@ input[type=range]:hover::-moz-range-thumb {
     <label class="row">色调 <span class="v" id="vtint"></span></label>
     <input type="range" id="tint" min="-100" max="100" step="1">
     <div class="btnrow" style="margin-top:8px">
-      <button class="pill" id="wbpick">框选白点</button>
-      <button id="wbclear">清除白点</button>
+      <button class="pill" id="wbpick" title="取色管框选中性灰/白，自动换成色温色调">
+        <svg class="btn-icon" viewBox="0 0 24 24"><path d="m2 22 1-1h3l9-9"></path><path d="M3 21v-3l9-9"></path><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"></path></svg><span>取白点</span></button>
+      <button id="wbclear" title="清除白点 / 复位色温色调">
+        <svg class="btn-icon" style="margin-right:0" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
       <span class="hint" style="margin:auto 0" id="wbinfo">白点: 未设</span></div>
   </div></details>
 
@@ -1375,7 +1422,8 @@ input[type=range]:hover::-moz-range-thumb {
       <button class="pill" id="pbase" style="color:#e0a24a">框选片基</button>
       <button class="pill" id="pshadow" style="color:#5aa0ff">框选暗部</button>
       <button class="pill" id="phl" style="color:#ffe14a">框选亮部</button>
-      <button id="sclear">清除取样</button></div>
+      <button id="sclear" title="清除取样">
+        <svg class="btn-icon" style="margin-right:0" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></div>
     <span class="hint" id="sinfo">取样: 未设</span>
   </div></details>
 
@@ -1438,6 +1486,10 @@ input[type=range]:hover::-moz-range-thumb {
     <button id="batch" style="width:100%;margin-top:4px">批量导出</button>
     <div id="bprog"><i></i></div>
     <div id="blog"></div>
+  </div></details>
+
+  <details class="sec" open><summary>载入行为</summary><div class="bd">
+    <label class="row"><span><input type="checkbox" id="resetdefault" checked style="width:auto;margin-right:6px">载入每张时重置为默认参数（含水平翻转）</span></label>
   </div></details>
   <div id="status"></div>
 </div>
@@ -1515,7 +1567,7 @@ input[type=range]:hover::-moz-range-thumb {
 <script>
 const HJ={"Content-Type":"application/json"};
 const D={crop:0,black_pct:0.5,white_pct:99.7,wb:"gray",gamma:1.8,contrast:0.08,
-  saturation:1.0,denoise:0,rotate:0,flip:"none",level_angle:0,raw_denoise:false,use_match:false,
+  saturation:1.0,denoise:0,rotate:0,flip:"h",level_angle:0,raw_denoise:false,use_match:false,
   negadoctor:false,nd_gamma:2.4,nd_exposure:1.0,
   mode:"color",temp:0,tint:0,sharpen:0,sharpen_radius:2.0,wb_point:null,wb_rect:null,
   film_base_rect:null,shadow_rect:null,highlight_rect:null,
@@ -1543,7 +1595,8 @@ function imgAspect(){ const wh=dispWH(); return wh[1]? wh[0]/wh[1] : 1.5; }
 function fitWrap(){
   const im=$("img"), st=$("stage");
   const a=(im.naturalWidth&&im.naturalHeight)?im.naturalWidth/im.naturalHeight:imgAspect();
-  let w=st.clientWidth-24, h=w/a; if(h>st.clientHeight-24){h=st.clientHeight-24;w=h*a;}
+  const availH=st.clientHeight-24-64;   // 顶部内边距 + 底部预留底栏
+  let w=st.clientWidth-48, h=w/a; if(h>availH){h=availH;w=h*a;}
   const wr=$("imgwrap"); wr.style.width=w+"px"; wr.style.height=h+"px"; drawCrop(); drawWBRect(); drawSamples();
 }
 function drawCrop(){
@@ -1640,7 +1693,7 @@ function setPickWB(on){
   if(!on&&wbdrag){wbdrag=null; drawWBRect();}
 }
 $("wbpick").onclick=()=>setPickWB(!pickWB);
-$("wbclear").onclick=()=>{P.wb_point=null;P.wb_rect=null;drawWBRect();refl();render();};
+$("wbclear").onclick=()=>{P.wb_point=null;P.wb_rect=null;P.temp=0;P.tint=0;drawWBRect();refl();render();};
 
 // ---- 引导取样：片基 / 暗部 / 亮部（拖框，覆盖自动色阶）----
 let pickS=null, sdrag=null;
@@ -1739,10 +1792,18 @@ function cropMove(e){
 }
 function cropUp(){
   if(wbdrag){
-    P.wb_rect=normalizedRect(wbdrag.start,wbdrag.cur);
-    P.wb_point=null;
-    wbdrag=null;
-    setPickWB(false); drawWBRect(); refl(); render();
+    const r=normalizedRect(wbdrag.start,wbdrag.cur);
+    wbdrag=null; setPickWB(false); drawWBRect();
+    stat("采样中性灰…");
+    // 框选中性灰 → 自动换算成 色温/色调 回填，不再单独存白点框
+    fetch("/api/wbtemp",{method:"POST",headers:HJ,
+      body:JSON.stringify(Object.assign({},P,{wb_rect:r,crop_rect:cropRect()}))})
+      .then(x=>x.json()).then(d=>{
+        if(d.ok){ P.temp=d.temp; P.tint=d.tint; P.wb_rect=null; P.wb_point=null;
+          stat("白点→ 色温 "+d.temp+" / 色调 "+d.tint); }
+        else stat("✗ "+d.err);
+        drawWBRect(); refl(); render();
+      });
     return;
   }
   if(sdrag){
@@ -2153,15 +2214,19 @@ function loadFile(path){
           if(sd.curFmt!==undefined){curFmt=sd.curFmt||"free"; orient=sd.orient||"land";}
           stat("已载入（恢复自"+label+"）");
         }else{
-          cropN={x0:.06,y0:.06,x1:.94,y1:.94};
+          P=dclone(D);                    // 重置为默认（含 flip:h），不沿用上一张
+          cropN={x0:.06,y0:.06,x1:.94,y1:.94}; curFmt="free"; orient="land";
           if(aspect) applyFormat(curFmt);
-          stat("已载入");
+          stat("已载入（默认参数）");
         }
         syncFmtPills(); refl(); drawCrop();
         lastSavedSig=settingsSig();   // 先记基线，避免刚载入未改动就误写边车
         render();
       };
-      // 优先读挨着照片的 XML 边车；没有再退回内部 JSON 记忆
+      if($("resetdefault").checked){    // 开关：每张一律用默认参数
+        applyRestore(null); return;
+      }
+      // 否则优先读挨着照片的 XML 边车；没有再退回内部 JSON 记忆
       fetch("/api/sidecar?path="+encodeURIComponent(path)).then(r=>r.json()).then(sc=>{
         if(sc.ok&&sc.data){ applyRestore(sc.data,"XML 边车"); return; }
         fetch("/api/settings?path="+encodeURIComponent(path)).then(r=>r.json()).then(s=>{
