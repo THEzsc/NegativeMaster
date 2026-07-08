@@ -31,6 +31,7 @@ import json
 import hashlib
 import argparse
 import subprocess
+import xml.etree.ElementTree as ET
 import numpy as np
 from PIL import Image
 from flask import Flask, request, jsonify, send_file, Response
@@ -137,6 +138,72 @@ def settings_file(path):
     """某个图像文件对应的参数记忆 JSON 路径。"""
     key = hashlib.sha1(os.path.abspath(path).encode("utf-8")).hexdigest()
     return os.path.join(SETTINGS_DIR, key + ".json")
+
+
+def sidecar_path(path):
+    """调整参数的 XML 边车路径：和源文件放一起，保留原扩展名避免同名冲突。
+    如 /a/TZP06758.ARW -> /a/TZP06758.ARW.decast.xml"""
+    return os.path.abspath(path) + ".decast.xml"
+
+
+def _data_to_xml(data, src):
+    """把 {P, cropN, curFmt, orient} 序列化成可读、可回读的 XML。"""
+    root = ET.Element("decastAdjustments",
+                      version="1", source=os.path.basename(src))
+    pe = ET.SubElement(root, "params")
+    P = data.get("P") or {}
+    for k in sorted(P.keys()):
+        v = P[k]
+        el = ET.SubElement(pe, "param", name=str(k))
+        if v is None:
+            el.set("null", "1")
+        elif isinstance(v, (dict, list)):
+            el.set("json", json.dumps(v, ensure_ascii=False))
+        elif isinstance(v, str):
+            el.set("type", "str"); el.set("value", v)
+        else:  # int / float / bool
+            el.set("value", json.dumps(v))
+    cn = data.get("cropN") or {}
+    ET.SubElement(root, "crop", **{k: str(cn.get(k, "")) for k in
+                                   ("x0", "y0", "x1", "y1")})
+    ET.SubElement(root, "view", fmt=str(data.get("curFmt", "free")),
+                  orient=str(data.get("orient", "land")))
+    try:
+        ET.indent(root)  # Python 3.9+ 美化缩进
+    except Exception:
+        pass
+    return ET.tostring(root, encoding="unicode", xml_declaration=True)
+
+
+def _xml_to_data(xmlstr):
+    """回读 XML 边车 -> {P, cropN, curFmt, orient}。"""
+    root = ET.fromstring(xmlstr)
+    P = {}
+    for el in root.findall("./params/param"):
+        name = el.get("name")
+        if name is None:
+            continue
+        if el.get("null"):
+            P[name] = None
+        elif el.get("json") is not None:
+            P[name] = json.loads(el.get("json"))
+        elif el.get("type") == "str":
+            P[name] = el.get("value", "")
+        elif el.get("value") is not None:
+            P[name] = json.loads(el.get("value"))
+    data = {"P": P}
+    c = root.find("crop")
+    if c is not None:
+        try:
+            data["cropN"] = {k: float(c.get(k)) for k in
+                             ("x0", "y0", "x1", "y1")}
+        except Exception:
+            pass
+    v = root.find("view")
+    if v is not None:
+        data["curFmt"] = v.get("fmt", "free")
+        data["orient"] = v.get("orient", "land")
+    return data
 
 
 def bad_preset_name(name):
@@ -334,6 +401,35 @@ def api_settings():
     except Exception as e:
         return jsonify(ok=False, err=str(e)), 500
     return jsonify(ok=True)
+
+
+@app.route("/api/sidecar", methods=["GET", "POST"])
+def api_sidecar():
+    """调整参数的 XML 边车：紧挨源文件保存/回读，随照片一起搬移。
+    GET?path= 读取（无边车时 data=null）；POST {path,data} 写入。"""
+    if request.method == "GET":
+        path = request.args.get("path", "").strip()
+        if not path:
+            return jsonify(ok=False, err="缺少 path"), 400
+        sp = sidecar_path(path)
+        if not os.path.isfile(sp):
+            return jsonify(ok=True, data=None)
+        try:
+            with open(sp, "r", encoding="utf-8") as fh:
+                return jsonify(ok=True, data=_xml_to_data(fh.read()), file=sp)
+        except Exception as e:
+            return jsonify(ok=True, data=None, warn=str(e))
+    body = request.json or {}
+    path = str(body.get("path", "")).strip()
+    if not path:
+        return jsonify(ok=False, err="缺少 path"), 400
+    sp = sidecar_path(path)
+    try:
+        with open(sp, "w", encoding="utf-8") as fh:
+            fh.write(_data_to_xml(body.get("data") or {}, path))
+    except Exception as e:
+        return jsonify(ok=False, err=str(e)), 500
+    return jsonify(ok=True, file=sp)
 
 
 @app.route("/api/presets", methods=["GET", "POST", "DELETE"])
@@ -1093,6 +1189,7 @@ function refl(){
 let lastURL=null, negOn=false, inflight=false, rdirty=false;
 function render(){
   if(!loaded) return;
+  autosaveXml();                 // 参数一变就排一次自动保存（防抖+去重）
   if(inflight){ rdirty=true; return; }
   inflight=true; $("spin").style.display="inline";
   const body=Object.assign({},P,{crop_rect:cropRect()});
@@ -1246,20 +1343,27 @@ function loadFile(path){
       curFile=path; loaded=true; fullW=d.w; fullH=d.h;
       $("meta").textContent=d.name+" · "+d.w+"×"+d.h;
       resetView();
-      // 有记忆参数就恢复（P / 裁切框 / 画幅选择），没有就重置裁切框
-      fetch("/api/settings?path="+encodeURIComponent(path)).then(r=>r.json()).then(s=>{
-        if(s.ok&&s.data){
-          const sd=s.data;
+      const applyRestore=(sd,label)=>{
+        if(sd){
           if(sd.P) P=Object.assign(dclone(D),sd.P);
           if(sd.cropN) cropN=Object.assign({},sd.cropN);
           if(sd.curFmt!==undefined){curFmt=sd.curFmt||"free"; orient=sd.orient||"land";}
-          stat("已载入（已恢复记忆参数）");
+          stat("已载入（恢复自"+label+"）");
         }else{
           cropN={x0:.06,y0:.06,x1:.94,y1:.94};
           if(aspect) applyFormat(curFmt);
           stat("已载入");
         }
-        syncFmtPills(); refl(); drawCrop(); render();
+        syncFmtPills(); refl(); drawCrop();
+        lastSavedSig=settingsSig();   // 先记基线，避免刚载入未改动就误写边车
+        render();
+      };
+      // 优先读挨着照片的 XML 边车；没有再退回内部 JSON 记忆
+      fetch("/api/sidecar?path="+encodeURIComponent(path)).then(r=>r.json()).then(sc=>{
+        if(sc.ok&&sc.data){ applyRestore(sc.data,"XML 边车"); return; }
+        fetch("/api/settings?path="+encodeURIComponent(path)).then(r=>r.json()).then(s=>{
+          applyRestore(s.ok&&s.data?s.data:null,"记忆参数");
+        });
       });
     });
 }
@@ -1271,6 +1375,25 @@ function saveSettings(path,silent){
 }
 function currentSettings(){
   return {P:P,cropN:cropN,curFmt:curFmt,orient:orient};
+}
+// ---- 调整参数后自动存 XML 边车（挨着照片，随照片一起搬移）----
+let lastSavedSig=null, xmlTimer=null;
+function settingsSig(){ return JSON.stringify(currentSettings()); }
+function autosaveXml(){
+  if(!curFile) return;
+  const sig=settingsSig();
+  if(sig===lastSavedSig) return;           // 和上次保存的一样，不重复写
+  clearTimeout(xmlTimer);
+  xmlTimer=setTimeout(()=>{
+    const data=currentSettings(), sig2=JSON.stringify(data);
+    if(sig2===lastSavedSig) return;    // 期间基线已更新（如刚载入），不写
+    fetch("/api/sidecar",{method:"POST",headers:HJ,
+      body:JSON.stringify({path:curFile,data})}).then(r=>r.json()).then(d=>{
+        if(d.ok){ lastSavedSig=sig2; stat("✓ 调整已自动存 XML"); }});
+    // 顺带同步内部 JSON 记忆，保证「应用到整卷」等也拿到最新
+    fetch("/api/settings",{method:"POST",headers:HJ,
+      body:JSON.stringify({path:curFile,data})});
+  }, 900);
 }
 $("savepar").onclick=()=>{ if(!curFile){stat("先载入图片");return;} saveSettings(curFile,false); };
 $("applyroll").onclick=async()=>{
