@@ -1203,6 +1203,8 @@ input[type=range]:hover::-moz-range-thumb {
   </div>
   <div id="empty">← 右侧载入一张负片开始<br><small>支持 ARW/ARQ/CR2/NEF/TIF/JPG… · 滚轮缩放 · 双击 2x</small></div>
   <div id="rotpad">
+    <button id="autocrop" title="自动检测胶片画面区域并框选">自动框</button>
+    <span class="sep"></span>
     <button id="rotL" title="左转 90°">↶</button>
     <button id="rotR" title="右转 90°">↷</button>
     <button class="pill" id="fliph" title="水平镜像 H">⇋</button>
@@ -1326,7 +1328,6 @@ input[type=range]:hover::-moz-range-thumb {
     <div class="btnrow" style="margin-top:6px">
       <button class="pill on" id="oland">横 ▭</button>
       <button class="pill" id="oport">竖 ▯</button>
-      <button id="autocrop">自动框</button>
       <button id="cropfull">占满</button>
       <button id="cropreset">重置框</button></div>
   </div></details>
