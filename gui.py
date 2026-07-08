@@ -716,7 +716,11 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
       <button id="rotL">↶ 左转</button><button id="rotR">↷ 右转</button>
       <button class="pill" id="fliph">镜像 H</button>
       <button class="pill" id="flipv">翻转 V</button></div>
-    <div class="hint">快捷键：r 右转 · R 左转 · f 镜像 · e 导出 · 空格按住看负片</div>
+    <label class="row">旋转 / 拉直 <span class="v" id="vlevel_angle"></span>°
+      <button id="levelreset" style="margin-left:auto;font-size:11px;padding:1px 8px">归零</button></label>
+    <input type="range" id="level_angle" min="-45" max="45" step="0.1">
+    <div class="hint">任意角度旋正；导出会自动内缩去黑角。「自动框正」会填入检测到的角度。
+      快捷键：r 右转 · R 左转 · f 镜像 · e 导出 · 空格按住看负片</div>
   </div></details>
 
   <details class="sec" open><summary>降噪 / 锐化 / 晕影</summary><div class="bd">
@@ -786,7 +790,7 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
 <script>
 const HJ={"Content-Type":"application/json"};
 const D={crop:0,black_pct:0.5,white_pct:99.7,wb:"gray",gamma:1.8,contrast:0.08,
-  saturation:1.0,denoise:0,rotate:0,flip:"none",raw_denoise:false,use_match:false,
+  saturation:1.0,denoise:0,rotate:0,flip:"none",level_angle:0,raw_denoise:false,use_match:false,
   mode:"color",temp:0,tint:0,sharpen:0,sharpen_radius:2.0,wb_point:null,wb_rect:null,
   film_base_rect:null,shadow_rect:null,highlight_rect:null,
   exposure:0,highlights:0,shadows:0,whites:0,blacks:0,vibrance:0,vignette:0,
@@ -800,7 +804,7 @@ const PKEYS=["black_pct","white_pct","wb","gamma","contrast","saturation",
 let P=dclone(D), curFile=null, fmt="tif", timer=null, loaded=false;
 const $=id=>document.getElementById(id);
 const SL=["gamma","contrast","saturation","denoise","sharpen","black_pct","white_pct","temp","tint",
-  "exposure","highlights","shadows","whites","blacks","vibrance","vignette"];
+  "exposure","highlights","shadows","whites","blacks","vibrance","vignette","level_angle"];
 
 // ---- 裁切框（比例坐标，可自由定位 + 画幅比例锁定）----
 let cropN={x0:.06,y0:.06,x1:.94,y1:.94};
@@ -1256,6 +1260,7 @@ $("fliph").onclick=()=>{P.flip=P.flip==="h"?"none":"h";refl();render()};
 $("flipv").onclick=()=>{P.flip=P.flip==="v"?"none":"v";refl();render()};
 $("rotL").onclick=()=>{P.rotate=(P.rotate+270)%360;applyFormat(curFmt);render()};
 $("rotR").onclick=()=>{P.rotate=(P.rotate+90)%360;applyFormat(curFmt);render()};
+$("levelreset").onclick=()=>{P.level_angle=0;$("level_angle").value=0;$("vlevel_angle").textContent="0";render();};
 $("raw_denoise").onchange=e=>{P.raw_denoise=e.target.checked;render()};
 $("usematch").onclick=()=>{P.use_match=!P.use_match;refl();render()};
 $("ftif").onclick=()=>{fmt="tif";refl()}; $("fjpg").onclick=()=>{fmt="jpg";refl()};
@@ -1272,8 +1277,8 @@ $("fmts").querySelectorAll("button").forEach(b=>b.onclick=()=>{
   b.classList.add("on"); applyFormat(b.dataset.f); render();});
 $("oland").onclick=()=>{orient="land";$("oland").classList.add("on");$("oport").classList.remove("on");applyFormat(curFmt);render();};
 $("oport").onclick=()=>{orient="port";$("oport").classList.add("on");$("oland").classList.remove("on");applyFormat(curFmt);render();};
-$("cropfull").onclick=()=>{cropN={x0:0,y0:0,x1:1,y1:1}; P.level_angle=0; aspect?applyFormat(curFmt):drawCrop(); render();};
-$("cropreset").onclick=()=>{cropN={x0:.06,y0:.06,x1:.94,y1:.94}; P.level_angle=0; aspect?applyFormat(curFmt):drawCrop(); render();};
+$("cropfull").onclick=()=>{cropN={x0:0,y0:0,x1:1,y1:1}; aspect?applyFormat(curFmt):drawCrop(); render();};
+$("cropreset").onclick=()=>{cropN={x0:.06,y0:.06,x1:.94,y1:.94}; aspect?applyFormat(curFmt):drawCrop(); render();};
 $("autocrop").onclick=()=>{
   if(!loaded){stat("先载入图片");return;}
   stat("自动校平 + 检测画面区域…");
@@ -1282,7 +1287,7 @@ $("autocrop").onclick=()=>{
       if(!d.ok){stat("✗ "+d.err);return;}
       const[x0,y0,x1,y1]=d.rect; cropN={x0,y0,x1,y1};
       P.level_angle=d.angle||0;
-      curFmt="free"; syncFmtPills(); drawCrop(); render();
+      curFmt="free"; syncFmtPills(); refl(); drawCrop(); render();
       stat("已自动框选"+(P.level_angle?("，校平 "+P.level_angle.toFixed(2)+"°"):"（已水平）"));});
 };
 window.addEventListener("resize",()=>{ if(loaded) fitWrap(); });

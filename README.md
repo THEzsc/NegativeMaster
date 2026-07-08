@@ -127,6 +127,7 @@ This makes the core inversion predictable and keeps color correction separate fr
 | `--crop-rect x0,y0,x1,y1` | Normalized rectangle crop | none |
 | `--auto-crop` | Detect and crop the film frame | off |
 | `--auto-level` | Detect frame tilt and straighten (best with `--auto-crop`) | off |
+| `--level-angle` | Manual free-angle rotation / straighten in degrees; auto-insets to hide corners | `0` |
 | `--rotate` | Clockwise rotation: 0, 90, 180, 270 | `0` |
 | `--flip` | `none`, `h`, or `v` | `none` |
 | `--mode` | `color`, `bw`, or `positive` | `color` |

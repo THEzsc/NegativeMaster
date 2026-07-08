@@ -708,6 +708,17 @@ def _safe_inset_rect(shape, angle):
     return None
 
 
+def _rect_intersect(a, b):
+    """两个 [x0,y0,x1,y1] 归一化矩形取交集；退化时退回 b（安全框）。"""
+    if a is None:
+        return b
+    x0 = max(a[0], b[0]); y0 = max(a[1], b[1])
+    x1 = min(a[2], b[2]); y1 = min(a[3], b[3])
+    if x1 - x0 < 0.02 or y1 - y0 < 0.02:
+        return b
+    return [x0, y0, x1, y1]
+
+
 def orient_image(lin, rotate=0, flip="none"):
     """按 rotate/flip 调整图像方向（与 crop_rect 的坐标系一致）。
 
@@ -782,16 +793,17 @@ def convert_base(lin, args):
     _safe_rect = None
     if abs(_lvl) >= 0.1:
         lin = _deskew_lin(lin, _lvl)
-        # 没有显式裁切框、且不是「整幅预览+统计框」模式时，自动内缩去黑角
-        if (not getattr(args, "crop_rect", None)
-                and not getattr(args, "stats_rect", None)):
+        # 非「整幅预览」时算安全内缩框；下面裁切框会和它取交集，任意角度都不出黑角
+        if not getattr(args, "stats_rect", None):
             _safe_rect = _safe_inset_rect(lin.shape[:2], _lvl)
 
     # 2) 裁切
     #    crop_rect: 任意位置矩形裁切（会真正裁掉，用于导出/最终结果）
     #    stats_rect: 只把这块区域用于算色阶/白平衡，但输出仍是整幅（预览定位裁切框用）
     #    crop: 老的居中比例裁切（向后兼容）
-    crop_rect = getattr(args, "crop_rect", None) or _safe_rect
+    crop_rect = getattr(args, "crop_rect", None)
+    if _safe_rect is not None:               # 去斜后：用户裁切框与安全框取交集去黑角
+        crop_rect = _rect_intersect(crop_rect, _safe_rect)
     stats_rect = getattr(args, "stats_rect", None)
     h, w = lin.shape[:2]
     off_x, off_y = 0, 0  # 裁切偏移，用于把 wb_point 换算到裁切后坐标
@@ -1289,6 +1301,8 @@ def main():
                          "（已显式给 --crop-rect 时不生效）")
     ap.add_argument("--auto-level", action="store_true", dest="auto_level",
                     help="自动校平：检测画面倾斜角并旋正（和 --auto-crop 一起用最好）")
+    ap.add_argument("--level-angle", type=float, default=0.0, dest="level_angle",
+                    help="手动旋转/拉直角度（度，正=逆时针）；会自动内缩去黑角")
 
     ap.add_argument("--wb", default="gray", choices=["gray", "none"],
                     help="反转后白平衡：gray=灰世界(默认)，none=不做")
