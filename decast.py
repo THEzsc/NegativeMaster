@@ -606,19 +606,37 @@ def detect_film_rect(lin_oriented):
         return fallback
 
 
-def _robust_slope(x, y, max_tan):
-    """稳健拟合直线斜率：先最小二乘，剔除残差离群点后重拟合。
-    斜率超过 max_tan（对应角度过大、多半是误检）则返回 None。"""
-    if len(x) < 12:
+def _robust_slope(x, y, max_tan, iters=240, thresh=1.5):
+    """RANSAC + 总体最小二乘(TLS)拟合直线斜率（借鉴 darktable ashift 的做法）：
+    随机取两点定线、统计内点，取内点最多的模型，再对内点用 SVD 精修方向。
+    比普通最小二乘更抗齿孔/灰尘/片边文字/漏光等离群点。
+    内点太少或斜率超过 max_tan（角度过大，多半误检）则返回 None。"""
+    n = len(x)
+    if n < 12:
         return None
-    m, b = np.polyfit(x, y, 1)
-    resid = np.abs(y - (m * x + b))
-    thr = 2.0 * np.median(resid) + 1e-6
-    keep = resid < thr
-    if keep.sum() >= 12:
-        m, b = np.polyfit(x[keep], y[keep], 1)
-        if (keep.sum()) < 0.4 * len(x):   # 边缘太散，不可信
-            return None
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    rng = np.random.default_rng(12345)   # 固定种子：同一张图结果可复现
+    best_inl = None
+    for _ in range(iters):
+        i = int(rng.integers(n)); j = int(rng.integers(n))
+        if x[i] == x[j]:
+            continue
+        m = (y[j] - y[i]) / (x[j] - x[i])
+        b = y[i] - m * x[i]
+        d = np.abs(y - (m * x + b)) / np.hypot(m, 1.0)   # 到直线的垂直距离
+        inl = d < thresh
+        if best_inl is None or int(inl.sum()) > int(best_inl.sum()):
+            best_inl = inl
+    if best_inl is None or int(best_inl.sum()) < max(12, int(0.35 * n)):
+        return None
+    P = np.column_stack([x[best_inl], y[best_inl]])
+    P = P - P.mean(axis=0)
+    _, _, Vt = np.linalg.svd(P, full_matrices=False)
+    dx, dy = Vt[0]
+    if abs(dx) < 1e-9:
+        return None
+    m = dy / dx
     if abs(m) > max_tan:
         return None
     return float(m)
