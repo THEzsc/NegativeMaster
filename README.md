@@ -14,7 +14,7 @@ The repository includes two front ends over the same processing idea:
 - Supported RAW extensions include `.ARW`, `.ARQ`, `.CR2`, `.CR3`, `.NEF`, `.RAF`, `.DNG`, `.RW2`, `.ORF`, `.PEF`, `.SRW`, `.3FR`, `.IIQ`, and `.RAW`.
 - Standard image input: `.tif`, `.tiff`, `.png`, `.jpg`, `.jpeg`, `.bmp`, `.webp`.
 - Density-space orange-mask removal and inversion.
-- Crop tools, rotation, mirroring, auto frame detection, and aspect presets.
+- Crop tools, rotation, mirroring, auto frame detection, auto straighten (deskew), and aspect presets.
 - Box-based white balance sampling that averages the selected area to reduce grain/noise error.
 - Lightroom-style finishing controls: exposure, highlights, shadows, whites, blacks, curves, HSL, vibrance, vignette, sharpening, and chroma denoise.
 - Histogram matching against a reference positive scan.
@@ -74,10 +74,16 @@ Rotate or mirror before conversion:
 ./run.sh -i input.ARW -o positive.tif --crop 0.08 --rotate 180 --flip h
 ```
 
-Batch process a folder:
+Auto-detect the film frame and straighten it (no manual crop needed):
 
 ```bash
-./run.sh -i negatives/ -o positives/ --recursive --crop 0.08
+./run.sh -i input.ARW -o positive.tif --auto-crop --auto-level
+```
+
+Batch process a folder (auto frame + straighten each shot):
+
+```bash
+./run.sh -i negatives/ -o positives/ --recursive --auto-crop --auto-level
 ```
 
 Use a reference positive scan for histogram matching:
@@ -119,6 +125,7 @@ This makes the core inversion predictable and keeps color correction separate fr
 | `--crop F` | Crop all sides before processing, 0-0.45 | `0` |
 | `--crop-rect x0,y0,x1,y1` | Normalized rectangle crop | none |
 | `--auto-crop` | Detect and crop the film frame | off |
+| `--auto-level` | Detect frame tilt and straighten (best with `--auto-crop`) | off |
 | `--rotate` | Clockwise rotation: 0, 90, 180, 270 | `0` |
 | `--flip` | `none`, `h`, or `v` | `none` |
 | `--mode` | `color`, `bw`, or `positive` | `color` |

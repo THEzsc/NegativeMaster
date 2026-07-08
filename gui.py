@@ -49,7 +49,7 @@ DEFAULTS = dict(
     crop=0.0, crop_rect=None, base_rect=None, margin=0.0,
     black_pct=0.5, white_pct=99.7,
     wb="gray", gamma=1.8, contrast=0.08, saturation=1.0,
-    denoise=0.0, rotate=0, flip="none",
+    denoise=0.0, rotate=0, flip="none", level_angle=0.0,
     mode="color", temp=0.0, tint=0.0,
     sharpen=0.0, sharpen_radius=2.0, wb_point=None, wb_rect=None,
     # LR 风格精调
@@ -71,7 +71,8 @@ CACHE = {"path": None, "full": None, "prev": None, "scale": 1.0,
          "base": None, "base_key": None, "base_vrect": None}
 
 # 影响管线前半（convert_base）的参数——它们变了才重算 base 缓存
-BASE_PARAM_KEYS = ("mode", "rotate", "flip", "black_pct", "white_pct",
+BASE_PARAM_KEYS = ("mode", "rotate", "flip", "level_angle",
+                   "black_pct", "white_pct",
                    "wb", "wb_point", "wb_rect", "temp", "tint", "gamma", "contrast",
                    "margin", "base_rect", "input_gamma")
 
@@ -266,15 +267,18 @@ def api_hist():
 
 @app.route("/api/autocrop", methods=["POST"])
 def api_autocrop():
-    """在方向调整后的预览图上自动检测胶片画面区域，返回 0~1 比例矩形。"""
+    """方向调整后：可选自动校平(测倾斜角)，再自动检测画面区域。
+    返回 0~1 比例矩形 rect 和校平角 angle（度，前端存进 level_angle）。"""
     if CACHE["prev"] is None:
         return jsonify(ok=False, err="先载入图片"), 400
     body = request.json or {}
     rot = int(body.get("rotate", 0) or 0)
     flip = str(body.get("flip", "none"))
     oriented = decast.orient_image(CACHE["prev"], rot, flip)
-    rect = decast.detect_film_rect(oriented)
-    return jsonify(ok=True, rect=rect)
+    ang = decast.estimate_skew(oriented) if body.get("level") else 0.0
+    src = decast._deskew_lin(oriented, ang) if abs(ang) >= 0.1 else oriented
+    rect = decast.detect_film_rect(src)
+    return jsonify(ok=True, rect=rect, angle=round(float(ang), 2))
 
 
 @app.route("/api/pick")
@@ -585,7 +589,7 @@ button.acc{background:var(--acc);color:#211a08;border-color:var(--acc);font-weig
     <div class="btnrow" style="margin-top:6px">
       <button class="pill on" id="oland">横 ▭</button>
       <button class="pill" id="oport">竖 ▯</button>
-      <button id="autocrop">自动框</button>
+      <button id="autocrop">自动框正</button>
       <button id="cropfull">占满</button>
       <button id="cropreset">重置框</button></div>
   </div></details>
@@ -1097,17 +1101,18 @@ $("fmts").querySelectorAll("button").forEach(b=>b.onclick=()=>{
   b.classList.add("on"); applyFormat(b.dataset.f); render();});
 $("oland").onclick=()=>{orient="land";$("oland").classList.add("on");$("oport").classList.remove("on");applyFormat(curFmt);render();};
 $("oport").onclick=()=>{orient="port";$("oport").classList.add("on");$("oland").classList.remove("on");applyFormat(curFmt);render();};
-$("cropfull").onclick=()=>{cropN={x0:0,y0:0,x1:1,y1:1}; aspect?applyFormat(curFmt):drawCrop(); render();};
-$("cropreset").onclick=()=>{cropN={x0:.06,y0:.06,x1:.94,y1:.94}; aspect?applyFormat(curFmt):drawCrop(); render();};
+$("cropfull").onclick=()=>{cropN={x0:0,y0:0,x1:1,y1:1}; P.level_angle=0; aspect?applyFormat(curFmt):drawCrop(); render();};
+$("cropreset").onclick=()=>{cropN={x0:.06,y0:.06,x1:.94,y1:.94}; P.level_angle=0; aspect?applyFormat(curFmt):drawCrop(); render();};
 $("autocrop").onclick=()=>{
   if(!loaded){stat("先载入图片");return;}
-  stat("自动检测画面区域…");
+  stat("自动校平 + 检测画面区域…");
   fetch("/api/autocrop",{method:"POST",headers:HJ,
-    body:JSON.stringify({rotate:P.rotate,flip:P.flip})}).then(r=>r.json()).then(d=>{
+    body:JSON.stringify({rotate:P.rotate,flip:P.flip,level:true})}).then(r=>r.json()).then(d=>{
       if(!d.ok){stat("✗ "+d.err);return;}
       const[x0,y0,x1,y1]=d.rect; cropN={x0,y0,x1,y1};
+      P.level_angle=d.angle||0;
       curFmt="free"; syncFmtPills(); drawCrop(); render();
-      stat("已自动框选");});
+      stat("已自动框选"+(P.level_angle?("，校平 "+P.level_angle.toFixed(2)+"°"):"（已水平）"));});
 };
 window.addEventListener("resize",()=>{ if(loaded) fitWrap(); });
 

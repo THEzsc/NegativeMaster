@@ -606,6 +606,108 @@ def detect_film_rect(lin_oriented):
         return fallback
 
 
+def _robust_slope(x, y, max_tan):
+    """稳健拟合直线斜率：先最小二乘，剔除残差离群点后重拟合。
+    斜率超过 max_tan（对应角度过大、多半是误检）则返回 None。"""
+    if len(x) < 12:
+        return None
+    m, b = np.polyfit(x, y, 1)
+    resid = np.abs(y - (m * x + b))
+    thr = 2.0 * np.median(resid) + 1e-6
+    keep = resid < thr
+    if keep.sum() >= 12:
+        m, b = np.polyfit(x[keep], y[keep], 1)
+        if (keep.sum()) < 0.4 * len(x):   # 边缘太散，不可信
+            return None
+    if abs(m) > max_tan:
+        return None
+    return float(m)
+
+
+def estimate_skew(lin, max_angle=8.0):
+    """估计画面倾斜角（度），用于自动校平。
+
+    只用【画面/片框的边界】测倾斜，不受图像内容干扰：
+    先按 detect_film_rect 同法分出「内容」像素，再对上下边逐列取
+    内容起止行、对左右边逐行取内容起止列，各自稳健拟合直线求斜率，
+    四条边的角度取中位数。这样测的是胶片画幅本身的水平，
+    比"旋转让边缘投影最尖"的老办法稳得多（后者会被砖缝、树枝带偏）。
+    返回应施加的旋转角（PIL rotate 同向，正=逆时针）；测不准返回 0。
+    """
+    V = np.clip(np.asarray(stats_view(lin, max_side=760), np.float32), 0.0, 1.0)
+    luma = V @ LUMA_W if V.ndim == 3 else V
+    H, W = luma.shape
+    med = float(np.median(luma))
+    p_hi = float(np.percentile(luma, 99.5))
+    if p_hi <= 1e-4:
+        return 0.0
+    content = (luma < 0.8 * p_hi) & (luma > 0.3 * med)
+    max_tan = np.tan(np.radians(max_angle))
+    angs = []
+
+    # 上/下边：逐列取「首个/末个内容行」，拟合出的斜率 m=dy/dx → 角 = atan(m)
+    xs = np.where(content.sum(axis=0) > 0.3 * H)[0]
+    if len(xs) > 0.3 * W:
+        top = np.array([np.argmax(content[:, x]) for x in xs], float)
+        bot = np.array([H - 1 - np.argmax(content[::-1, x]) for x in xs], float)
+        xf = xs.astype(float)
+        for e in (top, bot):
+            m = _robust_slope(xf, e, max_tan)
+            if m is not None:
+                angs.append(np.degrees(np.arctan(m)))
+
+    # 左/右边：逐行取「首个/末个内容列」，斜率 m=dx/dy → 角 = -atan(m)
+    ys = np.where(content.sum(axis=1) > 0.3 * W)[0]
+    if len(ys) > 0.3 * H:
+        lef = np.array([np.argmax(content[y]) for y in ys], float)
+        rig = np.array([W - 1 - np.argmax(content[y][::-1]) for y in ys], float)
+        yf = ys.astype(float)
+        for e in (lef, rig):
+            m = _robust_slope(yf, e, max_tan)
+            if m is not None:
+                angs.append(-np.degrees(np.arctan(m)))
+
+    if len(angs) < 2:            # 至少两条边一致才敢转
+        return 0.0
+    ang = float(np.median(angs))
+    if abs(ang) > max_angle:
+        return 0.0
+    return ang if abs(ang) >= 0.25 else 0.0
+
+
+def _deskew_lin(lin, angle):
+    """按 angle（度，正=逆时针）旋转线性图；每通道用 PIL 'F' 模式保精度，
+    expand=False 保持画幅（旋转带入的黑角随后由裁切内缩去掉）。"""
+    if abs(angle) < 0.1:
+        return lin
+    out = [np.asarray(Image.fromarray(np.ascontiguousarray(lin[..., c]), mode="F")
+                      .rotate(angle, resample=Image.BILINEAR, expand=False))
+           for c in range(3)]
+    return np.ascontiguousarray(np.stack(out, axis=-1))
+
+
+def _safe_inset_rect(shape, angle):
+    """旋转 angle 后能避开黑角的最大居中矩形，返回 [x0,y0,x1,y1]（0~1）。
+    旋转产生的黑区只在四角，所以对称向内收，直到矩形四角都落在有效区即可。"""
+    h, w = shape[:2]
+    hs = 240
+    ws = max(2, int(round(hs * w / h)))
+    ones = np.ones((hs, ws), np.float32)
+    r = np.asarray(Image.fromarray(ones, mode="F")
+                   .rotate(angle, resample=Image.NEAREST, expand=False))
+    valid = r > 0.999
+    for f in np.linspace(0.0, 0.45, 91):          # 每步 0.5%，对称内缩
+        x0 = int(f * ws); x1 = int(round((1 - f) * ws)) - 1
+        y0 = int(f * hs); y1 = int(round((1 - f) * hs)) - 1
+        if x1 <= x0 or y1 <= y0:
+            break
+        if (valid[y0, x0] and valid[y0, x1]
+                and valid[y1, x0] and valid[y1, x1]):
+            f = float(round(f, 4))
+            return [f, f, 1 - f, 1 - f]
+    return None
+
+
 def orient_image(lin, rotate=0, flip="none"):
     """按 rotate/flip 调整图像方向（与 crop_rect 的坐标系一致）。
 
@@ -674,11 +776,22 @@ def convert_base(lin, args):
     lin = orient_image(lin, getattr(args, "rotate", 0),
                        getattr(args, "flip", "none"))
 
+    # 1.5) 自动校平：按 level_angle 去斜。旋转会带入黑角，没有显式裁切框时
+    #      用 _safe_inset_rect 算出避开黑角的最大矩形当裁切框。
+    _lvl = float(getattr(args, "level_angle", 0.0) or 0.0)
+    _safe_rect = None
+    if abs(_lvl) >= 0.1:
+        lin = _deskew_lin(lin, _lvl)
+        # 没有显式裁切框、且不是「整幅预览+统计框」模式时，自动内缩去黑角
+        if (not getattr(args, "crop_rect", None)
+                and not getattr(args, "stats_rect", None)):
+            _safe_rect = _safe_inset_rect(lin.shape[:2], _lvl)
+
     # 2) 裁切
     #    crop_rect: 任意位置矩形裁切（会真正裁掉，用于导出/最终结果）
     #    stats_rect: 只把这块区域用于算色阶/白平衡，但输出仍是整幅（预览定位裁切框用）
     #    crop: 老的居中比例裁切（向后兼容）
-    crop_rect = getattr(args, "crop_rect", None)
+    crop_rect = getattr(args, "crop_rect", None) or _safe_rect
     stats_rect = getattr(args, "stats_rect", None)
     h, w = lin.shape[:2]
     off_x, off_y = 0, 0  # 裁切偏移，用于把 wb_point 换算到裁切后坐标
@@ -1134,6 +1247,8 @@ def main():
     ap.add_argument("--auto-crop", action="store_true", dest="auto_crop",
                     help="自动检测胶片画面区域并当作 --crop-rect 用"
                          "（已显式给 --crop-rect 时不生效）")
+    ap.add_argument("--auto-level", action="store_true", dest="auto_level",
+                    help="自动校平：检测画面倾斜角并旋正（和 --auto-crop 一起用最好）")
 
     ap.add_argument("--wb", default="gray", choices=["gray", "none"],
                     help="反转后白平衡：gray=灰世界(默认)，none=不做")
@@ -1275,15 +1390,25 @@ def main():
         try:
             lin, _ = load_image(src, args)
             fargs = args
-            if getattr(args, "auto_crop", False) and not args.crop_rect:
-                # 自动检测画面区域：在「方向调整后」的下采样图上检测，
-                # 结果坐标与 --crop-rect 同一坐标系，逐张检测各用各的
-                rect = detect_film_rect(orient_image(
-                    stats_view(lin, max_side=800), args.rotate, args.flip))
+            do_level = getattr(args, "auto_level", False)
+            do_crop = getattr(args, "auto_crop", False) and not args.crop_rect
+            if do_level or do_crop:
+                # 在「方向调整后」的下采样图上检测：先算校平角、按角旋正小图，
+                # 再检测画面区域，使裁切框与全图去斜后同一坐标系；逐张各用各的
                 fargs = argparse.Namespace(**vars(args))
-                fargs.crop_rect = rect
-                print(f"[{idx}/{len(files)}] 自动画面区域："
-                      f"{','.join(f'{v:.3f}' for v in rect)}")
+                small = orient_image(stats_view(lin, max_side=800),
+                                     args.rotate, args.flip)
+                if do_level:
+                    ang = estimate_skew(small)
+                    fargs.level_angle = ang
+                    if abs(ang) >= 0.1:
+                        small = _deskew_lin(small, ang)
+                    print(f"[{idx}/{len(files)}] 自动校平：{ang:+.2f}°")
+                if do_crop:
+                    rect = detect_film_rect(small)
+                    fargs.crop_rect = rect
+                    print(f"[{idx}/{len(files)}] 自动画面区域："
+                          f"{','.join(f'{v:.3f}' for v in rect)}")
             P = convert_negative(lin, fargs)
             dst = out_path_for(src, args.output, batch, ext, args.suffix)
             save_image(P, dst, bits, quality=args.quality, resize=args.resize)
