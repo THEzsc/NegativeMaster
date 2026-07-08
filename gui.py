@@ -2336,15 +2336,20 @@ $("export").onclick=()=>{ if(!loaded){stat("先载入图片");return;}
       else stat("✗ "+d.err);});
 };
 function blog(t){ const l=$("blog"); l.textContent+=t+"\n"; l.scrollTop=l.scrollHeight; }
+let batchBusy=false, batchCancel=false;
 $("batch").onclick=async()=>{
+  if(batchBusy){ batchCancel=true; $("batch").textContent="取消中…"; return; }  // 运行中再点=取消
   const items=[...document.querySelectorAll("#files .fitem")].filter(el=>el.querySelector(".fck").checked);
   if(!items.length){stat("先在文件列表里勾选文件");return;}
   const outdir=$("batchout").value.trim();
   const useSaved=$("usesaved").checked;
   const bar=$("bprog"); bar.style.display="block"; bar.firstElementChild.style.width="0%";
   $("blog").textContent="";
+  batchBusy=true; batchCancel=false;
+  const bbtn=$("batch"); bbtn.textContent="取消导出"; bbtn.style.background="#c0392b"; bbtn.style.color="#fff";
   let done=0, okc=0;
   for(const el of items){
+    if(batchCancel){ blog("⏹ 已取消，剩余未导出"); break; }
     const f=el.dataset.path;
     try{
       // 参数：优先各自已存记忆，否则用当前面板参数
@@ -2370,7 +2375,9 @@ $("batch").onclick=async()=>{
     done++; bar.firstElementChild.style.width=(done/items.length*100)+"%";
     stat("批量导出 "+done+"/"+items.length+"…");
   }
-  stat("批量完成："+okc+"/"+items.length+" 成功");
+  batchBusy=false;
+  const bbtn2=$("batch"); bbtn2.textContent="批量导出"; bbtn2.style.background=""; bbtn2.style.color="";
+  stat((batchCancel?"已取消，":"批量完成：")+okc+"/"+done+" 导出，共 "+items.length+" 张");
   // 服务端缓存已换到最后一张，把当前显示的重新载回来
   if(curFile) fetch("/api/load",{method:"POST",headers:HJ,body:JSON.stringify({path:curFile})});
 };
