@@ -573,7 +573,25 @@ details.sec[open]>summary::before{content:"▾ "}
 details.sec .bd{padding:0 16px 12px}
 label.row{display:flex;justify-content:space-between;align-items:center;margin:9px 0 3px;font-size:13px}
 label.row .v{color:var(--acc);font-variant-numeric:tabular-nums}
-input[type=range]{width:100%;accent-color:var(--acc)}
+/* 滑杆：轨道用渐变展示效果方向；指针=图像软件那种下尖标记，不用圆点 */
+input[type=range]{width:100%;-webkit-appearance:none;appearance:none;background:transparent;height:20px;margin:3px 0 1px;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:4px;background:var(--line);box-shadow:inset 0 0 0 1px #0003}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:16px;margin-top:-5px;background:#fff;border:none;
+  clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%);
+  filter:drop-shadow(0 0 .6px rgba(0,0,0,.95)) drop-shadow(0 1px 1.5px rgba(0,0,0,.55))}
+input[type=range]:hover::-webkit-slider-thumb{filter:drop-shadow(0 0 .6px rgba(0,0,0,.95)) drop-shadow(0 1px 3px rgba(0,0,0,.7))}
+input[type=range]::-moz-range-track{height:6px;border-radius:4px;background:var(--line)}
+input[type=range]::-moz-range-thumb{width:13px;height:16px;background:#fff;border:none;clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%)}
+/* 冷↔暖 */
+#temp::-webkit-slider-runnable-track{background:linear-gradient(90deg,#3f7fd6,#b8bcc2 50%,#e0a24a)}
+/* 绿↔品红 */
+#tint::-webkit-slider-runnable-track{background:linear-gradient(90deg,#54b45a,#b8bcc2 50%,#c162c1)}
+/* 灰↔鲜艳 */
+#saturation::-webkit-slider-runnable-track,#vibrance::-webkit-slider-runnable-track,#hsls::-webkit-slider-runnable-track{background:linear-gradient(90deg,#7d7d7d,#d98f3a)}
+/* 暗↔亮 */
+#exposure::-webkit-slider-runnable-track,#gamma::-webkit-slider-runnable-track,#highlights::-webkit-slider-runnable-track,#shadows::-webkit-slider-runnable-track,#whites::-webkit-slider-runnable-track,#blacks::-webkit-slider-runnable-track,#hsll::-webkit-slider-runnable-track,#black_pct::-webkit-slider-runnable-track,#white_pct::-webkit-slider-runnable-track,#contrast::-webkit-slider-runnable-track{background:linear-gradient(90deg,#1c1c1c,#efefef)}
+/* 色相环 */
+#hslh::-webkit-slider-runnable-track{background:linear-gradient(90deg,#ff5a5a,#ffd24a,#5ad85a,#4ad8d8,#5a7aff,#d85ad8,#ff5a5a)}
 input[type=text]{width:100%;padding:6px 8px;background:#1b1d21;border:1px solid var(--line);border-radius:5px;color:var(--fg);font-size:12px}
 select{width:100%;padding:6px 8px;background:#1b1d21;border:1px solid var(--line);border-radius:5px;color:var(--fg);font-size:12px}
 button{background:#31343a;color:var(--fg);border:1px solid var(--line);border-radius:5px;padding:6px 10px;cursor:pointer;font-size:13px}
