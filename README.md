@@ -194,3 +194,9 @@ Runtime state such as `.venv/`, `settings/`, logs, Swift build products, and loc
 - RAW decoding depends on the underlying decoder. If a camera format is listed but does not open, update `rawpy`/LibRaw or try the macOS app.
 - For best color, crop away film borders before automatic tone estimation or use `--base-rect` to sample a clear film-base area.
 - The input should be an unreversed negative. Feeding an already-positive image in negative mode will invert it again.
+
+## Contributors
+
+- **THEzsc** (Project Creator & Main Developer)
+- **Antigravity (Google DeepMind AI)** (AI Pair Programmer) — Assisted with frontend GUI visual redesign, slider styling, Canvas rendering optimizations (curves and histograms), SVG icon modernization, and SwiftUI build orchestration.
+
