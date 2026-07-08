@@ -2084,9 +2084,12 @@ $("fliph").onclick=()=>{P.flip=P.flip==="h"?"none":"h"; transformRegions(rFlipH)
   P.level_angle=-(+P.level_angle||0); refl(); drawCrop(); render();};
 $("flipv").onclick=()=>{P.flip=P.flip==="v"?"none":"v"; transformRegions(rFlipV);
   P.level_angle=-(+P.level_angle||0); refl(); drawCrop(); render();};
-$("rotL").onclick=()=>{P.rotate=(P.rotate+270)%360; transformRegions(rRotCCW);
+// 镜像会翻转"看到的旋转方向"，所以镜像时左右转要反向设 rotate，
+// 让按钮永远按标注方向转所见的画面，裁切框也跟着对。
+function mirrored(){ return P.flip==="h"||P.flip==="v"; }
+$("rotL").onclick=()=>{ transformRegions(rRotCCW); P.rotate=(P.rotate+(mirrored()?90:270))%360;
   applyFormat(curFmt); refl(); render();};
-$("rotR").onclick=()=>{P.rotate=(P.rotate+90)%360; transformRegions(rRotCW);
+$("rotR").onclick=()=>{ transformRegions(rRotCW); P.rotate=(P.rotate+(mirrored()?270:90))%360;
   applyFormat(curFmt); refl(); render();};
 // 左下角旋转/拉直按钮
 function updAngle(){ const el=$("angleval"); if(el) el.textContent=(+(P.level_angle||0)).toFixed(1); }
