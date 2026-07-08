@@ -598,22 +598,44 @@ body {
 }
 #rotpad {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 24px;
+  left: 0; right: 0; bottom: 0;
   z-index: 10;
   display: none;
-  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
-  background: rgba(19, 22, 28, 0.85);
+  gap: 8px;
+  background: rgba(19, 22, 28, 0.9);
   backdrop-filter: blur(16px);
-  padding: 6px 14px;
-  border-radius: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  padding: 8px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.45);
   font-size: 11px;
   white-space: nowrap;
+}
+#rotpad .rotgroup {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+#rotpad .navbtn {
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 12px;
+  border-radius: 8px;
+}
+#rotpad .navbtn:disabled { opacity: 0.3; cursor: default; }
+#fileselect {
+  flex: 0 1 auto;
+  max-width: 240px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--fg);
+  font-size: 11px;
 }
 #rotpad button {
   padding: 4px 10px;
@@ -1203,20 +1225,25 @@ input[type=range]:hover::-moz-range-thumb {
   </div>
   <div id="empty">← 右侧载入一张负片开始<br><small>支持 ARW/ARQ/CR2/NEF/TIF/JPG… · 滚轮缩放 · 双击 2x</small></div>
   <div id="rotpad">
-    <button id="autocrop" title="自动检测胶片画面区域并框选">自动框</button>
-    <span class="sep"></span>
-    <button id="rotL" title="左转 90°">↶</button>
-    <button id="rotR" title="右转 90°">↷</button>
-    <button class="pill" id="fliph" title="水平镜像 H">⇋</button>
-    <button class="pill" id="flipv" title="垂直翻转 V">⇅</button>
-    <span class="sep"></span>
-    <span class="rl">拉直</span>
-    <button id="rotm1" title="逆时针 1°">−1°</button>
-    <button id="rotm01" title="逆时针 0.1°">−.1</button>
-    <span id="angleval">0.0</span>°
-    <button id="rotp01" title="顺时针 0.1°">+.1</button>
-    <button id="rotp1" title="顺时针 1°">+1°</button>
-    <button id="rot0" title="拉直归零">⟲</button>
+    <button class="navbtn" id="previmg" title="上一张 (←)">‹</button>
+    <select id="fileselect" title="选择底片"></select>
+    <div class="rotgroup">
+      <button id="autocrop" title="自动检测胶片画面区域并框选">自动框</button>
+      <span class="sep"></span>
+      <button id="rotL" title="左转 90°">↶</button>
+      <button id="rotR" title="右转 90°">↷</button>
+      <button class="pill" id="fliph" title="水平镜像 H">⇋</button>
+      <button class="pill" id="flipv" title="垂直翻转 V">⇅</button>
+      <span class="sep"></span>
+      <span class="rl">拉直</span>
+      <button id="rotm1" title="逆时针 1°">−1°</button>
+      <button id="rotm01" title="逆时针 0.1°">−.1</button>
+      <span id="angleval">0.0</span>°
+      <button id="rotp01" title="顺时针 0.1°">+.1</button>
+      <button id="rotp1" title="顺时针 1°">+1°</button>
+      <button id="rot0" title="拉直归零">⟲</button>
+    </div>
+    <button class="navbtn" id="nextimg" title="下一张 (→)">›</button>
   </div>
   <div id="imgwrap"><img id="img">
     <div id="wbsel"></div>
@@ -2029,17 +2056,35 @@ window.addEventListener("resize",()=>{ if(loaded) fitWrap(); });
 // ---- 文件列表：列出 / 过滤 / 刷新 / 勾选 ----
 function fillFiles(files){
   const box=$("files"); box.innerHTML="";
+  const sel=$("fileselect"); sel.innerHTML="";
   files.forEach(f=>{
     const el=document.createElement("div"); el.className="fitem"; el.dataset.path=f;
     const cb=document.createElement("input"); cb.type="checkbox"; cb.className="fck";
     cb.onclick=e=>e.stopPropagation();
     const sp=document.createElement("span"); sp.textContent=f.split("/").pop(); sp.title=f;
     el.appendChild(cb); el.appendChild(sp);
-    el.onclick=()=>{loadFile(f);[...box.children].forEach(c=>c.classList.remove("on"));el.classList.add("on");};
+    el.onclick=()=>loadFile(f);
     box.appendChild(el);
+    const op=document.createElement("option"); op.value=f; op.textContent=f.split("/").pop(); sel.appendChild(op);
   });
-  applyFilter();
+  applyFilter(); updateNavButtons();
 }
+// 底栏选片：下拉 + 上一张/下一张（走整卷文件顺序）
+function navFile(step){
+  const opts=[...$("fileselect").options]; if(!opts.length) return;
+  let idx=opts.findIndex(o=>o.value===curFile);
+  idx = idx<0 ? (step>0?0:opts.length-1) : idx+step;
+  if(idx<0||idx>=opts.length) return;
+  loadFile(opts[idx].value);
+}
+function updateNavButtons(){
+  const opts=[...$("fileselect").options]; const idx=opts.findIndex(o=>o.value===curFile);
+  $("previmg").disabled = idx<=0;
+  $("nextimg").disabled = idx<0 || idx>=opts.length-1;
+}
+$("fileselect").onchange=e=>{ if(e.target.value) loadFile(e.target.value); };
+$("previmg").onclick=()=>navFile(-1);
+$("nextimg").onclick=()=>navFile(1);
 function applyFilter(){
   const q=$("filter").value.trim().toLowerCase();
   document.querySelectorAll("#files .fitem").forEach(el=>{
@@ -2081,6 +2126,9 @@ function loadFile(path){
       if(!d.ok){stat("✗ "+d.err);return;}
       curFile=path; loaded=true; fullW=d.w; fullH=d.h; $("rotpad").style.display="flex";
       $("meta").textContent=d.name+" · "+d.w+"×"+d.h;
+      $("fileselect").value=path;                       // 同步底栏下拉与列表高亮
+      [...document.querySelectorAll("#files .fitem")].forEach(c=>c.classList.toggle("on",c.dataset.path===path));
+      updateNavButtons();
       resetView();
       const applyRestore=(sd,label)=>{
         if(sd){
@@ -2256,6 +2304,8 @@ window.addEventListener("keydown",e=>{
   else if(e.key==="R") $("rotL").click();
   else if(e.key==="f") $("fliph").click();
   else if(e.key==="e") $("export").click();
+  else if(e.key==="ArrowLeft"){ e.preventDefault(); navFile(-1); }
+  else if(e.key==="ArrowRight"){ e.preventDefault(); navFile(1); }
 });
 window.addEventListener("keyup",e=>{ if(e.key===" ") showNeg(false); });
 
