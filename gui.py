@@ -253,7 +253,8 @@ def api_list():
             if root != base and os.path.dirname(root) != base:
                 pass
     items = sorted(set(items))[:600]
-    return jsonify(dirs=dirs, files=items)
+    edited = [f for f in items if os.path.isfile(sidecar_path(f))]  # 有 XML 边车=调过
+    return jsonify(dirs=dirs, files=items, edited=edited)
 
 
 @app.route("/api/load", methods=["POST"])
@@ -1000,6 +1001,14 @@ input[type=range]:hover::-moz-range-thumb {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+#files .fitem .editdot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: transparent; flex: 0 0 auto; margin-right: -2px;
+}
+#files .fitem.edited .editdot {
+  background: var(--acc); box-shadow: 0 0 5px var(--acc);
+}
+#files .fitem.edited { color: #ffffff; }
 #files .fitem:hover {
   background: rgba(255, 255, 255, 0.03);
   color: #ffffff;
@@ -2135,20 +2144,31 @@ $("autocrop").onclick=()=>{
 window.addEventListener("resize",()=>{ if(loaded) fitWrap(); });
 
 // ---- 文件列表：列出 / 过滤 / 刷新 / 勾选 ----
-function fillFiles(files){
+function fillFiles(files,edited){
+  const ed=edited||new Set();
   const box=$("files"); box.innerHTML="";
   const sel=$("fileselect"); sel.innerHTML="";
   files.forEach(f=>{
     const el=document.createElement("div"); el.className="fitem"; el.dataset.path=f;
+    if(ed.has(f)) el.classList.add("edited");
     const cb=document.createElement("input"); cb.type="checkbox"; cb.className="fck";
     cb.onclick=e=>e.stopPropagation();
+    const dot=document.createElement("span"); dot.className="editdot"; dot.title="已调整（有 XML 参数）";
     const sp=document.createElement("span"); sp.textContent=f.split("/").pop(); sp.title=f;
-    el.appendChild(cb); el.appendChild(sp);
+    el.appendChild(cb); el.appendChild(dot); el.appendChild(sp);
     el.onclick=()=>loadFile(f);
     box.appendChild(el);
-    const op=document.createElement("option"); op.value=f; op.textContent=f.split("/").pop(); sel.appendChild(op);
+    const op=document.createElement("option"); op.value=f; op.textContent=(ed.has(f)?"● ":"")+f.split("/").pop(); sel.appendChild(op);
   });
   applyFilter(); updateNavButtons();
+}
+function markEdited(path){   // 某张存了参数后，实时点亮标记
+  const el=[...document.querySelectorAll("#files .fitem")].find(e=>e.dataset.path===path);
+  if(el&&!el.classList.contains("edited")){
+    el.classList.add("edited");
+    const op=[...$("fileselect").options].find(o=>o.value===path);
+    if(op&&!op.textContent.startsWith("●")) op.textContent="● "+op.textContent;
+  }
 }
 // 底栏选片：下拉 + 上一张/下一张（走整卷文件顺序）
 function navFile(step){
@@ -2173,7 +2193,7 @@ function applyFilter(){
 }
 function listFiles(dir){
   fetch("/api/list"+(dir?"?dir="+encodeURIComponent(dir):"")).then(r=>r.json()).then(d=>{
-    fillFiles(d.files); stat(d.files.length+" 个文件");});
+    fillFiles(d.files,new Set(d.edited||[])); stat(d.files.length+" 个文件");});
 }
 $("filter").addEventListener("input",applyFilter);
 $("refresh").onclick=()=>listFiles($("dir").value.trim());
@@ -2261,7 +2281,7 @@ function autosaveXml(){
     if(sig2===lastSavedSig) return;    // 期间基线已更新（如刚载入），不写
     fetch("/api/sidecar",{method:"POST",headers:HJ,
       body:JSON.stringify({path:curFile,data})}).then(r=>r.json()).then(d=>{
-        if(d.ok){ lastSavedSig=sig2; stat("✓ 调整已自动存 XML"); }});
+        if(d.ok){ lastSavedSig=sig2; markEdited(curFile); stat("✓ 调整已自动存 XML"); }});
     // 顺带同步内部 JSON 记忆，保证「应用到整卷」等也拿到最新
     fetch("/api/settings",{method:"POST",headers:HJ,
       body:JSON.stringify({path:curFile,data})});
