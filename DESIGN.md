@@ -219,7 +219,7 @@ The inherited help modal has an (8px) backdrop blur for temporary separation. Pe
 
 Inputs, buttons, list containers and shared panels have square corners. Main actions clip opposite corners with an (8px) horizontal and (14px) vertical offset; the processing export/autocrop variant uses (6px)/(10px). Those source proportions give approximately (30°)/(60°) oblique edges. Do not substitute a generic (45°) chamfer.
 
-The canvas uses thin horizontal and vertical mounting marks with one oblique line. Crop handles are square orange markers (11px). Circular nodes belong to the SVG icon vocabulary; sheet range inputs use thin 3px tracks, 12px square orange handles and 26px interaction targets, while processing ranges and checkboxes retain their established geometry. The square-control rule does not ban those meaningful circles.
+Keep the preview free of decorative corner marks. Guides must support composition or an editing action. Crop handles are square orange markers (11px). Circular nodes belong to the SVG icon vocabulary; sheet range inputs use thin 3px tracks, 12px square orange handles and 26px interaction targets, while processing ranges and checkboxes retain their established geometry. The square-control rule does not ban those meaningful circles.
 
 ## Components
 

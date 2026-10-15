@@ -476,13 +476,6 @@
       "css": ".ds-frame{font-family:-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;display:grid;grid-template-columns:18px 54px minmax(0,1fr) 18px;align-items:center;gap:8px;padding:11px 6px;border-bottom:1px solid var(--line,#383b3f);color:var(--fg,#f2f0ec);cursor:grab;max-width:300px}.ds-frame.ds-active{background:var(--surface,#242629)}.ds-frame input{accent-color:var(--orange,#ec6c22);width:14px;height:14px;margin:0}.ds-thumb{width:54px;height:39px}.ds-frame-title{display:block;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-active .ds-frame-title{color:var(--acc,#ff8b32)}.ds-frame-source{font-size:11px;color:var(--mut,#b4b2ad)}.ds-order{color:var(--mut,#b4b2ad);font-size:12px}.ds-frame:focus-visible{outline:2px solid var(--acc,#ff8b32);outline-offset:3px;}.ds-frame.ds-drag-over{outline:1px solid var(--acc,#ff8b32);outline-offset:-1px}"
     },
     {
-      "name": "Mounting Guide",
-      "kind": "custom",
-      "description": "Thin orthogonal mounting marks with one oblique alignment line.",
-      "html": "<svg class=\"ds-guide\" viewBox=\"0 0 42 28\" aria-hidden=\"true\"><path d=\"M1 27V1h40M1 18l29-17\"/></svg>",
-      "css": ".ds-guide{width:42px;height:28px;stroke:var(--mut,#b4b2ad);stroke-width:1;fill:none;pointer-events:none;opacity:.55}"
-    },
-    {
       "name": "Preview View Switch",
       "kind": "custom",
       "description": "Roll/frame preview selection; single-frame rotation and crop use a 1200px thumbnail canvas and shared export parameters. Its optional thirds guides are preview-only and never exported.",

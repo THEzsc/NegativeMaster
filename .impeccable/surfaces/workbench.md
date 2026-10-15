@@ -6,7 +6,7 @@ FORM provenance: the installed concept-seed runner printed direction key `b88fc4
 
 Direction: photographic mounting marks expressed as an operable editing surface. A full-width plain header changes between individual-frame processing and roll layout. The central continuous canvas leads. A removable frame list supports ordering; a right inspector exposes film/layout/photo/background/header/output one group at a time. No fake machine bezel, terminal, metrics dashboard or brochure copy.
 
-Signature: rectangular surfaces and fine orthogonal alignment marks with occasional 30°/60° cuts at action edges. Orange distinguishes selected controls and final actions. The image preview is the real renderer output, including transparency. Day mode is warm off-white with dark ink, retaining orange emphasis. Native controls and established processing behavior persist.
+Signature: rectangular surfaces, functional composition guides and occasional 30°/60° cuts at action edges. Decorative corner marks were removed after user feedback. Orange distinguishes selected controls and final actions. The image preview is the real renderer output, including transparency. Day mode is warm off-white with dark ink, retaining orange emphasis. Native controls and established processing behavior persist.
 
 Grounded alternatives considered: photographic mounting corners; Swiss photographic exhibition catalog; archival sleeve indexing; orange print-registration proofs; geometric wayfinding typography; modular publication crops (sixth assigned); darkroom contact prints. Pinned brief commits photographic mounting geometry; disciplined modular crop guides from the assigned direction are compatible with this user choice.
 
