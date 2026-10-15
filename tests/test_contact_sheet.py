@@ -213,19 +213,37 @@ class ContactSheetTests(unittest.TestCase):
 
     def test_new_lettering_styles_have_distinct_real_samples(self):
         samples=[]
-        for style in ("dot","mono","condensed","citaro","citaro-tall","film-dot","film-stamp"):
+        for style in ("dot","mono","condensed","citaro","citaro-tall","film-dot","film-stamp","film-rvp"):
             out=sheet.lettering_sample(style,"KODAK GOLD 200 / C-41")
             self.assertEqual(out.size,(800,156))
             self.assertGreater(len(out.getcolors(1000000)),1)
             samples.append(out.tobytes())
-        self.assertEqual(len(set(samples)),7)
+        self.assertEqual(len(set(samples)),8)
+
+    def test_edge_arrows_only_change_photo_frame_number_band(self):
+        self.assertEqual(sheet.normalize_config({})["strip"]["edgeArrow"],"none")
+        cfg=dict(self.config,columns=2,strip={"leader":True,"leaderMode":"manual",
+                 "leaderCount":2,"fontStyle":"film-rvp","startNumber":9999,"edgeScale":1.8})
+        l=sheet.sheet_layout(1,cfg);plain=sheet.render_sheet([self.landscape],cfg)
+        variants=[]
+        for direction in ("left","right"):
+            out=sheet.render_sheet([self.landscape],dict(cfg,strip=dict(cfg["strip"],edgeArrow=direction)))
+            diff=ImageChops.difference(out,plain).convert("RGB").getbbox()
+            self.assertIsNotNone(diff)
+            self.assertGreaterEqual(diff[1],l.row_y(1)+l.band+l.aperture_height)
+            self.assertLessEqual(diff[3],l.row_y(1)+l.strip_height)
+            self.assertGreaterEqual(diff[0],l.margin+int(l.cell_width*.48))
+            self.assertLessEqual(diff[2],l.margin+int(l.cell_width*.60))
+            variants.append(out.tobytes())
+        self.assertNotEqual(*variants)
 
     def test_leader_and_header_controls_reject_invalid_values(self):
         for config in ({"strip":{"leaderCount":25}}, {"strip":{"leaderMode":"invalid"}},
                        {"strip":{"leaderStyle":"invalid"}}, {"strip":{"leaderStrength":2}},
                        {"header":{"infoScale":float("nan")}}, {"background":{"opacity":2}},
                        {"strip":{"separation":"invalid"}}, {"strip":{"separationStrength":-1}},
-                       {"strip":{"shadowTone":"red"}}, {"strip":{"separationHoles":"false"}}):
+                       {"strip":{"shadowTone":"red"}}, {"strip":{"separationHoles":"false"}},
+                       {"strip":{"edgeArrow":"up"}}):
             with self.assertRaises(ValueError): sheet.normalize_config(config)
 
     def test_invalid_inputs_and_oversized_canvas_fail_before_render(self):

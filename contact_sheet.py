@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
     "strip": {"color": "#080808", "opacity": 1, "sprockets": True, "edgeText": None,
               "secondaryText": None, "edgeColor": None, "fontStyle": "auto", "leader": True,
               "startNumber": 1, "reverseNumbers": False, "frameGap": 12, "padding": 8,
-              "showNumbers": True, "showHalfNumbers": True, "fit": "contain",
+              "showNumbers": True, "showHalfNumbers": True, "edgeArrow": "none", "fit": "contain",
               "edgeScale": 1, "edgeTracking": 0, "leaderMode": "auto", "leaderCount": 3,
               "leaderStyle": "dark", "leaderStrength": .75, "leaderShape": "cut",
               "separation": "none", "separationStrength": .65,
@@ -98,12 +98,13 @@ def normalize_config(config: dict | None) -> dict:
                          ("leaderStyle", ("dark", "clear", "leak", "burn", "radial")),
                          ("separation", ("none", "shadow", "outline", "lift", "paper")),
                          ("shadowTone", ("black", "white")),
+                         ("edgeArrow", ("none", "left", "right")),
                          ("leaderShape", ("cut", "straight"))):
         if strip[key] not in choices:
             raise ValueError("片头设置无效")
     if not isinstance(strip["separationHoles"], bool):
         raise ValueError("齿孔层次设置须为布尔值")
-    if strip["fontStyle"] not in ("auto", "dot", "mono", "condensed", "citaro", "citaro-tall", "film-dot", "film-stamp"):
+    if strip["fontStyle"] not in ("auto", "dot", "mono", "condensed", "citaro", "citaro-tall", "film-dot", "film-stamp", "film-rvp"):
         raise ValueError("边字字体样式无效")
     if strip["fit"] not in ("contain", "cover"):
         raise ValueError("照片填充方式无效")
@@ -235,6 +236,51 @@ _DOT = {
     "+": (0,4,4,31,4,4,0), " ": (0,0,0,0,0,0,0),
 }
 
+# Original angular exposure lettering, drawn from the supplied RVP reference's
+# visual traits. These paths are not a manufacturer's font or extracted glyphs.
+# A small exposure grid gives diagonals their characteristic stepped shoulders.
+_RVP_STROKES = {
+    "A": (((0,10),(0,3),(3,0),(6,3),(6,10)),((0,6),(6,6))),
+    "B": (((0,10),(0,0),(4,0),(6,2),(6,3),(4,5),(0,5)),((4,5),(6,7),(6,8),(4,10),(0,10))),
+    "C": (((6,1),(5,0),(2,0),(0,2),(0,8),(2,10),(5,10),(6,9)),),
+    "D": (((0,0),(3,0),(6,3),(6,7),(3,10),(0,10),(0,0)),),
+    "E": (((6,0),(0,0),(0,10),(6,10)),((0,5),(5,5))),
+    "F": (((6,0),(0,0),(0,10)),((0,5),(5,5))),
+    "G": (((6,2),(4,0),(2,0),(0,2),(0,8),(2,10),(6,10),(6,5),(3,5)),),
+    "H": (((0,0),(0,10)),((6,0),(6,10)),((0,5),(6,5))),
+    "I": (((1,0),(5,0)),((3,0),(3,10)),((1,10),(5,10))),
+    "J": (((1,0),(6,0),(6,8),(4,10),(2,10),(0,8)),),
+    "K": (((0,0),(0,10)),((6,0),(0,6)),((2,4),(6,10))),
+    "L": (((0,0),(0,10),(6,10)),),
+    "M": (((0,10),(0,0),(3,4),(6,0),(6,10)),),
+    "N": (((0,10),(0,0),(6,10),(6,0)),),
+    "O": (((2,0),(4,0),(6,2),(6,8),(4,10),(2,10),(0,8),(0,2),(2,0)),),
+    "P": (((0,10),(0,0),(4,0),(6,2),(6,4),(4,6),(0,6)),),
+    "Q": (((2,0),(4,0),(6,2),(6,7),(3,10),(0,7),(0,2),(2,0)),((3,7),(6,10))),
+    "R": (((0,10),(0,0),(4,0),(6,2),(6,4),(4,6),(0,6)),((3,6),(6,10))),
+    "S": (((6,1),(5,0),(2,0),(0,2),(0,4),(6,6),(6,8),(4,10),(1,10),(0,9)),),
+    "T": (((0,0),(6,0)),((3,0),(3,10))),
+    "U": (((0,0),(0,8),(2,10),(4,10),(6,8),(6,0)),),
+    "V": (((0,0),(0,5),(3,10),(6,5),(6,0)),),
+    "W": (((0,0),(0,10),(3,6),(6,10),(6,0)),),
+    "X": (((0,0),(6,10)),((6,0),(0,10))),
+    "Y": (((0,0),(3,5),(6,0)),((3,5),(3,10))),
+    "Z": (((0,0),(6,0),(0,10),(6,10)),),
+    "0": (((2,0),(4,0),(6,2),(6,8),(4,10),(2,10),(0,8),(0,2),(2,0)),((1,8),(5,2))),
+    "1": (((1,3),(4,0),(4,10)),),
+    "2": (((0,2),(2,0),(4,0),(6,2),(6,4),(0,10),(6,10)),),
+    "3": (((0,0),(5,0),(6,1),(6,3),(4,5),(2,5)),((4,5),(6,7),(6,9),(5,10),(0,10))),
+    "4": (((4,10),(4,0),(0,6),(0,7),(6,7)),),
+    "5": (((6,0),(0,0),(0,5),(4,5),(6,7),(6,9),(5,10),(0,10)),),
+    "6": (((6,0),(2,0),(0,2),(0,8),(2,10),(4,10),(6,8),(6,6),(4,5),(0,5)),),
+    "7": (((0,0),(6,0),(6,2),(1,10)),),
+    "8": (((2,0),(4,0),(6,2),(6,3),(4,5),(2,5),(0,3),(0,2),(2,0)),((2,5),(0,7),(0,8),(2,10),(4,10),(6,8),(6,7),(4,5))),
+    "9": (((6,5),(2,5),(0,4),(0,2),(2,0),(4,0),(6,2),(6,8),(4,10),(0,10)),),
+    "-": (((1,5),(5,5)),), ".": (((3,9),(3,10)),),
+    "/": (((0,10),(6,0)),), ":": (((3,3),(3,3.5)),((3,7),(3,7.5))),
+    "+": (((0,5),(6,5)),((3,2),(3,8))), " ": (),
+}
+
 
 def _text(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, size: int,
           fill: tuple, style: str = "mono", max_width: float | None = None,
@@ -242,7 +288,7 @@ def _text(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, size: i
     text = str(text or "")[:250]
     if not text:
         return
-    if style in ("citaro", "citaro-tall", "film-dot", "film-stamp") and (all(ord(ch) < 128 for ch in text) if style.startswith("citaro") else all(ch.upper() in _DOT for ch in text)):
+    if style in ("citaro", "citaro-tall", "film-dot", "film-stamp", "film-rvp") and (all(ord(ch) < 128 for ch in text) if style.startswith("citaro") else all(ch.upper() in _DOT for ch in text)):
         mask = _edge_type_mask(text, style, size, max_width, tracking)
         draw.bitmap(xy, mask, fill=fill)
         return
@@ -295,7 +341,20 @@ def _text(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, size: i
 @lru_cache(maxsize=256)
 def _edge_type_mask(text: str, style: str, size: int, max_width: float | None, tracking: float) -> Image.Image:
     scale = 4
-    if style.startswith("citaro"):
+    if style == "film-rvp":
+        advance=18+tracking*24/max(1,size)
+        source=Image.new("L",(max(1,ceil(advance*(len(text)-1)+16)),24))
+        d=ImageDraw.Draw(source)
+        for i,ch in enumerate(text.upper()):
+            for path in _RVP_STROKES.get(ch,()):
+                d.line([(round(i*advance+2+x*2),round(2+y*2)) for x,y in path],
+                       fill=245,width=3,joint="curve")
+        source=source.filter(ImageFilter.GaussianBlur(.22))
+        height=max(1,size*scale);width=max(1,round(source.width*height/24))
+        if max_width and width>max_width*scale:
+            height=max(1,round(height*max_width*scale/width));width=max(1,round(max_width*scale))
+        mask=source.resize((width,height),Image.Resampling.LANCZOS)
+    elif style.startswith("citaro"):
         font = _font(style, 96)
         bbox = font.getbbox(text, anchor="lt")
         source = Image.new("L", (max(1,round(font.getlength(text)))+4, max(1,bbox[3])+4))
@@ -348,12 +407,27 @@ def _edge_type_mask(text: str, style: str, size: int, max_width: float | None, t
     return mask.resize((width,height),Image.Resampling.LANCZOS)
 
 
-def lettering_sample(style: str, text: str, color: str = "#dda850") -> Image.Image:
-    if style not in ("dot","mono","condensed","citaro","citaro-tall","film-dot","film-stamp"):
+@lru_cache(maxsize=128)
+def _edge_arrow_mask(direction: str, size: int) -> Image.Image:
+    """A broad stepped wedge matching the supplied film-edge reference."""
+    source=Image.new("L",(19,11));draw=ImageDraw.Draw(source)
+    for y in range(11): draw.line((abs(y-5)*3,y,18,y),fill=245)
+    if direction == "right": source=ImageOps.mirror(source)
+    return source.filter(ImageFilter.GaussianBlur(.2)).resize(
+        (max(1,round(size*1.75)),max(1,size)),Image.Resampling.LANCZOS)
+
+
+def lettering_sample(style: str, text: str, color: str = "#dda850", arrow: str = "none") -> Image.Image:
+    if style not in ("dot","mono","condensed","citaro","citaro-tall","film-dot","film-stamp","film-rvp"):
         raise ValueError("边字字体样式无效")
+    if arrow not in ("none","left","right"): raise ValueError("边字箭头方向无效")
     out=Image.new("RGB",(800,156),(14,14,13)); draw=ImageDraw.Draw(out)
     _text(draw,(28,25),text or "FILM 135 / ISO 200",38,_color(color),style,744)
-    _text(draw,(28,91),"12  12A     13  13A     14  14A",25,_color(color),style,744)
+    for i,number in enumerate((12,13,14)):
+        x=28+i*248
+        _text(draw,(x,91),str(number),25,_color(color),style,56)
+        if arrow != "none": draw.bitmap((x+66,92),_edge_arrow_mask(arrow,23),fill=_color(color))
+        _text(draw,(x+122,91),f"{number}A",25,_color(color),style,110)
     return out
 
 
@@ -598,7 +672,7 @@ def _edge_labels(row: Image.Image, layout: SheetLayout, c: dict, stock: dict,
     style = strip["fontStyle"]
     if style == "auto":
         style = stock.get("font_style", "condensed")
-    if style not in ("dot", "condensed", "mono", "citaro", "citaro-tall", "film-dot", "film-stamp"):
+    if style not in ("dot", "condensed", "mono", "citaro", "citaro-tall", "film-dot", "film-stamp", "film-rvp"):
         style = "condensed"
     primary = strip["edgeText"] if strip["edgeText"] is not None else stock.get("edge_text", stock.get("name", ""))
     secondary = strip["secondaryText"] if strip["secondaryText"] is not None else stock.get("edge_secondary", "")
@@ -613,12 +687,16 @@ def _edge_labels(row: Image.Image, layout: SheetLayout, c: dict, stock: dict,
         x = cell * layout.cell_width + layout.gap / 2
         edge = secondary if secondary and cell % 2 else primary
         _text(draw, (x, outer), edge, fs, edge_color, style, layout.cell_width*.84, tracking)
-        if not strip["showNumbers"] or index < 0:
+        if index < 0:
             continue
+        number_y = layout.strip_height - outer - fs
+        if strip["edgeArrow"] != "none":
+            draw.bitmap((x+layout.cell_width*.49,number_y),
+                        _edge_arrow_mask(strip["edgeArrow"],fs),fill=edge_color)
+        if not strip["showNumbers"]: continue
         number = strip["startNumber"] + (count-1-index if strip["reverseNumbers"] else index)
         override = c["frameOverrides"][index] if index < len(c["frameOverrides"]) else {}
         label = str(override.get("label", number) if isinstance(override, dict) else number)
-        number_y = layout.strip_height - outer - fs
         _text(draw, (x + layout.cell_width*.10, number_y), label, fs, edge_color, style, layout.cell_width*.38, tracking)
         if strip["showHalfNumbers"]:
             _text(draw, (x + layout.cell_width*.60, number_y), label+"A", fs, edge_color, style, layout.cell_width*.35, tracking)

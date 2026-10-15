@@ -106,7 +106,7 @@ class SheetApiTests(unittest.TestCase):
         self.fail("Asynchronous image task did not complete")
 
     def test_lettering_preview_is_bounded_and_rejects_unknown_styles(self):
-        for style in ("citaro","citaro-tall","film-dot","film-stamp"):
+        for style in ("citaro","citaro-tall","film-dot","film-stamp","film-rvp"):
             response=self.client.get("/api/sheet/lettering",query_string={"style":style,"text":"FOMAPAN 100"})
             self.assertEqual(response.status_code,200)
             self.assertEqual(response.mimetype,"image/png")
@@ -114,6 +114,13 @@ class SheetApiTests(unittest.TestCase):
             response.close()
         response=self.client.get("/api/sheet/lettering?style=missing")
         self.assertEqual(response.status_code,400)
+        variants=[]
+        for arrow in ("none","left","right"):
+            response=self.client.get("/api/sheet/lettering",query_string={"style":"film-rvp","text":"RVP100","arrow":arrow})
+            self.assertEqual(response.status_code,200)
+            variants.append(response.data);response.close()
+        self.assertEqual(len(set(variants)),3)
+        self.assertEqual(self.client.get("/api/sheet/lettering?arrow=up").status_code,400)
 
     def test_export_preferred_and_raw_jpeg_pairs_deduplicated(self):
         self.image("FRAME001.JPG", color="black")
@@ -432,7 +439,7 @@ class SheetApiTests(unittest.TestCase):
             job=identifier, order=[0], stockId="test", config=dict(width=1200,
             columns=3, background=dict(mode="blur", sourceIndex="custom",opacity=.4),
             header=dict(roll="2401",showStock=True,infoScale=1.2),
-            strip=dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="radial",leaderStrength=.6,separation="lift",separationStrength=.8,shadowTone="white",separationHoles=False),
+            strip=dict(fontStyle="film-rvp",edgeArrow="left",leaderMode="manual",leaderCount=4,leaderStyle="radial",leaderStrength=.6,separation="lift",separationStrength=.8,shadowTone="white",separationHoles=False),
             frameOverrides=[override])))
         self.assertEqual(exported.status_code, 200, exported.json)
         self.assertEqual(exported.mimetype, "application/zip")
@@ -461,7 +468,7 @@ class SheetApiTests(unittest.TestCase):
         self.assertEqual(project["config"]["header"]["roll"], "2401")
         self.assertEqual(project["config"]["header"]["infoScale"], 1.2)
         self.assertEqual(project["config"]["background"]["opacity"], .4)
-        for key,value in dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="radial",leaderStrength=.6,separation="lift",separationStrength=.8,shadowTone="white",separationHoles=False).items():
+        for key,value in dict(fontStyle="film-rvp",edgeArrow="left",leaderMode="manual",leaderCount=4,leaderStyle="radial",leaderStrength=.6,separation="lift",separationStrength=.8,shadowTone="white",separationHoles=False).items():
             self.assertEqual(project["config"]["strip"][key], value)
         self.assertEqual(project["frameOptions"][project["sources"][0]], override)
         self.assertTrue(Path(project["sources"][0]).is_file())
