@@ -59,7 +59,77 @@ The UI lets you browse a folder, load a negative, adjust the conversion while pr
 
 Use **box white balance** when a neutral area is noisy or grainy: enable the white-balance picker, drag a rectangle over a neutral gray/white region, and the converter will average the selected area instead of trusting one pixel.
 
+**自动裁剪＋校平** solves crop and leveling together from the original frame
+boundaries, preserving your 90° orientation and mirror choices. A fine 0.05°
+search near level improves thin-edge detection. Original sensor bounds are
+included when calculating the crop, so rotation does not leave black corners.
+Repeated clicks calculate an absolute angle rather than accumulating rotations.
+
+**同卷参考** (enabled by default, optional) reads nearby saved XML adjustments
+in the same folder when an edge is too weak to detect. At least five consistent
+references are required; the current frame and its RAW/JPEG twin are excluded.
+Tight creative crops and inconsistent references are rejected. The UI explicitly
+reports reference use. These are geometric hints from your edits, not a trained
+image model. Disable this option if camera position/film framing changes within
+one folder. Reference files and original photos are never modified by detection.
+Without reliable detection or references, the current crop/angle are preserved.
+
+Run geometry and API regression tests with:
+
+```bash
+./.venv/bin/python -m unittest discover -s tests -v
+```
+
 Use **apply current settings to roll** after tuning one frame. If files are checked, only those files receive the current parameters; otherwise the current file list is treated as the roll. Batch export can then use the saved per-file parameters.
+
+## Roll contact sheets
+
+Open **整卷排版** in the shared header, or visit `http://127.0.0.1:8765/sheet`.
+Folder imports prefer exported positive files, then use each frame's saved XML or
+settings. A RAW file without saved adjustments is skipped with an explanation.
+Photo imports can also use ordinary positive images directly. This preparation
+does not overwrite the original photos or adjustment sidecars.
+
+The editor supports frame selection and reordering, individual rotation and crop
+position, configurable perforated strips and a curved leader, editable numbering
+and edge text, blurred-photo/solid/gradient/transparent backgrounds, custom
+background images, and an optional white film-information header. Export PNG or
+JPEG at widths from 1200 to 10000 pixels, within an 80-megapixel canvas limit.
+Export uses the same renderer as the preview and writes sRGB with 300-DPI metadata.
+The default destination is a new file in the roll's `整卷展示` subfolder.
+
+Click a photograph or choose **单张** to inspect its composition at a useful size.
+The **照片** pane provides 90° rotation, per-frame fit, zoom and crop centers;
+when the image is cropped, drag directly on the canvas. Optional thirds guides
+are preview-only. **重置当前构图** restores geometry while retaining the frame label.
+A drag is one undo step; Alt + Up/Down reorders a focused photo without losing
+keyboard focus. Rechecking a photo keeps its position in the displayed sequence.
+The canvas toolbar shows tools for the current view, and the photo rail can be
+collapsed for more canvas space. On narrow screens it opens as a keyboard-accessible
+drawer with a backdrop and Escape dismissal.
+
+The browser draft restores the full ordering, selection (including no selection),
+active frame, frame edits and background reference by file path. Missing sources
+produce an explicit error and preserve the previous draft. Restore the source
+files or load a portable project to resume. The last export path and a repeat-download link remain visible for the current page session.
+
+Preview requests coalesce during continuous edits. A 64 MiB bounded pixel cache
+reuses decoded preview images; full-resolution export retains its original path.
+On the local 36-photo FOMAPAN roll, median warm backend preview time decreased
+from 0.815 s to 0.162 s (about 5×); the first preview remained around 0.80 s.
+This measures server rendering requests, excluding browser drawing and debounce.
+Frontend ordering, crop and asynchronous workflow regressions can be run with
+`node --test tests/test_sheet_*.cjs` in addition to the Python suite above.
+
+**保存项目** creates a portable ZIP containing the prepared positive photos,
+custom background and editable layout, so a project remains usable without its
+original source folder. Layout presets are stored locally in the browser.
+
+The stock library contains 100 models. Manufacturer documents substantiate 27
+edge inscriptions; the remaining inscriptions, fonts and colors are clearly
+marked as editable reconstructions. References and limits are recorded in
+[data/FILM_SOURCES.md](data/FILM_SOURCES.md). The workbench has day and night modes
+with an orange, charcoal and angular visual system.
 
 ## CLI
 

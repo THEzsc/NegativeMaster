@@ -1,0 +1,2548 @@
+{
+  "version": 1,
+  "stocks": [
+    {
+      "id": "kodak-gold-200",
+      "brand": "Kodak",
+      "name": "GOLD 200",
+      "iso": 200,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "KODAK GOLD 200",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "保留参考图中的 GOLD 200 排版风格；GB 200 等历史/规格变体没有统一到这个展示标签。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak GOLD 200 product page",
+          "url": "https://www.kodak.com/en/still-film/product/consumer/gold-200-film/"
+        },
+        {
+          "title": "35milly：实物 Gold 200 片边照片（外观参考，未将其当作字体文件）",
+          "url": "https://35milly.com/en/how-to-identify-the-emulsion-side-of-the-film-with-photos/"
+        }
+      ]
+    },
+    {
+      "id": "kodak-ultramax-400",
+      "brand": "Kodak",
+      "name": "ULTRAMAX 400",
+      "iso": 400,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "KODAK ULTRAMAX 400",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak ULTRAMAX 400 product page",
+          "url": "https://www.kodak.com/en/still-film/product/consumer/ultramax-400-film/"
+        }
+      ]
+    },
+    {
+      "id": "kodak-colorplus-200",
+      "brand": "Kodak",
+      "name": "COLORPLUS 200",
+      "iso": 200,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "200-8 KODAK",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "实印字串参考摄影者 Dmitri 对其本人拍摄和扫描的底片记录；因未取得可逐字检查的片边高分辨率图，此条仍标为近似，而非厂家核验。字体与色值为可编辑近似。实际片边字随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak Professional Film Catalogue (2024), consumer film range",
+          "url": "https://kodakprofessional.com/sites/default/files/files/resources/Kodak%20Catalogue%20-%20Final%20-%20High%20Res%20%28Print%29.pdf"
+        },
+        {
+          "title": "Kodak Alaris：C-41 color film processing resources",
+          "url": "https://www.kodakprofessional.com/photographers/resources"
+        },
+        {
+          "title": "Dmitri / Analog.Cafe：本人拍摄与扫描的 ColorPlus，实印字串 200-8 KODAK",
+          "url": "https://www.analog.cafe/r/kodak-colorplus-200-film-review-fygr"
+        }
+      ]
+    },
+    {
+      "id": "kodak-pro-image-100",
+      "brand": "Kodak",
+      "name": "PRO IMAGE 100",
+      "iso": 100,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "KODAK PRO IMAGE 100",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak Professional Film Catalogue (2024)",
+          "url": "https://kodakprofessional.com/sites/default/files/files/resources/Kodak%20Catalogue%20-%20Final%20-%20High%20Res%20%28Print%29.pdf"
+        },
+        {
+          "title": "Kodak Alaris：C-41 color film processing resources",
+          "url": "https://www.kodakprofessional.com/photographers/resources"
+        }
+      ]
+    },
+    {
+      "id": "kodak-portra-160",
+      "brand": "Kodak",
+      "name": "PORTRA 160",
+      "iso": 160,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "KODAK PORTRA 160",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "verified",
+      "notes": "实印型号字串来自官方 Edge Print 字段；本预设不填固定乳剂批号或 DX 数字。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak Alaris PORTRA 160：Edge Print field",
+          "url": "https://www.kodakprofessional.com/photographers/film/color/kodak-professional-portra-160-film/529"
+        },
+        {
+          "title": "Kodak Alaris：C-41 color film processing resources",
+          "url": "https://www.kodakprofessional.com/photographers/resources"
+        }
+      ]
+    },
+    {
+      "id": "kodak-portra-400",
+      "brand": "Kodak",
+      "name": "PORTRA 400",
+      "iso": 400,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "KODAK PORTRA 400",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "verified",
+      "notes": "实印型号字串来自官方 Edge Print 字段；本预设不填固定乳剂批号或 DX 数字。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak Alaris PORTRA 400：Edge Print field",
+          "url": "https://www.kodakprofessional.com/photographers/film/color/kodak-professional-portra-400-film/516"
+        },
+        {
+          "title": "Kodak Alaris：C-41 color film processing resources",
+          "url": "https://www.kodakprofessional.com/photographers/resources"
+        }
+      ]
+    },
+    {
+      "id": "kodak-portra-800",
+      "brand": "Kodak",
+      "name": "PORTRA 800",
+      "iso": 800,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "KODAK PORTRA 800",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "verified",
+      "notes": "实印型号字串来自官方 Edge Print 字段；本预设不填固定乳剂批号或 DX 数字。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak Alaris PORTRA 800：Edge Print field",
+          "url": "https://www.kodakprofessional.com/photographers/film/color/kodak-professional-portra-800-film/528"
+        },
+        {
+          "title": "Kodak Alaris：C-41 color film processing resources",
+          "url": "https://www.kodakprofessional.com/photographers/resources"
+        }
+      ]
+    },
+    {
+      "id": "kodak-ektar-100",
+      "brand": "Kodak",
+      "name": "EKTAR 100",
+      "iso": 100,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "KODAK EKTAR 100",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "verified",
+      "notes": "实印型号字串来自官方 Edge Print 字段；本预设不填固定乳剂批号或 DX 数字。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak Alaris EKTAR 100：Edge Print field",
+          "url": "https://www.kodakprofessional.com/photographers/film/color/kodak-professional-ektar-100-film/530"
+        },
+        {
+          "title": "Kodak Alaris：C-41 color film processing resources",
+          "url": "https://www.kodakprofessional.com/photographers/resources"
+        }
+      ]
+    },
+    {
+      "id": "kodak-ektachrome-e100",
+      "brand": "Kodak",
+      "name": "EKTACHROME E100",
+      "iso": 100,
+      "process": "E-6",
+      "type": "color-reversal",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "KODAK E100",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak Alaris E100：Edge Print field",
+          "url": "https://www.kodakprofessional.com/photographers/film/color/kodak-professional-ektachrome-film-e100/531"
+        }
+      ]
+    },
+    {
+      "id": "kodak-tri-x-400",
+      "brand": "Kodak",
+      "name": "TRI-X 400",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "KODAK 400TX",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak Alaris TRI-X 400：ISO and Edge Print fields",
+          "url": "https://www.kodakprofessional.com/photographers/film/black-white/kodak-professional-tri-x-films/515"
+        }
+      ]
+    },
+    {
+      "id": "kodak-t-max-100",
+      "brand": "Kodak",
+      "name": "T-MAX 100",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "KODAK 100TMX",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak Alaris T-MAX 100：ISO and Edge Print fields",
+          "url": "https://www.kodakprofessional.com/photographers/film/black-white/kodak-professional-t-max-100-film/525"
+        }
+      ]
+    },
+    {
+      "id": "kodak-t-max-400",
+      "brand": "Kodak",
+      "name": "T-MAX 400",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "KODAK 400TMY-2",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak Alaris T-MAX 400：ISO and Edge Print fields",
+          "url": "https://www.kodakprofessional.com/photographers/film/black-white/kodak-professional-t-max-400-film/526"
+        }
+      ]
+    },
+    {
+      "id": "kodak-t-max-p3200",
+      "brand": "Kodak",
+      "name": "T-MAX P3200",
+      "iso": 800,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "KODAK P3200TMZ",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "标称 ISO 800；P3200 名称表示可增感至 EI 3200 或更高，产品名称数字不等于原生 ISO。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak Alaris T-MAX P3200：ISO and Edge Print fields",
+          "url": "https://www.kodakprofessional.com/photographers/film/black-white/kodak-professional-t-max-p3200-film/527"
+        }
+      ]
+    },
+    {
+      "id": "kodak-vision3-50d",
+      "brand": "Kodak",
+      "name": "VISION3 50D",
+      "iso": 50,
+      "process": "ECN-2",
+      "type": "color-negative",
+      "formats": [
+        "35mm",
+        "16mm"
+      ],
+      "edge_text": "KODAK VISION3 50D",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "电影原片型号；35mm 分装进 135 暗盒不改变原片编号。520x/521x 是型号代码，未当作真实边字位置或固定 KeyKode。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak VISION3 50D 5203 / 7-series product page",
+          "url": "https://www.kodak.com/en/motion/product/camera-films/50d-5203-7203/"
+        }
+      ]
+    },
+    {
+      "id": "kodak-vision3-200t",
+      "brand": "Kodak",
+      "name": "VISION3 200T",
+      "iso": 200,
+      "process": "ECN-2",
+      "type": "color-negative",
+      "formats": [
+        "35mm",
+        "16mm"
+      ],
+      "edge_text": "KODAK VISION3 200T",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "电影原片型号；35mm 分装进 135 暗盒不改变原片编号。520x/521x 是型号代码，未当作真实边字位置或固定 KeyKode。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak VISION3 200T 5213 / 7-series product page",
+          "url": "https://www.kodak.com/en/motion/product/camera-films/200t-5213-7213/"
+        }
+      ]
+    },
+    {
+      "id": "kodak-vision3-250d",
+      "brand": "Kodak",
+      "name": "VISION3 250D",
+      "iso": 250,
+      "process": "ECN-2",
+      "type": "color-negative",
+      "formats": [
+        "35mm",
+        "16mm"
+      ],
+      "edge_text": "KODAK VISION3 250D",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "电影原片型号；35mm 分装进 135 暗盒不改变原片编号。520x/521x 是型号代码，未当作真实边字位置或固定 KeyKode。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak VISION3 250D 5207 / 7-series product page",
+          "url": "https://www.kodak.com/en/motion/product/camera-films/250d-5207-7207/"
+        }
+      ]
+    },
+    {
+      "id": "kodak-vision3-500t",
+      "brand": "Kodak",
+      "name": "VISION3 500T",
+      "iso": 500,
+      "process": "ECN-2",
+      "type": "color-negative",
+      "formats": [
+        "35mm",
+        "16mm"
+      ],
+      "edge_text": "KODAK VISION3 500T",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "电影原片型号；35mm 分装进 135 暗盒不改变原片编号。520x/521x 是型号代码，未当作真实边字位置或固定 KeyKode。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak VISION3 500T 5219 / 7-series product page",
+          "url": "https://www.kodak.com/en/motion/product/camera-films/500t-5219-7219/"
+        }
+      ]
+    },
+    {
+      "id": "kodak-eastman-double-x",
+      "brand": "Kodak",
+      "name": "EASTMAN DOUBLE-X 5222",
+      "iso": 250,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "35mm",
+        "16mm"
+      ],
+      "edge_text": "EASTMAN DOUBLE-X",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "日光 EI 250、钨丝灯 EI 200；标准电影显影为 D-96。本字段以日光曝光指数供排版选择。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak EASTMAN DOUBLE-X 5222/7222",
+          "url": "https://www.kodak.com/en/motion/product/camera-films/eastman-double-x-black-white-5222-7222/"
+        }
+      ]
+    },
+    {
+      "id": "kodak-ektacolor-pro-160",
+      "brand": "Kodak",
+      "name": "EKTACOLOR PRO 160",
+      "iso": 160,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "KODAK EKTACOLOR PRO 160",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "按 2026 年官网展示名称建档；不要据新包装名推断实物边字或乳剂更换。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak EKTACOLOR PRO 160",
+          "url": "https://www.kodak.com/en/still-film/product/professional/ektacolor/ektacolor-pro-160-film/"
+        },
+        {
+          "title": "Kodak Alaris：C-41 color film processing resources",
+          "url": "https://www.kodakprofessional.com/photographers/resources"
+        }
+      ]
+    },
+    {
+      "id": "kodak-ektacolor-pro-400",
+      "brand": "Kodak",
+      "name": "EKTACOLOR PRO 400",
+      "iso": 400,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "KODAK EKTACOLOR PRO 400",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "按 2026 年官网展示名称建档；不要据新包装名推断实物边字或乳剂更换。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak EKTACOLOR PRO 400",
+          "url": "https://www.kodak.com/en/still-film/product/professional/ektacolor/ektacolor-pro-400-film/"
+        },
+        {
+          "title": "Kodak Alaris：C-41 color film processing resources",
+          "url": "https://www.kodakprofessional.com/photographers/resources"
+        }
+      ]
+    },
+    {
+      "id": "kodak-ektacolor-pro-800",
+      "brand": "Kodak",
+      "name": "EKTACOLOR PRO 800",
+      "iso": 800,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "KODAK EKTACOLOR PRO 800",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "按 2026 年官网展示名称建档；不要据新包装名推断实物边字或乳剂更换。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak EKTACOLOR PRO 800",
+          "url": "https://www.kodak.com/en/still-film/product/professional/ektacolor/ektacolor-pro-800-film/"
+        },
+        {
+          "title": "Kodak Alaris：C-41 color film processing resources",
+          "url": "https://www.kodakprofessional.com/photographers/resources"
+        }
+      ]
+    },
+    {
+      "id": "kodak-ektapan-100",
+      "brand": "Kodak",
+      "name": "EKTAPAN 100",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "KODAK EKTAPAN 100",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "当前 EKTAPAN 产品族；历史同名胶片应按实物另建预设。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak EKTAPAN 100 current product page",
+          "url": "https://www.kodak.com/en/still-film/product/professional/ektapan/ektapan-100-film/"
+        }
+      ]
+    },
+    {
+      "id": "kodak-ektapan-400",
+      "brand": "Kodak",
+      "name": "EKTAPAN 400",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "KODAK EKTAPAN 400",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "当前 EKTAPAN 产品族；历史同名胶片应按实物另建预设。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak EKTAPAN 400 current product page",
+          "url": "https://www.kodak.com/en/still-film/product/professional/ektapan/ektapan-400-film/"
+        }
+      ]
+    },
+    {
+      "id": "kodak-ektapan-p3200",
+      "brand": "Kodak",
+      "name": "EKTAPAN P3200",
+      "iso": 3200,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "KODAK EKTAPAN P3200",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "当前 EKTAPAN 产品族；官网的 3200 是推荐增感使用指数，原生 ISO 未在所引当前产品页明确，勿把此排版默认值当作测定感光度。历史同名 EKTAPAN 产品应按实物另建预设。边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak EKTAPAN P3200 current product page",
+          "url": "https://www.kodak.com/en/still-film/product/professional/ektapan/ektapan-p3200-film/"
+        }
+      ]
+    },
+    {
+      "id": "kodak-kodacolor-200",
+      "brand": "Kodak",
+      "name": "KODACOLOR 200",
+      "iso": 200,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "KODAK KODACOLOR 200",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "2025/2026 产品命名；保留独立排版预设，不自动认定它与旧包装完全一致。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Kodak KODACOLOR 200",
+          "url": "https://www.kodak.com/en/still-film/product/consumer/kodacolor-200-film/"
+        },
+        {
+          "title": "Kodak Alaris：C-41 color film processing resources",
+          "url": "https://www.kodakprofessional.com/photographers/resources"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-superia-reala",
+      "brand": "Fujifilm",
+      "name": "SUPERIA REALA",
+      "iso": 100,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "220"
+      ],
+      "edge_text": "REALA",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "135 实印缩写据 2005 年厂家边字对照表；120 的字串可能不同。收录历史型号用于旧卷排版，不代表仍在生产。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-superia-100",
+      "brand": "Fujifilm",
+      "name": "SUPERIA 100",
+      "iso": 100,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "S-100",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "135 实印缩写据 2005 年厂家边字对照表；120 的字串可能不同。收录历史型号用于旧卷排版，不代表仍在生产。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-superia-200",
+      "brand": "Fujifilm",
+      "name": "SUPERIA 200",
+      "iso": 200,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "110"
+      ],
+      "edge_text": "S-200",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "135 实印缩写据 2005 年厂家边字对照表；120 的字串可能不同。收录历史型号用于旧卷排版，不代表仍在生产。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-superia-x-tra-400",
+      "brand": "Fujifilm",
+      "name": "SUPERIA X-TRA 400",
+      "iso": 400,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "S-400",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "135 实印缩写据 2005 年厂家边字对照表；120 的字串可能不同。收录历史型号用于旧卷排版，不代表仍在生产。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-superia-x-tra-800",
+      "brand": "Fujifilm",
+      "name": "SUPERIA X-TRA 800",
+      "iso": 800,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "S-800",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "135 实印缩写据 2005 年厂家边字对照表；120 的字串可能不同。收录历史型号用于旧卷排版，不代表仍在生产。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-superia-1600",
+      "brand": "Fujifilm",
+      "name": "SUPERIA 1600",
+      "iso": 1600,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "1600",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "135 实印缩写据 2005 年厂家边字对照表；120 的字串可能不同。收录历史型号用于旧卷排版，不代表仍在生产。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-pro-160s",
+      "brand": "Fujifilm",
+      "name": "PRO 160S",
+      "iso": 160,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "220",
+        "sheet"
+      ],
+      "edge_text": "PRO 160S",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "135 实印缩写据 2005 年厂家边字对照表；120 的字串可能不同。收录历史型号用于旧卷排版，不代表仍在生产。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-pro-160c",
+      "brand": "Fujifilm",
+      "name": "PRO 160C",
+      "iso": 160,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "220",
+        "sheet"
+      ],
+      "edge_text": "PRO 160C",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "135 实印缩写据 2005 年厂家边字对照表；120 的字串可能不同。收录历史型号用于旧卷排版，不代表仍在生产。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-pro-400h",
+      "brand": "Fujifilm",
+      "name": "PRO 400H",
+      "iso": 400,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "220"
+      ],
+      "edge_text": "400",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "135 实印缩写据 2005 年厂家边字对照表；120 的字串可能不同。收录历史型号用于旧卷排版，不代表仍在生产。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-pro-800z",
+      "brand": "Fujifilm",
+      "name": "PRO 800Z",
+      "iso": 800,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "220"
+      ],
+      "edge_text": "800",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "135 实印缩写据 2005 年厂家边字对照表；120 的字串可能不同。收录历史型号用于旧卷排版，不代表仍在生产。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-velvia-50",
+      "brand": "Fujifilm",
+      "name": "Velvia 50",
+      "iso": 50,
+      "process": "E-6",
+      "type": "color-reversal",
+      "formats": [
+        "135",
+        "120",
+        "220",
+        "sheet"
+      ],
+      "edge_text": "FUJI RVP",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "字串据 2005 年 FUJICHROME 边字对照表；所列规格为历史供应规格，可能已停止供应。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-velvia-100",
+      "brand": "Fujifilm",
+      "name": "Velvia 100",
+      "iso": 100,
+      "process": "E-6",
+      "type": "color-reversal",
+      "formats": [
+        "135",
+        "120",
+        "220",
+        "sheet"
+      ],
+      "edge_text": "FUJI RVP100",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "字串据 2005 年 FUJICHROME 边字对照表；所列规格为历史供应规格，可能已停止供应。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-velvia-100f",
+      "brand": "Fujifilm",
+      "name": "Velvia 100F",
+      "iso": 100,
+      "process": "E-6",
+      "type": "color-reversal",
+      "formats": [
+        "135",
+        "120",
+        "220",
+        "sheet"
+      ],
+      "edge_text": "FUJI RVP100F",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "字串据 2005 年 FUJICHROME 边字对照表；所列规格为历史供应规格，可能已停止供应。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-provia-100f",
+      "brand": "Fujifilm",
+      "name": "PROVIA 100F",
+      "iso": 100,
+      "process": "E-6",
+      "type": "color-reversal",
+      "formats": [
+        "135",
+        "120",
+        "220",
+        "sheet"
+      ],
+      "edge_text": "FUJI RDPIII",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "字串据 2005 年 FUJICHROME 边字对照表；所列规格为历史供应规格，可能已停止供应。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-astia-100f",
+      "brand": "Fujifilm",
+      "name": "ASTIA 100F",
+      "iso": 100,
+      "process": "E-6",
+      "type": "color-reversal",
+      "formats": [
+        "135",
+        "120",
+        "220",
+        "sheet"
+      ],
+      "edge_text": "FUJI RAP100F",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "字串据 2005 年 FUJICHROME 边字对照表；所列规格为历史供应规格，可能已停止供应。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-neopan-acros-100",
+      "brand": "Fujifilm",
+      "name": "NEOPAN 100 ACROS",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "100 ACROS",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "原版 ACROS 的 135 字串，不能用来鉴定 ACROS II；原版按历史型号收录。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
+          "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-neopan-acros-ii",
+      "brand": "Fujifilm",
+      "name": "NEOPAN 100 ACROS II",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "FUJI ACROS II",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "ACROS II 与原版分别建档。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Japan film product range",
+          "url": "https://www.fujifilm.com/jp/ja/consumer/films/negative-and-reversal"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-fujicolor-100",
+      "brand": "Fujifilm",
+      "name": "FUJICOLOR 100",
+      "iso": 100,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "FUJICOLOR 100",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Japan film product range",
+          "url": "https://www.fujifilm.com/jp/ja/consumer/films/negative-and-reversal"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-c200",
+      "brand": "Fujifilm",
+      "name": "FUJICOLOR C200",
+      "iso": 200,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "200",
+      "edge_secondary": "CA24",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "2017 年 C200 技术资料第 13 节直接列出品种字串 200 和代际码 CA24；代际码不是乳剂批号或 DX 数字。字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。实际片边字随年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujicolor C200 Product Information Bulletin",
+          "url": "https://asset.fujifilm.com/www/us/files/2019-09/cce1e1943550fc3e76c22411066f0100/films_c200_datasheet_01.pdf"
+        }
+      ]
+    },
+    {
+      "id": "fujifilm-superia-premium-400",
+      "brand": "Fujifilm",
+      "name": "SUPERIA PREMIUM 400",
+      "iso": 400,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "S-400",
+      "edge_secondary": "CH24",
+      "edge_color": "#dfb975",
+      "font_style": "condensed",
+      "edge_evidence": "verified",
+      "notes": "SUPERIA PREMIUM 400 官方技术资料第 15 节直接列出品种字串 S-400 和代际码 CH24；代际码不是乳剂批号或 DX 数字。字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。实际片边字随年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Fujifilm Japan film product range",
+          "url": "https://www.fujifilm.com/jp/ja/consumer/films/negative-and-reversal"
+        },
+        {
+          "title": "SUPERIA PREMIUM 400 Product Information Bulletin",
+          "url": "https://asset.fujifilm.com/www/jp/files/2019-12/3723e0912cf7e939bb07fd982b0ff9fa/datasheet_superiapremium400_01.pdf"
+        }
+      ]
+    },
+    {
+      "id": "ilford-hp5-plus",
+      "brand": "ILFORD",
+      "name": "HP5 PLUS",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "ILFORD HP5 PLUS",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD product brochure：film speeds, types and formats",
+          "url": "https://www.ilfordphoto.com/wp/wp-content/uploads/2017/05/Ilford-Product-Brochure-LOW-RES-WEB-1.pdf"
+        }
+      ]
+    },
+    {
+      "id": "ilford-fp4-plus",
+      "brand": "ILFORD",
+      "name": "FP4 PLUS",
+      "iso": 125,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "ILFORD FP4 PLUS",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD product brochure：film speeds, types and formats",
+          "url": "https://www.ilfordphoto.com/wp/wp-content/uploads/2017/05/Ilford-Product-Brochure-LOW-RES-WEB-1.pdf"
+        }
+      ]
+    },
+    {
+      "id": "ilford-pan-f-plus",
+      "brand": "ILFORD",
+      "name": "PAN F PLUS",
+      "iso": 50,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "ILFORD PAN F PLUS",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD product brochure：film speeds, types and formats",
+          "url": "https://www.ilfordphoto.com/wp/wp-content/uploads/2017/05/Ilford-Product-Brochure-LOW-RES-WEB-1.pdf"
+        }
+      ]
+    },
+    {
+      "id": "ilford-delta-100",
+      "brand": "ILFORD",
+      "name": "DELTA 100 PROFESSIONAL",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "ILFORD DELTA 100 PROFESSIONAL",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD product brochure：film speeds, types and formats",
+          "url": "https://www.ilfordphoto.com/wp/wp-content/uploads/2017/05/Ilford-Product-Brochure-LOW-RES-WEB-1.pdf"
+        }
+      ]
+    },
+    {
+      "id": "ilford-delta-400",
+      "brand": "ILFORD",
+      "name": "DELTA 400 PROFESSIONAL",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "ILFORD DELTA 400 PROFESSIONAL",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD product brochure：film speeds, types and formats",
+          "url": "https://www.ilfordphoto.com/wp/wp-content/uploads/2017/05/Ilford-Product-Brochure-LOW-RES-WEB-1.pdf"
+        }
+      ]
+    },
+    {
+      "id": "ilford-sfx-200",
+      "brand": "ILFORD",
+      "name": "SFX 200",
+      "iso": 200,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "ILFORD SFX 200",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD product brochure：film speeds, types and formats",
+          "url": "https://www.ilfordphoto.com/wp/wp-content/uploads/2017/05/Ilford-Product-Brochure-LOW-RES-WEB-1.pdf"
+        }
+      ]
+    },
+    {
+      "id": "ilford-delta-3200",
+      "brand": "ILFORD",
+      "name": "DELTA 3200 PROFESSIONAL",
+      "iso": 1000,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "ILFORD DELTA 3200",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "厂家测定日光 ISO 1000；常以 EI 3200 使用并相应显影。名称 3200 不等于原生 ISO。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD DELTA 3200 Technical Information：ISO speed rating",
+          "url": "https://www.ilfordphoto.com/amfile/file/download/file/1913/product/682/"
+        }
+      ]
+    },
+    {
+      "id": "ilford-xp2-super",
+      "brand": "ILFORD",
+      "name": "XP2 SUPER",
+      "iso": 400,
+      "process": "C-41",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "ILFORD XP2 SUPER",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "显色型黑白负片，使用 C-41 而非普通黑白流程。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD product brochure：film speeds, types and formats",
+          "url": "https://www.ilfordphoto.com/wp/wp-content/uploads/2017/05/Ilford-Product-Brochure-LOW-RES-WEB-1.pdf"
+        }
+      ]
+    },
+    {
+      "id": "ilford-ortho-plus",
+      "brand": "ILFORD",
+      "name": "ORTHO PLUS",
+      "iso": 80,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "ILFORD ORTHO PLUS",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "日光 EI 80、钨丝灯 EI 40；此处以日光指数供排版。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD ORTHO PLUS film and processing chart",
+          "url": "https://www.ilfordphoto.com/amfile/file/download/file/1953/product/699/"
+        }
+      ]
+    },
+    {
+      "id": "ilford-pan-100",
+      "brand": "ILFORD",
+      "name": "PAN 100",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "ILFORD PAN 100",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "区域供应型号；不要与 PAN F PLUS 混用。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD regional product handbook (2018), PAN 100 / PAN 400",
+          "url": "https://www.ilfordphoto.cz/wp-content/uploads/2018/08/P%C5%98%C3%8DRU%C4%8CKA_ILFORD_2018.pdf"
+        }
+      ]
+    },
+    {
+      "id": "ilford-pan-400",
+      "brand": "ILFORD",
+      "name": "PAN 400",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "ILFORD PAN 400",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "区域供应型号；不要与 PAN F PLUS 混用。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD regional product handbook (2018), PAN 100 / PAN 400",
+          "url": "https://www.ilfordphoto.cz/wp-content/uploads/2018/08/P%C5%98%C3%8DRU%C4%8CKA_ILFORD_2018.pdf"
+        }
+      ]
+    },
+    {
+      "id": "kentmere-pan-100",
+      "brand": "Kentmere",
+      "name": "PAN 100",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "KENTMERE PAN 100",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD / HARMAN Kentmere PAN 100",
+          "url": "https://www.ilfordphoto.com/kentmere-100-120"
+        }
+      ]
+    },
+    {
+      "id": "kentmere-pan-200",
+      "brand": "Kentmere",
+      "name": "PAN 200",
+      "iso": 200,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "KENTMERE PAN 200",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD / HARMAN Kentmere PAN 200",
+          "url": "https://www.ilfordphoto.com/kentmere-200-35mm"
+        }
+      ]
+    },
+    {
+      "id": "kentmere-pan-400",
+      "brand": "Kentmere",
+      "name": "PAN 400",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "KENTMERE PAN 400",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ILFORD / HARMAN Kentmere PAN 400",
+          "url": "https://www.ilfordphoto.com/kentmere-400-120"
+        }
+      ]
+    },
+    {
+      "id": "foma-fomapan-100",
+      "brand": "FOMA",
+      "name": "FOMAPAN 100 Classic",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "FOMAPAN 100 CLASSIC",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "盒装与散装片的边字可能不同或没有型号实印；排版预设不推断原片是否有码。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "FOMA official black-and-white film catalogue",
+          "url": "https://www.foma.cz/en/catalogue-bw-film-324"
+        },
+        {
+          "title": "FOMA official product handbook, formats and processing",
+          "url": "https://www.foma.cz/ew/92cad2bd-ec2b-4442-bc3c-b13be9ea63ff-fr"
+        }
+      ]
+    },
+    {
+      "id": "foma-fomapan-200",
+      "brand": "FOMA",
+      "name": "FOMAPAN 200 Creative",
+      "iso": 200,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "FOMAPAN 200 CREATIVE",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "盒装与散装片的边字可能不同或没有型号实印；排版预设不推断原片是否有码。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "FOMA official black-and-white film catalogue",
+          "url": "https://www.foma.cz/en/catalogue-bw-film-324"
+        },
+        {
+          "title": "FOMA official product handbook, formats and processing",
+          "url": "https://www.foma.cz/ew/92cad2bd-ec2b-4442-bc3c-b13be9ea63ff-fr"
+        }
+      ]
+    },
+    {
+      "id": "foma-fomapan-400",
+      "brand": "FOMA",
+      "name": "FOMAPAN 400 Action",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "FOMAPAN 400 ACTION",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "盒装与散装片的边字可能不同或没有型号实印；排版预设不推断原片是否有码。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "FOMA official black-and-white film catalogue",
+          "url": "https://www.foma.cz/en/catalogue-bw-film-324"
+        },
+        {
+          "title": "FOMA official product handbook, formats and processing",
+          "url": "https://www.foma.cz/ew/92cad2bd-ec2b-4442-bc3c-b13be9ea63ff-fr"
+        }
+      ]
+    },
+    {
+      "id": "foma-retropan-320",
+      "brand": "FOMA",
+      "name": "RETROPAN 320 soft",
+      "iso": 320,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "RETROPAN 320 SOFT",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "盒装与散装片的边字可能不同或没有型号实印；排版预设不推断原片是否有码。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "FOMA official black-and-white film catalogue",
+          "url": "https://www.foma.cz/en/catalogue-bw-film-324"
+        },
+        {
+          "title": "FOMA official product handbook, formats and processing",
+          "url": "https://www.foma.cz/ew/92cad2bd-ec2b-4442-bc3c-b13be9ea63ff-fr"
+        }
+      ]
+    },
+    {
+      "id": "foma-ortho-400",
+      "brand": "FOMA",
+      "name": "ORTHO 400",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "FOMA ORTHO 400",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "FOMA official black-and-white film catalogue",
+          "url": "https://www.foma.cz/en/catalogue-bw-film-324"
+        },
+        {
+          "title": "FOMA ORTHO 400 official technical data sheet",
+          "url": "https://www.foma.cz/en/fomaortho"
+        }
+      ]
+    },
+    {
+      "id": "foma-fomapan-r-100",
+      "brand": "FOMA",
+      "name": "FOMAPAN R 100",
+      "iso": 100,
+      "process": "B&W reversal",
+      "type": "bw-reversal",
+      "formats": [
+        "135",
+        "16mm",
+        "Double 8",
+        "Double Super 8"
+      ],
+      "edge_text": "FOMAPAN R 100",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "黑白反转片；不是 FOMAPAN 100 Classic 负片。电影规格含双 8、双 Super 8 原片，不代表 Super 8 暗盒。边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "FOMA official black-and-white film catalogue",
+          "url": "https://www.foma.cz/en/catalogue-bw-film-324"
+        },
+        {
+          "title": "FOMA official product handbook, formats and processing",
+          "url": "https://www.foma.cz/ew/92cad2bd-ec2b-4442-bc3c-b13be9ea63ff-fr"
+        },
+        {
+          "title": "FOMAPAN R 100 official technical data sheet",
+          "url": "https://www.foma.cz/en/fomapan-R-100"
+        }
+      ]
+    },
+    {
+      "id": "lucky-shd-100",
+      "brand": "Lucky 乐凯",
+      "name": "SHD100 新一代",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "LUCKY SHD100",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "按新一代产品建档；老 SHD 同名胶卷与新一代不可据名称判为相同。官方商城采用动态页面，部分资料仅在商品图或搜索索引可读。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "乐凯官方影像商城：SHD100 / SHD400 黑白胶卷",
+          "url": "https://www.lucky.cn/index/home"
+        },
+        {
+          "title": "乐凯胶片股份有限公司 2023 ESG / 社会责任报告：新一代 SHD100 / SHD400 产品",
+          "url": "https://pdf.dfcfw.com/pdf/H2_AN202403281628446070_1.pdf"
+        }
+      ]
+    },
+    {
+      "id": "lucky-shd-400",
+      "brand": "Lucky 乐凯",
+      "name": "SHD400 新一代",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "LUCKY SHD400",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "按新一代产品建档；老 SHD 同名胶卷与新一代不可据名称判为相同。官方商城采用动态页面，部分资料仅在商品图或搜索索引可读。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "乐凯官方影像商城：SHD100 / SHD400 黑白胶卷",
+          "url": "https://www.lucky.cn/index/home"
+        },
+        {
+          "title": "乐凯胶片股份有限公司 2023 ESG / 社会责任报告：新一代 SHD100 / SHD400 产品",
+          "url": "https://pdf.dfcfw.com/pdf/H2_AN202403281628446070_1.pdf"
+        }
+      ]
+    },
+    {
+      "id": "agfaphoto-apx-100",
+      "brand": "AgfaPhoto",
+      "name": "APX 100",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "AGFAPHOTO APX 100",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "现代 AgfaPhoto 授权品牌产品；历史 AGFA APX 请按实物单独编辑，未推断代工来源。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "AgfaPhoto official APX 100 / 400 product range",
+          "url": "https://agfaphoto.com/en/analog-photography-single-use-cameras/"
+        }
+      ]
+    },
+    {
+      "id": "agfaphoto-apx-400",
+      "brand": "AgfaPhoto",
+      "name": "APX 400",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "AGFAPHOTO APX 400",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "现代 AgfaPhoto 授权品牌产品；历史 AGFA APX 请按实物单独编辑，未推断代工来源。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "AgfaPhoto official APX 100 / 400 product range",
+          "url": "https://agfaphoto.com/en/analog-photography-single-use-cameras/"
+        }
+      ]
+    },
+    {
+      "id": "adox-chs-100-ii",
+      "brand": "ADOX",
+      "name": "CHS 100 II",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "sheet"
+      ],
+      "edge_text": "ADOX CHS 100 II",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "135 与片页版可用；厂家该页描述 120 正在准备，未据此承诺当前供应。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ADOX official CHS 100 II",
+          "url": "https://www.adox.de/films/chs100ii-en/"
+        }
+      ]
+    },
+    {
+      "id": "adox-hr-50",
+      "brand": "ADOX",
+      "name": "HR-50",
+      "iso": 50,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "ADOX HR-50",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ADOX official HR-50",
+          "url": "https://www.adox.de/hr50-en/"
+        }
+      ]
+    },
+    {
+      "id": "adox-cms-20-ii",
+      "brand": "ADOX",
+      "name": "CMS 20 II",
+      "iso": 20,
+      "process": "ADOTECH IV",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "ADOX CMS 20 II",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "20 为采用专用 ADOTECH 显影时的实用曝光指数；不是对所有显影剂都成立的通用 ISO。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ADOX official CMS 20 II",
+          "url": "https://www.adox.de/films/cms20ii-en/"
+        }
+      ]
+    },
+    {
+      "id": "adox-scala-50",
+      "brand": "ADOX",
+      "name": "SCALA 50",
+      "iso": 50,
+      "process": "B&W reversal",
+      "type": "bw-reversal",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "ADOX SCALA 50",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "按专用黑白反转流程建档。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ADOX official SCALA 50",
+          "url": "https://www.adox.de/scala50-en/"
+        }
+      ]
+    },
+    {
+      "id": "adox-scala-160",
+      "brand": "ADOX",
+      "name": "SCALA 160",
+      "iso": 160,
+      "process": "B&W reversal",
+      "type": "bw-reversal",
+      "formats": [
+        "135"
+      ],
+      "edge_text": "ADOX SCALA 160",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "反转流程 EI 160；作为负片处理时曝光指数不同。历史型号收录不代表持续供应。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "ADOX official SCALA 160",
+          "url": "https://www.adox.de/scala160-en/"
+        }
+      ]
+    },
+    {
+      "id": "rollei-rpx-25",
+      "brand": "Rollei",
+      "name": "RPX 25",
+      "iso": 25,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "ROLLEI RPX 25",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "型号、ISO 与规格据 2021 年官方系列表；不根据网络传闻填入其他厂家的乳剂名。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Rollei RETRO 80S official datasheet, film range comparison",
+          "url": "https://www.rolleianalog.com/wp-content/uploads/2021/02/RETRO80S_Datenblatt_EN_R012101.pdf"
+        }
+      ]
+    },
+    {
+      "id": "rollei-rpx-100",
+      "brand": "Rollei",
+      "name": "RPX 100",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "ROLLEI RPX 100",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "型号、ISO 与规格据 2021 年官方系列表；不根据网络传闻填入其他厂家的乳剂名。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Rollei RETRO 80S official datasheet, film range comparison",
+          "url": "https://www.rolleianalog.com/wp-content/uploads/2021/02/RETRO80S_Datenblatt_EN_R012101.pdf"
+        }
+      ]
+    },
+    {
+      "id": "rollei-rpx-400",
+      "brand": "Rollei",
+      "name": "RPX 400",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "ROLLEI RPX 400",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "型号、ISO 与规格据 2021 年官方系列表；不根据网络传闻填入其他厂家的乳剂名。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Rollei RETRO 80S official datasheet, film range comparison",
+          "url": "https://www.rolleianalog.com/wp-content/uploads/2021/02/RETRO80S_Datenblatt_EN_R012101.pdf"
+        }
+      ]
+    },
+    {
+      "id": "rollei-retro-80s",
+      "brand": "Rollei",
+      "name": "RETRO 80S",
+      "iso": 80,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "ROLLEI RETRO 80S",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "型号、ISO 与规格据 2021 年官方系列表；不根据网络传闻填入其他厂家的乳剂名。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Rollei RETRO 80S official datasheet, film range comparison",
+          "url": "https://www.rolleianalog.com/wp-content/uploads/2021/02/RETRO80S_Datenblatt_EN_R012101.pdf"
+        }
+      ]
+    },
+    {
+      "id": "rollei-retro-400s",
+      "brand": "Rollei",
+      "name": "RETRO 400S",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "ROLLEI RETRO 400S",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "型号、ISO 与规格据 2021 年官方系列表；不根据网络传闻填入其他厂家的乳剂名。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Rollei RETRO 80S official datasheet, film range comparison",
+          "url": "https://www.rolleianalog.com/wp-content/uploads/2021/02/RETRO80S_Datenblatt_EN_R012101.pdf"
+        }
+      ]
+    },
+    {
+      "id": "rollei-superpan-200",
+      "brand": "Rollei",
+      "name": "SUPERPAN 200",
+      "iso": 200,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "ROLLEI SUPERPAN 200",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "型号、ISO 与规格据 2021 年官方系列表；不根据网络传闻填入其他厂家的乳剂名。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Rollei RETRO 80S official datasheet, film range comparison",
+          "url": "https://www.rolleianalog.com/wp-content/uploads/2021/02/RETRO80S_Datenblatt_EN_R012101.pdf"
+        }
+      ]
+    },
+    {
+      "id": "rollei-ortho-25-plus",
+      "brand": "Rollei",
+      "name": "ORTHO 25 PLUS",
+      "iso": 25,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "ROLLEI ORTHO 25 PLUS",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "型号、ISO 与规格据 2021 年官方系列表；不根据网络传闻填入其他厂家的乳剂名。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Rollei RETRO 80S official datasheet, film range comparison",
+          "url": "https://www.rolleianalog.com/wp-content/uploads/2021/02/RETRO80S_Datenblatt_EN_R012101.pdf"
+        }
+      ]
+    },
+    {
+      "id": "rollei-infrared-400",
+      "brand": "Rollei",
+      "name": "INFRARED 400",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120",
+        "sheet"
+      ],
+      "edge_text": "ROLLEI INFRARED 400",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "型号、ISO 与规格据 2021 年官方系列表；不根据网络传闻填入其他厂家的乳剂名。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Rollei RETRO 80S official datasheet, film range comparison",
+          "url": "https://www.rolleianalog.com/wp-content/uploads/2021/02/RETRO80S_Datenblatt_EN_R012101.pdf"
+        }
+      ]
+    },
+    {
+      "id": "cinestill-800t",
+      "brand": "CineStill",
+      "name": "800T",
+      "iso": 800,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "CINESTILL 800T",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "按 CineStill 静态摄影版本建档；不把电影原片 KeyKode 或 5219/5203 直接当作 CineStill 边字。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "CineStill official four-film medium-format lineup",
+          "url": "https://cinestillfilm.com/blogs/news/120-medium-format"
+        },
+        {
+          "title": "CineStill official film processing FAQ",
+          "url": "https://cinestillfilm.com/pages/frequently-asked-questions"
+        }
+      ]
+    },
+    {
+      "id": "cinestill-50d",
+      "brand": "CineStill",
+      "name": "50D",
+      "iso": 50,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "CINESTILL 50D",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "按 CineStill 静态摄影版本建档；不把电影原片 KeyKode 或 5219/5203 直接当作 CineStill 边字。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "CineStill official four-film medium-format lineup",
+          "url": "https://cinestillfilm.com/blogs/news/120-medium-format"
+        },
+        {
+          "title": "CineStill official film processing FAQ",
+          "url": "https://cinestillfilm.com/pages/frequently-asked-questions"
+        }
+      ]
+    },
+    {
+      "id": "cinestill-400d",
+      "brand": "CineStill",
+      "name": "400D",
+      "iso": 400,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "CINESTILL 400D",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "按 CineStill 静态摄影版本建档；不把电影原片 KeyKode 或 5219/5203 直接当作 CineStill 边字。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "CineStill official four-film medium-format lineup",
+          "url": "https://cinestillfilm.com/blogs/news/120-medium-format"
+        },
+        {
+          "title": "CineStill official film processing FAQ",
+          "url": "https://cinestillfilm.com/pages/frequently-asked-questions"
+        }
+      ]
+    },
+    {
+      "id": "cinestill-bwxx",
+      "brand": "CineStill",
+      "name": "BwXX",
+      "iso": 250,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "CINESTILL BwXX",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "mono",
+      "edge_evidence": "approximate",
+      "notes": "日光 EI 250、钨丝灯 EI 200；包装 DX 指数与实用曝光指数需分别确认。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "CineStill official four-film medium-format lineup",
+          "url": "https://cinestillfilm.com/blogs/news/120-medium-format"
+        },
+        {
+          "title": "CineStill official BwXX exposure and development guide",
+          "url": "https://cinestillfilm.com/pages/bwxx-dev-times"
+        }
+      ]
+    },
+    {
+      "id": "lomography-color-negative-100",
+      "brand": "Lomography",
+      "name": "Color Negative 100",
+      "iso": 100,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "LOMOGRAPHY COLOR 100",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "以厂家 ISO 100 Film Guide 建档；包装名与底片实际印字未做等同。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Lomography manufacturer film guides download index",
+          "url": "https://cdn.downloads.lomography.com/downloads/"
+        }
+      ]
+    },
+    {
+      "id": "lomography-color-negative-400",
+      "brand": "Lomography",
+      "name": "Color Negative 400",
+      "iso": 400,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "LOMOGRAPHY COLOR 400",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "以厂家 ISO 400 Film Guide 建档；包装名与底片实际印字未做等同。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Lomography manufacturer film guides download index",
+          "url": "https://cdn.downloads.lomography.com/downloads/"
+        }
+      ]
+    },
+    {
+      "id": "lomography-color-negative-800",
+      "brand": "Lomography",
+      "name": "Color Negative 800",
+      "iso": 800,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "LOMOGRAPHY COLOR 800",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "以厂家 ISO 800 Film Guide 建档；包装名与底片实际印字未做等同。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Lomography manufacturer film guides download index",
+          "url": "https://cdn.downloads.lomography.com/downloads/"
+        }
+      ]
+    },
+    {
+      "id": "lomography-lomochrome-purple",
+      "brand": "Lomography",
+      "name": "LomoChrome Purple 100–400",
+      "iso": 100,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "110"
+      ],
+      "edge_text": "LOMOCHROME PURPLE",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "厂家建议可按 100–400 曝光；100 字段只是排版默认值，不把该范围认作精确测定 ISO。配方迭代需按卷盒版本确认。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Lomography manufacturer film guides download index",
+          "url": "https://cdn.downloads.lomography.com/downloads/"
+        },
+        {
+          "title": "Lomography：What are LomoChrome films?",
+          "url": "https://www.lomography.com/school/what-are-lomochrome-films-fa-g3ebpber"
+        }
+      ]
+    },
+    {
+      "id": "lomography-lomochrome-metropolis",
+      "brand": "Lomography",
+      "name": "LomoChrome Metropolis 100–400",
+      "iso": 100,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "110"
+      ],
+      "edge_text": "LOMOCHROME METROPOLIS",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "厂家建议可按 100–400 曝光；100 字段只是排版默认值，不把该范围认作精确测定 ISO。配方迭代需按卷盒版本确认。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Lomography manufacturer film guides download index",
+          "url": "https://cdn.downloads.lomography.com/downloads/"
+        },
+        {
+          "title": "Lomography：What are LomoChrome films?",
+          "url": "https://www.lomography.com/school/what-are-lomochrome-films-fa-g3ebpber"
+        }
+      ]
+    },
+    {
+      "id": "lomography-lomochrome-turquoise",
+      "brand": "Lomography",
+      "name": "LomoChrome Turquoise 100–400",
+      "iso": 100,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "110"
+      ],
+      "edge_text": "LOMOCHROME TURQUOISE",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "厂家建议可按 100–400 曝光；100 字段只是排版默认值，不把该范围认作精确测定 ISO。配方迭代需按卷盒版本确认。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Lomography manufacturer film guides download index",
+          "url": "https://cdn.downloads.lomography.com/downloads/"
+        },
+        {
+          "title": "Lomography：What are LomoChrome films?",
+          "url": "https://www.lomography.com/school/what-are-lomochrome-films-fa-g3ebpber"
+        }
+      ]
+    },
+    {
+      "id": "lomography-lomochrome-color-92",
+      "brand": "Lomography",
+      "name": "LomoChrome Color ’92",
+      "iso": 400,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120",
+        "110"
+      ],
+      "edge_text": "LOMOCHROME COLOR 92",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Lomography Color ’92 official product specification",
+          "url": "https://shop.lomography.com/us/lomochrome-color-92-35-mm-iso-400?source=nl_color_92_reacts"
+        }
+      ]
+    },
+    {
+      "id": "lomography-redscale-xr",
+      "brand": "Lomography",
+      "name": "Redscale XR 50–200",
+      "iso": 50,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "LOMOGRAPHY REDSCALE XR",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "可按 50–200 曝光获得不同颜色；50 字段为排版默认值。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Lomography Redscale XR 50–200 official product specification",
+          "url": "https://www.lomography.cn/products/f136xr3/"
+        }
+      ]
+    },
+    {
+      "id": "lomography-earl-grey",
+      "brand": "Lomography",
+      "name": "Earl Grey",
+      "iso": 100,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "LOMOGRAPHY EARL GREY 100",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "型号与实用曝光指数据厂家对应 Film Guide。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Lomography manufacturer film guides download index",
+          "url": "https://cdn.downloads.lomography.com/downloads/"
+        }
+      ]
+    },
+    {
+      "id": "lomography-lady-grey",
+      "brand": "Lomography",
+      "name": "Lady Grey",
+      "iso": 400,
+      "process": "B&W",
+      "type": "bw-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "LOMOGRAPHY LADY GREY 400",
+      "edge_secondary": "",
+      "edge_color": "#eee6d8",
+      "font_style": "condensed",
+      "edge_evidence": "approximate",
+      "notes": "型号与实用曝光指数据厂家对应 Film Guide。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "Lomography manufacturer film guides download index",
+          "url": "https://cdn.downloads.lomography.com/downloads/"
+        }
+      ]
+    },
+    {
+      "id": "harman-phoenix-200",
+      "brand": "HARMAN",
+      "name": "Phoenix 200",
+      "iso": 200,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "HARMAN PHOENIX 200",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "原版 Phoenix；与 Phoenix II 分开。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "HARMAN official Phoenix 200 product specification",
+          "url": "https://www.harmanphoto.co.uk/harman-phoenix-200"
+        }
+      ]
+    },
+    {
+      "id": "harman-phoenix-ii",
+      "brand": "HARMAN",
+      "name": "Phoenix II",
+      "iso": 200,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "HARMAN PHOENIX II",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "DX 200，厂家建议最佳曝光范围 100–200；新配方与原版分开。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "HARMAN official Phoenix II product specification",
+          "url": "https://www.harmanphoto.co.uk/harman-phoenix-ii-120"
+        }
+      ]
+    },
+    {
+      "id": "harman-red-125",
+      "brand": "HARMAN",
+      "name": "RED 125",
+      "iso": 125,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "HARMAN RED 125",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "创意红调彩色负片。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "HARMAN official RED 125 product specification",
+          "url": "https://www.harmanphoto.co.uk/harman-red-125-35mm"
+        }
+      ]
+    },
+    {
+      "id": "harman-switch-azure",
+      "brand": "HARMAN",
+      "name": "SWITCH AZURE",
+      "iso": 125,
+      "process": "C-41",
+      "type": "color-negative",
+      "formats": [
+        "135",
+        "120"
+      ],
+      "edge_text": "HARMAN SWITCH AZURE",
+      "edge_secondary": "",
+      "edge_color": "#dfb975",
+      "font_style": "dot",
+      "edge_evidence": "approximate",
+      "notes": "创意换色负片；产品实用 ISO 125。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "sources": [
+        {
+          "title": "HARMAN official SWITCH AZURE product specification",
+          "url": "https://www.harmanphoto.co.uk/harman-switch-azure-35mm"
+        }
+      ]
+    }
+  ]
+}

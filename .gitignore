@@ -26,3 +26,8 @@ output/
 .DS_Store
 *.swp
 *.swo
+
+# Local review evidence can include private photographs and filesystem paths
+.impeccable/review/
+.impeccable/questions/
+*.nmproject.zip

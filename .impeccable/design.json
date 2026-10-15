@@ -1,0 +1,548 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-14T19:02:07.645091+00:00",
+  "title": "Design System: NegativeMaster",
+  "extensions": {
+    "colorMeta": {
+      "bg": {
+        "role": "neutral",
+        "displayName": "Workbench Ground",
+        "tonalRamp": [
+          "oklch(15.00% 0.00439 264.46)",
+          "oklch(26.43% 0.00439 264.46)",
+          "oklch(37.86% 0.00439 264.46)",
+          "oklch(49.29% 0.00439 264.46)",
+          "oklch(60.71% 0.00439 264.46)",
+          "oklch(72.14% 0.00439 264.46)",
+          "oklch(83.57% 0.00439 264.46)",
+          "oklch(95.00% 0.00439 264.46)"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Control Panel",
+        "tonalRamp": [
+          "oklch(15.00% 0.00653 258.36)",
+          "oklch(26.43% 0.00653 258.36)",
+          "oklch(37.86% 0.00653 258.36)",
+          "oklch(49.29% 0.00653 258.36)",
+          "oklch(60.71% 0.00653 258.36)",
+          "oklch(72.14% 0.00653 258.36)",
+          "oklch(83.57% 0.00653 258.36)",
+          "oklch(95.00% 0.00653 258.36)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Selection Surface",
+        "tonalRamp": [
+          "oklch(15.00% 0.00629 258.36)",
+          "oklch(26.43% 0.00629 258.36)",
+          "oklch(37.86% 0.00629 258.36)",
+          "oklch(49.29% 0.00629 258.36)",
+          "oklch(60.71% 0.00629 258.36)",
+          "oklch(72.14% 0.00629 258.36)",
+          "oklch(83.57% 0.00629 258.36)",
+          "oklch(95.00% 0.00629 258.36)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Fine Divider",
+        "tonalRamp": [
+          "oklch(15.00% 0.00806 255.55)",
+          "oklch(26.43% 0.00806 255.55)",
+          "oklch(37.86% 0.00806 255.55)",
+          "oklch(49.29% 0.00806 255.55)",
+          "oklch(60.71% 0.00806 255.55)",
+          "oklch(72.14% 0.00806 255.55)",
+          "oklch(83.57% 0.00806 255.55)",
+          "oklch(95.00% 0.00806 255.55)"
+        ]
+      },
+      "fg": {
+        "role": "neutral",
+        "displayName": "Main Ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.00575 84.57)",
+          "oklch(26.43% 0.00575 84.57)",
+          "oklch(37.86% 0.00575 84.57)",
+          "oklch(49.29% 0.00575 84.57)",
+          "oklch(60.71% 0.00575 84.57)",
+          "oklch(72.14% 0.00575 84.57)",
+          "oklch(83.57% 0.00575 84.57)",
+          "oklch(95.00% 0.00575 84.57)"
+        ]
+      },
+      "mut": {
+        "role": "neutral",
+        "displayName": "Supporting Ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.00739 88.66)",
+          "oklch(26.43% 0.00739 88.66)",
+          "oklch(37.86% 0.00739 88.66)",
+          "oklch(49.29% 0.00739 88.66)",
+          "oklch(60.71% 0.00739 88.66)",
+          "oklch(72.14% 0.00739 88.66)",
+          "oklch(83.57% 0.00739 88.66)",
+          "oklch(95.00% 0.00739 88.66)"
+        ]
+      },
+      "acc": {
+        "role": "primary",
+        "displayName": "Reading Orange",
+        "tonalRamp": [
+          "oklch(15.00% 0.17002 53.19)",
+          "oklch(26.43% 0.17002 53.19)",
+          "oklch(37.86% 0.17002 53.19)",
+          "oklch(49.29% 0.17002 53.19)",
+          "oklch(60.71% 0.17002 53.19)",
+          "oklch(72.14% 0.17002 53.19)",
+          "oklch(83.57% 0.17002 53.19)",
+          "oklch(95.00% 0.17002 53.19)"
+        ]
+      },
+      "orange": {
+        "role": "primary",
+        "displayName": "Signal Orange",
+        "tonalRamp": [
+          "oklch(15.00% 0.17723 45.64)",
+          "oklch(26.43% 0.17723 45.64)",
+          "oklch(37.86% 0.17723 45.64)",
+          "oklch(49.29% 0.17723 45.64)",
+          "oklch(60.71% 0.17723 45.64)",
+          "oklch(72.14% 0.17723 45.64)",
+          "oklch(83.57% 0.17723 45.64)",
+          "oklch(95.00% 0.17723 45.64)"
+        ]
+      },
+      "stage": {
+        "role": "neutral",
+        "displayName": "Photographic Stage",
+        "tonalRamp": [
+          "oklch(15.00% 0.00503 248.07)",
+          "oklch(26.43% 0.00503 248.07)",
+          "oklch(37.86% 0.00503 248.07)",
+          "oklch(49.29% 0.00503 248.07)",
+          "oklch(60.71% 0.00503 248.07)",
+          "oklch(72.14% 0.00503 248.07)",
+          "oklch(83.57% 0.00503 248.07)",
+          "oklch(95.00% 0.00503 248.07)"
+        ]
+      },
+      "field": {
+        "role": "neutral",
+        "displayName": "Field Ground",
+        "tonalRamp": [
+          "oklch(15.00% 0.00506 248.08)",
+          "oklch(26.43% 0.00506 248.08)",
+          "oklch(37.86% 0.00506 248.08)",
+          "oklch(49.29% 0.00506 248.08)",
+          "oklch(60.71% 0.00506 248.08)",
+          "oklch(72.14% 0.00506 248.08)",
+          "oklch(83.57% 0.00506 248.08)",
+          "oklch(95.00% 0.00506 248.08)"
+        ]
+      },
+      "light-bg": {
+        "role": "neutral",
+        "displayName": "Day Workbench Ground",
+        "tonalRamp": [
+          "oklch(15.00% 0.00702 88.64)",
+          "oklch(26.43% 0.00702 88.64)",
+          "oklch(37.86% 0.00702 88.64)",
+          "oklch(49.29% 0.00702 88.64)",
+          "oklch(60.71% 0.00702 88.64)",
+          "oklch(72.14% 0.00702 88.64)",
+          "oklch(83.57% 0.00702 88.64)",
+          "oklch(95.00% 0.00702 88.64)"
+        ]
+      },
+      "light-panel": {
+        "role": "neutral",
+        "displayName": "Day Control Panel",
+        "tonalRamp": [
+          "oklch(15.00% 0.00696 88.64)",
+          "oklch(26.43% 0.00696 88.64)",
+          "oklch(37.86% 0.00696 88.64)",
+          "oklch(49.29% 0.00696 88.64)",
+          "oklch(60.71% 0.00696 88.64)",
+          "oklch(72.14% 0.00696 88.64)",
+          "oklch(83.57% 0.00696 88.64)",
+          "oklch(95.00% 0.00696 88.64)"
+        ]
+      },
+      "light-surface": {
+        "role": "neutral",
+        "displayName": "Day Selection Surface",
+        "tonalRamp": [
+          "oklch(15.00% 0.00871 84.57)",
+          "oklch(26.43% 0.00871 84.57)",
+          "oklch(37.86% 0.00871 84.57)",
+          "oklch(49.29% 0.00871 84.57)",
+          "oklch(60.71% 0.00871 84.57)",
+          "oklch(72.14% 0.00871 84.57)",
+          "oklch(83.57% 0.00871 84.57)",
+          "oklch(95.00% 0.00871 84.57)"
+        ]
+      },
+      "light-line": {
+        "role": "neutral",
+        "displayName": "Day Fine Divider",
+        "tonalRamp": [
+          "oklch(15.00% 0.01362 82.40)",
+          "oklch(26.43% 0.01362 82.40)",
+          "oklch(37.86% 0.01362 82.40)",
+          "oklch(49.29% 0.01362 82.40)",
+          "oklch(60.71% 0.01362 82.40)",
+          "oklch(72.14% 0.01362 82.40)",
+          "oklch(83.57% 0.01362 82.40)",
+          "oklch(95.00% 0.01362 82.40)"
+        ]
+      },
+      "light-fg": {
+        "role": "neutral",
+        "displayName": "Day Main Ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.00241 247.92)",
+          "oklch(26.43% 0.00241 247.92)",
+          "oklch(37.86% 0.00241 247.92)",
+          "oklch(49.29% 0.00241 247.92)",
+          "oklch(60.71% 0.00241 247.92)",
+          "oklch(72.14% 0.00241 247.92)",
+          "oklch(83.57% 0.00241 247.92)",
+          "oklch(95.00% 0.00241 247.92)"
+        ]
+      },
+      "light-mut": {
+        "role": "neutral",
+        "displayName": "Day Supporting Ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.01211 81.77)",
+          "oklch(26.43% 0.01211 81.77)",
+          "oklch(37.86% 0.01211 81.77)",
+          "oklch(49.29% 0.01211 81.77)",
+          "oklch(60.71% 0.01211 81.77)",
+          "oklch(72.14% 0.01211 81.77)",
+          "oklch(83.57% 0.01211 81.77)",
+          "oklch(95.00% 0.01211 81.77)"
+        ]
+      },
+      "light-acc": {
+        "role": "primary",
+        "displayName": "Day Reading Orange",
+        "tonalRamp": [
+          "oklch(15.00% 0.13904 44.57)",
+          "oklch(26.43% 0.13904 44.57)",
+          "oklch(37.86% 0.13904 44.57)",
+          "oklch(49.29% 0.13904 44.57)",
+          "oklch(60.71% 0.13904 44.57)",
+          "oklch(72.14% 0.13904 44.57)",
+          "oklch(83.57% 0.13904 44.57)",
+          "oklch(95.00% 0.13904 44.57)"
+        ]
+      },
+      "light-orange": {
+        "role": "primary",
+        "displayName": "Day Signal Orange",
+        "tonalRamp": [
+          "oklch(15.00% 0.16891 48.53)",
+          "oklch(26.43% 0.16891 48.53)",
+          "oklch(37.86% 0.16891 48.53)",
+          "oklch(49.29% 0.16891 48.53)",
+          "oklch(60.71% 0.16891 48.53)",
+          "oklch(72.14% 0.16891 48.53)",
+          "oklch(83.57% 0.16891 48.53)",
+          "oklch(95.00% 0.16891 48.53)"
+        ]
+      },
+      "light-stage": {
+        "role": "neutral",
+        "displayName": "Day Photographic Stage",
+        "tonalRamp": [
+          "oklch(15.00% 0.00876 84.57)",
+          "oklch(26.43% 0.00876 84.57)",
+          "oklch(37.86% 0.00876 84.57)",
+          "oklch(49.29% 0.00876 84.57)",
+          "oklch(60.71% 0.00876 84.57)",
+          "oklch(72.14% 0.00876 84.57)",
+          "oklch(83.57% 0.00876 84.57)",
+          "oklch(95.00% 0.00876 84.57)"
+        ]
+      },
+      "light-field": {
+        "role": "neutral",
+        "displayName": "Day Field Ground",
+        "tonalRamp": [
+          "oklch(15.00% 0.00450 78.30)",
+          "oklch(26.43% 0.00450 78.30)",
+          "oklch(37.86% 0.00450 78.30)",
+          "oklch(49.29% 0.00450 78.30)",
+          "oklch(60.71% 0.00450 78.30)",
+          "oklch(72.14% 0.00450 78.30)",
+          "oklch(83.57% 0.00450 78.30)",
+          "oklch(95.00% 0.00450 78.30)"
+        ]
+      },
+      "action-ink": {
+        "role": "neutral",
+        "displayName": "Action Ink",
+        "tonalRamp": [
+          "oklch(15.00% 0.00770 67.33)",
+          "oklch(26.43% 0.00770 67.33)",
+          "oklch(37.86% 0.00770 67.33)",
+          "oklch(49.29% 0.00770 67.33)",
+          "oklch(60.71% 0.00770 67.33)",
+          "oklch(72.14% 0.00770 67.33)",
+          "oklch(83.57% 0.00770 67.33)",
+          "oklch(95.00% 0.00770 67.33)"
+        ]
+      },
+      "action-hover": {
+        "role": "primary",
+        "displayName": "Action Hover",
+        "tonalRamp": [
+          "oklch(15.00% 0.15356 55.80)",
+          "oklch(26.43% 0.15356 55.80)",
+          "oklch(37.86% 0.15356 55.80)",
+          "oklch(49.29% 0.15356 55.80)",
+          "oklch(60.71% 0.15356 55.80)",
+          "oklch(72.14% 0.15356 55.80)",
+          "oklch(83.57% 0.15356 55.80)",
+          "oklch(95.00% 0.15356 55.80)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "brand": {
+        "displayName": "Brand",
+        "purpose": "Shared wordmark only."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Active inspector pane heading."
+      },
+      "section": {
+        "displayName": "Section",
+        "purpose": "Frame rail and processing groups."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Working controls, navigation and explanation."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Compact field labels, notes and frame titles."
+      },
+      "value": {
+        "displayName": "Value",
+        "purpose": "Counts, dimensions, zoom and adjustment readouts."
+      }
+    },
+    "shadows": [
+      {
+        "name": "artifact-help-dark",
+        "value": "0 14px 36px #0003",
+        "purpose": "Night sheet preview and temporary help card."
+      },
+      {
+        "name": "artifact-help-day",
+        "value": "0 12px 32px #28242018",
+        "purpose": "Day sheet preview and temporary help card."
+      },
+      {
+        "name": "overlay-rail",
+        "value": "8px 0 22px #0003",
+        "purpose": "Frame rail only while overlaid below 800px."
+      },
+      {
+        "name": "processing-image",
+        "value": "0 10px 40px rgba(0, 0, 0, 0.7)",
+        "purpose": "Inherited image wrapper; not general control elevation."
+      },
+      {
+        "name": "crop-mask",
+        "value": "0 0 0 4000px rgba(0, 0, 0, 0.6)",
+        "purpose": "Functional mask outside the selected image crop."
+      }
+    ],
+    "motion": [
+      {
+        "name": "preview-pending",
+        "value": "filter 120ms ease-out",
+        "purpose": "Real preview becomes dim while its replacement renders."
+      },
+      {
+        "name": "prepare-progress",
+        "value": "width 180ms ease-out",
+        "purpose": "Preparation progress track."
+      },
+      {
+        "name": "processing-state",
+        "value": "all .2s cubic-bezier(.4,0,.2,1)",
+        "purpose": "Inherited processing button transitions; reduced-motion disables transitions."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "1600px"
+      },
+      {
+        "name": "compact-desktop",
+        "value": "1150px"
+      },
+      {
+        "name": "overlay-rail",
+        "value": "800px"
+      },
+      {
+        "name": "stacked",
+        "value": "620px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Cut-corner opening or export action; the shared sheet variant.",
+      "html": "<button class=\"ds-action\">导出整卷图片 <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4\"/></svg></button>",
+      "css": ".ds-action{font-family:-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;background:var(--orange,#ec6c22);color:#161310;border:0;border-radius:0;padding:10px 19px;min-height:40px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 14px,100% 100%,8px 100%,0 calc(100% - 14px));}.ds-action svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7}.ds-action:hover{background:#ff9949}.ds-action:focus-visible{outline:2px solid var(--acc,#ff8b32);outline-offset:3px;outline-offset:5px}.ds-action:disabled{opacity:.45;cursor:default}"
+    },
+    {
+      "name": "Quiet Action",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Secondary action with an opaque hover surface and a fine border.",
+      "html": "<button class=\"ds-quiet\">选择文件夹</button>",
+      "css": ".ds-quiet{font-family:-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;background:transparent;color:var(--fg,#f2f0ec);border:1px solid var(--line,#383b3f);border-radius:0;padding:8px 11px;min-height:36px;display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}.ds-quiet:hover{background:var(--surface,#242629)}.ds-quiet:focus-visible{outline:2px solid var(--acc,#ff8b32);outline-offset:3px;}.ds-quiet:disabled{opacity:.45;cursor:default}"
+    },
+    {
+      "name": "Icon Action",
+      "kind": "button",
+      "refersTo": "button-icon",
+      "description": "Compact SVG action using the same flat border and hover language.",
+      "html": "<button class=\"ds-icon\" aria-label=\"放大\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14M12 5v14\"/></svg></button>",
+      "css": ".ds-icon{width:36px;min-height:36px;display:inline-grid;place-items:center;border:1px solid var(--line,#383b3f);border-radius:0;background:transparent;color:var(--fg,#f2f0ec);cursor:pointer}.ds-icon svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}.ds-icon:hover{background:var(--surface,#242629)}.ds-icon:focus-visible{outline:2px solid var(--acc,#ff8b32);outline-offset:3px;}.ds-icon:disabled{opacity:.45;cursor:default}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-text",
+      "description": "Square field with a quiet label and a visible accent keyboard outline.",
+      "html": "<label class=\"ds-field\"><span>主边字</span><input value=\"FOMAPAN 100 CLASSIC\" placeholder=\"填写实际边字\"></label>",
+      "css": ".ds-field{display:block;font-family:-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;color:var(--fg,#f2f0ec);max-width:300px}.ds-field span{display:block;margin-bottom:7px;color:var(--mut,#b4b2ad);font-size:12px}.ds-field input{display:block;width:100%;min-height:40px;font-family:-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;padding:8px 10px;background:var(--field,#151719);color:var(--fg,#f2f0ec);border:1px solid var(--line,#383b3f);border-radius:0;caret-color:var(--acc,#ff8b32)}.ds-field input::placeholder{color:var(--mut,#b4b2ad);opacity:1}.ds-field input:focus-visible{outline:2px solid var(--acc,#ff8b32);outline-offset:3px;outline-offset:2px}"
+    },
+    {
+      "name": "Processing Mode Selector",
+      "kind": "chip",
+      "refersTo": "mode-selector",
+      "description": "The inherited compact setting selector, restyled as a square action.",
+      "html": "<div class=\"ds-modes\"><button class=\"ds-mode ds-selected\" aria-pressed=\"true\">自由</button><button class=\"ds-mode\" aria-pressed=\"false\">135</button><button class=\"ds-mode\" aria-pressed=\"false\">6×6</button></div>",
+      "css": ".ds-modes{display:flex;gap:6px;flex-wrap:wrap}.ds-mode{font-family:-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;padding:5px 12px;font-size:11.5px;font-weight:500;background:var(--surface,#242629);color:var(--fg,#f2f0ec);border:1px solid var(--line,#383b3f);border-radius:0;box-shadow:none;cursor:pointer;transition:all .2s cubic-bezier(.4,0,.2,1)}.ds-mode:hover{background:var(--line,#383b3f);border-color:var(--mut,#b4b2ad)}.ds-mode.ds-selected{background:var(--orange,#ec6c22);color:#171411;border-color:var(--orange,#ec6c22);font-weight:600}.ds-mode:active{transform:scale(.97)}.ds-mode:focus-visible{outline:2px solid var(--acc,#ff8b32);outline-offset:3px;}@media(prefers-reduced-motion:reduce){.ds-mode{transition:none}}"
+    },
+    {
+      "name": "Workspace Navigation",
+      "kind": "nav",
+      "refersTo": "navigation-item",
+      "description": "Plain workspaces with connected geometry and a single active underline.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"工作区\"><a href=\"#tune\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg>调片</a><a href=\"#sheet\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 6h16v12H4zM4 9h16M4 15h16M9 9v6M15 9v6\"/><circle cx=\"4\" cy=\"6\" r=\"1.5\" fill=\"currentColor\" stroke=\"none\"/></svg>整卷排版</a></nav>",
+      "css": ".ds-nav{display:flex;gap:4px;background:var(--panel,#1b1d20);padding:0 0 12px;font-family:-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;}.ds-nav a{display:flex;align-items:center;gap:8px;padding:10px 18px;color:var(--mut,#b4b2ad);text-decoration:none;position:relative}.ds-nav a[aria-current=page]{color:var(--fg,#f2f0ec)}.ds-nav a[aria-current=page]:after{content:\"\";position:absolute;bottom:-12px;left:18px;right:18px;height:3px;background:var(--orange,#ec6c22)}.ds-nav svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}.ds-nav a:focus-visible{outline:2px solid var(--acc,#ff8b32);outline-offset:3px;}"
+    },
+    {
+      "name": "Inspector Tabs",
+      "kind": "nav",
+      "refersTo": "inspector-tab",
+      "description": "Six settings families with a separate 照片 composition pane and an orange active underline.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button role=\"tab\" aria-selected=\"true\">胶卷</button><button role=\"tab\" aria-selected=\"false\">布局</button><button role=\"tab\" aria-selected=\"false\">照片</button><button role=\"tab\" aria-selected=\"false\">背景</button><button role=\"tab\" aria-selected=\"false\">信息</button><button role=\"tab\" aria-selected=\"false\">导出</button></div>",
+      "css": ".ds-tabs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:0 12px;border-bottom:1px solid var(--line,#383b3f);background:var(--panel,#1b1d20)}.ds-tabs button{font-family:-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;font-size:12px;position:relative;background:none;border:0;border-radius:0;color:var(--mut,#b4b2ad);min-height:52px;padding:15px 0;cursor:pointer}.ds-tabs button[aria-selected=true]{color:var(--acc,#ff8b32);font-weight:600}.ds-tabs button[aria-selected=true]:after{content:\"\";position:absolute;bottom:0;left:8px;right:8px;height:2px;background:var(--orange,#ec6c22)}.ds-tabs button:focus-visible{outline:2px solid var(--acc,#ff8b32);outline-offset:3px;}@media(max-width:620px){.ds-tabs button{min-height:50px}}"
+    },
+    {
+      "name": "Inspector Section",
+      "kind": "card",
+      "refersTo": "inspector-section",
+      "description": "An opaque workbench region with a fine boundary, not a lifted card.",
+      "html": "<section class=\"ds-inspector\"><h2>胶卷与边字</h2><p>FOMA / ISO 100 / B&amp;W / 135, 120, sheet</p></section>",
+      "css": ".ds-inspector{font-family:-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;background:var(--panel,#1b1d20);color:var(--fg,#f2f0ec);border-left:1px solid var(--line,#383b3f);border-radius:0;padding:24px 22px}.ds-inspector h2{font-size:16px;font-weight:500;margin:0 0 22px}.ds-inspector p{font-size:12px;line-height:1.7;color:var(--mut,#b4b2ad);margin:8px 0 16px}"
+    },
+    {
+      "name": "Frame Row",
+      "kind": "custom",
+      "refersTo": "frame-row",
+      "description": "Activating a photo opens its single-frame composition view and separate 照片 inspector; the inline thumbnail is only a specimen placeholder.",
+      "html": "<div class=\"ds-frame ds-active\" role=\"listitem\" tabindex=\"0\" aria-label=\"TZP09831_pos.jpg，已选，可拖动排序\"><input type=\"checkbox\" checked aria-label=\"选择照片\"><svg class=\"ds-thumb\" viewBox=\"0 0 54 39\" aria-label=\"缩略图示例\"><rect width=\"54\" height=\"39\" fill=\"#191a1b\"/><path d=\"M0 39V25l15-15 15 14 10-7 14 15v7\" fill=\"#b4b2ad\"/><circle cx=\"40\" cy=\"8\" r=\"4\" fill=\"#f2f0ec\"/></svg><div><span class=\"ds-frame-title\">TZP09831_pos.jpg</span><span class=\"ds-frame-source\">已导出成片</span></div><span class=\"ds-order\">1</span></div>",
+      "css": ".ds-frame{font-family:-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;font-size:13px;line-height:1.5;display:grid;grid-template-columns:18px 54px minmax(0,1fr) 18px;align-items:center;gap:8px;padding:11px 6px;border-bottom:1px solid var(--line,#383b3f);color:var(--fg,#f2f0ec);cursor:grab;max-width:300px}.ds-frame.ds-active{background:var(--surface,#242629)}.ds-frame input{accent-color:var(--orange,#ec6c22);width:14px;height:14px;margin:0}.ds-thumb{width:54px;height:39px}.ds-frame-title{display:block;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-active .ds-frame-title{color:var(--acc,#ff8b32)}.ds-frame-source{font-size:11px;color:var(--mut,#b4b2ad)}.ds-order{color:var(--mut,#b4b2ad);font-size:12px}.ds-frame:focus-visible{outline:2px solid var(--acc,#ff8b32);outline-offset:3px;}.ds-frame.ds-drag-over{outline:1px solid var(--acc,#ff8b32);outline-offset:-1px}"
+    },
+    {
+      "name": "Mounting Guide",
+      "kind": "custom",
+      "description": "Thin orthogonal mounting marks with one oblique alignment line.",
+      "html": "<svg class=\"ds-guide\" viewBox=\"0 0 42 28\" aria-hidden=\"true\"><path d=\"M1 27V1h40M1 18l29-17\"/></svg>",
+      "css": ".ds-guide{width:42px;height:28px;stroke:var(--mut,#b4b2ad);stroke-width:1;fill:none;pointer-events:none;opacity:.55}"
+    },
+    {
+      "name": "Preview View Switch",
+      "kind": "custom",
+      "description": "Roll/frame preview selection; single-frame rotation and crop use a 1200px thumbnail canvas and shared export parameters. Its optional thirds guides are preview-only and never exported.",
+      "html": "<div class=\"ds-view-switch\" role=\"group\" aria-label=\"预览视图\"><button aria-pressed=\"true\">整卷</button><button aria-pressed=\"false\">单张</button></div>",
+      "css": ".ds-view-switch{display:inline-flex;border:1px solid var(--line,#383b3f);flex:none}.ds-view-switch button{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Segoe UI',sans-serif;line-height:1.5;background:transparent;border:0;border-radius:0;color:var(--mut,#b4b2ad);padding:7px 11px;font-size:12px;min-height:32px;cursor:pointer}.ds-view-switch button[aria-pressed=true]{background:var(--surface,#242629);color:var(--acc,#ff8b32)}.ds-view-switch button:hover{color:var(--fg,#f2f0ec)}.ds-view-switch button:focus-visible{outline:2px solid var(--acc,#ff8b32);outline-offset:3px}.ds-view-switch button:disabled{opacity:.45;cursor:default}@media(max-width:800px){.ds-view-switch button{padding:7px 10px}}@media(max-width:620px){.ds-view-switch button{min-height:42px}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Photographic Mounting Workbench",
+    "overview": "NegativeMaster is a local photographic workbench. Its visual identity comes from photographic mounting marks: a continuous image area, square control surfaces, fine orthogonal lines and occasional oblique action edges. The orange/charcoal palette, day mode and connected-node icon language are confirmed user commitments.\n\nThe chrome stays dense and quiet so photographs and rendered contact sheets carry the visual content. Night mode uses charcoal layers; day mode uses warm paper and dark ink with a deeper orange for readable text. Q Graph's content-first hierarchy and node grammar inform the shell without importing unrelated page compositions.",
+    "keyCharacteristics": [
+      "Continuous image area before controls",
+      "Orange actions and selected states",
+      "Warm day mode and charcoal night mode",
+      "Square controls with occasional cut action corners",
+      "Fine SVG linework with connected nodes"
+    ],
+    "rules": [
+      {
+        "name": "The Two Oranges Rule",
+        "body": "Use the text accent for links, values and focus, and the action orange for filled actions, checkboxes and selection marks. Day mode keeps these separate so orange text stays readable.",
+        "section": "colors"
+      },
+      {
+        "name": "The Image Leads Rule",
+        "body": "Keep the photograph or rendered sheet in the largest continuous region; control groups belong beside or below it.",
+        "section": "layout"
+      },
+      {
+        "name": "The Quiet Frame Rule",
+        "body": "Use flat tonal surfaces and fine borders for the working chrome. Reserve ambient lift for the displayed artifact, temporary help or the overlaid frame rail.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Measured Cut Rule",
+        "body": "Keep controls square. Confine the angular cut to important actions and mounting details, preserving the source proportions rather than cutting every container.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Node Grammar Rule",
+        "body": "Draw navigation and action icons as inline SVG strokes with simple paths and occasional circular connection nodes.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do use the shared theme variables for text, fields, borders and panel backgrounds in both workspaces.",
+      "Do keep the central photograph or sheet uninterrupted, with controls organized by the action they perform.",
+      "Do use the muted text token for supporting copy and the foreground token for editable values and file names.",
+      "Do retain square controls, fine alignment lines and the measured action cut.",
+      "Do use inline SVG icons and text labels for visible actions; preserve focus and disabled states.",
+      "Do stack the stage and inspector on narrow screens and leave the mobile status footer in document flow.",
+      "Do keep film edge lettering and exported sheet backgrounds editable; identify approximate lettering as an approximation."
+    ],
+    "donts": [
+      "Don't turn the workbench into a fake machine bezel, terminal, dashboard or promotional page.",
+      "Don't use bright filled orange for long labels or body copy; use the theme's text accent for orange text.",
+      "Don't add rounded card chrome, glass panels or decorative glows to new controls.",
+      "Don't promote inherited glyph icons, isolated rounded legacy widgets or hard-coded legacy colors into the shared system.",
+      "Don't impose the workbench chrome palette on user-editable photographic backgrounds or archival sheet content.",
+      "Don't replace the recorded direction key with an invented seed."
+    ]
+  }
+}

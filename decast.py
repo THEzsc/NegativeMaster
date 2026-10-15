@@ -562,48 +562,185 @@ def _longest_run(mask):
     return best_len, best_s, best_e
 
 
-def detect_film_rect(lin_oriented):
-    """自动检测胶片画面区域（去掉片基/齿孔间隔/暗边框）。
+def _film_edge_image(lin):
+    """Area-average before analysis: narrow borders survive without RAW aliasing."""
+    a = np.asarray(lin, dtype=np.float32)
+    if a.ndim == 2:
+        a = np.repeat(a[..., None], 3, axis=2)
+    if a.ndim != 3 or a.shape[2] < 3 or min(a.shape[:2]) < 24:
+        raise ValueError("Image is too small for frame detection")
+    a = np.nan_to_num(a[..., :3], nan=0.0, posinf=1.0, neginf=0.0)
+    h, w = a.shape[:2]
+    scale = min(1.0, 1400.0 / max(h, w))
+    size = (max(24, round(w * scale)), max(24, round(h * scale)))
+    a = np.stack([np.asarray(Image.fromarray(a[..., c]).resize(
+        size, Image.Resampling.BOX)) for c in range(3)], axis=-1)
+    lo, hi = np.percentile(a, [0.5, 99.5], axis=(0, 1))
+    # Normalize channels independently so orange film base does not dominate.
+    return np.sqrt(np.clip((a - lo) / np.maximum(hi - lo, 0.02), 0, 1))
 
-    输入：方向已调整（rotate/flip 已做）的线性负片 HxWx3。
-    输出：[x0,y0,x1,y1]，0~1 比例坐标，可直接当 crop_rect 用。
 
-    做法：下采样后取线性亮度。翻拍负片里画面外只有两种东西：
-      - 片基/无片裸光：接近整幅最亮（≈ 99.5 百分位）
-      - 片夹/黑边框：远暗于画面中值
-    把这两类都排除后剩下的就是「内容」像素，按行/列统计内容占比 > 0.2
-    的最大连续区间（等价于在快速反转的正片亮度上做中间调分离），
-    最后向内收 1%。检测不到合理区域时兜底返回 [0.03, 0.03, 0.97, 0.97]。
+def _detect_outer_edge(a):
+    """Find one border, with inward distance on axis 0.
+
+    A bounded line search votes across 160 scanlines. Candidates need a long
+    contrast edge AND a relatively uniform exterior band. This rejects most
+    subject edges. Unknown boundaries remain at the image edge.
+    Returns d(t)=offset+slope*(t-center), residual, and confidence.
     """
-    fallback = [0.03, 0.03, 0.97, 0.97]
+    h, w = a.shape[:2]
+    ts = np.linspace(w * 0.08, w * 0.92 - 1, min(160, w - 2)).astype(int)
+    center = (w - 1) / 2
+    tx = ts - center
+    limit = max(4, int(h * 0.36))
+    # A three-pixel step captures narrow bright film base as well as dark holders.
+    smooth = (a[:, np.maximum(ts - 1, 0)] + a[:, ts] +
+              a[:, np.minimum(ts + 1, w - 1)]) / 3
+    grad = np.zeros((h, len(ts)), np.float32)
+    grad[1:-1] = np.max(np.abs(smooth[2:] - smooth[:-2]), axis=2) / 2
+    noise = np.median(grad[:limit], axis=0)
+    threshold = np.maximum(0.003, noise * 2.5)
+    # Search slopes first; all candidates must have support distributed along edge.
+    candidates = []
+    ds = np.arange(1, limit)
+    cols = np.arange(len(ts))[None, :]
+    # Fine near-level angles matter for scan alignment; coarse voting previously
+    # quantized weak edges to about 0.33 degrees or missed them altogether.
+    slopes = np.tan(np.radians(np.unique(np.r_[np.arange(-2., 2.01, .05),
+                                               np.arange(-8., 8.01, .25)])))
+    for slope in slopes:
+        yy = np.rint(ds[:, None] + slope * tx).astype(int)
+        valid = (yy >= 1) & (yy < limit)
+        strength = grad[np.clip(yy, 1, h - 2), cols]
+        supported = (strength > threshold) & valid
+        support = supported.mean(axis=1)
+        score = np.mean(np.minimum(strength / threshold, 5) * valid, axis=1)
+        score *= support ** 2
+        # Non-maximum suppression keeps weaker inner film-base edges even when
+        # the outer holder edge has much higher contrast.
+        for _ in range(8):
+            j = int(np.argmax(score))
+            if score[j] <= 0:
+                break
+            if support[j] >= 0.50:
+                candidates.append((float(score[j]), float(ds[j]), float(slope)))
+            score[max(0, j - 3):j + 4] = 0
+    # Prioritize actual peripheral edges before deep subject lines.
+    candidates.sort(key=lambda v: v[0] / (1 + 12 * v[1] / h), reverse=True)
+    tested = []
+    accepted = []
+    for score, offset, slope in candidates:
+        if any(abs(offset - d) < 3 and abs((slope - m) * w) < 5 for d, m in tested):
+            continue
+        tested.append((offset, slope))
+        if len(tested) > 64:
+            break
+        pred = offset + slope * tx
+        # Refine the voted line from nearby local maxima, then reject outliers.
+        ys = np.rint(pred).astype(int)[None, :] + np.arange(-3, 4)[:, None]
+        strengths = grad[np.clip(ys, 1, h - 2), np.arange(len(ts))]
+        best = np.argmax(strengths, axis=0)
+        points = ys[best, np.arange(len(ts))].astype(float)
+        good = (strengths[best, np.arange(len(ts))] > threshold) & (points >= 1)
+        for _ in range(3):
+            if good.sum() < len(ts) * 0.45:
+                break
+            slope, offset = np.polyfit(tx[good], points[good], 1)
+            residuals = np.abs(points - (offset + slope * tx))
+            good &= residuals <= 2.0
+        if good.mean() < 0.5 or abs(slope) > np.tan(np.radians(8)):
+            continue
+        # A local subject edge must not pass by only occupying one end of the frame.
+        if min(g.mean() for g in np.array_split(good, 4)) < 0.25:
+            continue
+        boundary = offset + slope * tx
+        if np.percentile(boundary, 10) < 1 or np.max(boundary) > limit:
+            continue
+        # Sample several depths OUTSIDE the candidate. Across-edge consistency is
+        # robust to dust, film markings and occasional sprocket holes (IQR).
+        depths = np.linspace(0.08, 0.85, 9)[:, None] * np.maximum(boundary - 2, 0)
+        exterior = smooth[np.rint(depths).astype(int), np.arange(len(ts))]
+        spread = np.max(np.percentile(exterior, 75, axis=1) -
+                        np.percentile(exterior, 25, axis=1), axis=1)
+        uniformity = float(np.median(spread))
+        if uniformity > 0.12:
+            continue
+        # Wide trims require particularly consistent outside regions.
+        if offset > h * 0.08:
+            # A wide holder is flat through its depth as well as along its edge.
+            # Smooth roads/skies with a gradient must not become huge crop bands.
+            flat = exterior.reshape(-1, exterior.shape[-1])
+            if np.max(np.percentile(flat, 90, axis=0) -
+                      np.percentile(flat, 10, axis=0)) > 0.08:
+                continue
+        # Reject the holder-to-base boundary when the next band is still empty:
+        # the crop belongs at base-to-image, even if that transition is weaker.
+        inner_y = np.clip(np.rint(boundary[None, :] + np.array([2, 4, 6])[:, None]),
+                          0, h - 1).astype(int)
+        interior = smooth[inner_y, np.arange(len(ts))]
+        inside_spread = np.max(np.percentile(interior, 75, axis=1) -
+                               np.percentile(interior, 25, axis=1), axis=1)
+        if np.max(inside_spread) < 0.018:
+            # Textureless dark sky behind bright film base is still a frame.
+            # A uniform bright band behind a dark holder is usually more base.
+            if offset > h * 0.06 or np.median(interior) >= np.median(exterior) - 0.03:
+                continue
+        residual = float(np.percentile(np.abs(points[good] - boundary[good]), 95))
+        confidence = float(good.mean() * max(0, 1 - uniformity / 0.24))
+        if offset > h * .08 and confidence < .92:
+            continue
+        accepted.append((confidence, offset, slope, residual))
+    if not accepted:
+        return None
+    # Favor the strongest supported boundary; avoid walking deep into the subject
+    # when a comparably well-supported exterior boundary already exists.
+    best_conf = max(v[0] for v in accepted)
+    viable = [v for v in accepted if v[0] >= max(0.50, best_conf * 0.85)]
+    if not viable:
+        return None
+    confidence, offset, slope, residual = min(viable, key=lambda v: v[1])
+    return dict(offset=offset, slope=slope, residual=residual,
+                confidence=round(confidence, 3), center=center)
+
+
+def detect_film_frame(lin_oriented):
+    """Detect four physical borders independently; never invent a fallback crop.
+
+    rect is an axis-aligned rectangle inside the detected lines. Unknown sides
+    keep their full extent. The original detect_film_rect API wraps this result.
+    """
+    full = dict(rect=[0.0, 0.0, 1.0, 1.0], confidence=0.0,
+                detected_edges=0, status="uncertain", edges={}, analysis_shape=list(np.shape(lin_oriented)[:2]))
     try:
-        V = np.asarray(stats_view(lin_oriented, max_side=600),
-                       dtype=np.float32)
-        luma = np.clip(V, 0.0, 1.0) @ LUMA_W
-        hh, ww = luma.shape
-        med = float(np.median(luma))
-        p_hi = float(np.percentile(luma, 99.5))
-        if p_hi <= 1e-4:
-            return fallback
-        # 内容像素：既不接近片基/裸光的最亮档，也不掉进黑边框的暗档
-        content = (luma < 0.8 * p_hi) & (luma > 0.3 * med)
+        a = _film_edge_image(lin_oriented)
+    except (ValueError, TypeError):
+        return full
+    h, w = a.shape[:2]
+    edges = dict(top=_detect_outer_edge(a), bottom=_detect_outer_edge(a[::-1]),
+                 left=_detect_outer_edge(a.transpose(1, 0, 2)),
+                 right=_detect_outer_edge(a[:, ::-1].transpose(1, 0, 2)))
+    # Stay inside even tilted borders. The margin is tied to fit uncertainty,
+    # not to a fixed percentage of the photograph.
+    def inset(edge, span):
+        if edge is None:
+            return 0.0
+        endpoints = [edge['offset'] + edge['slope'] * (t - edge['center'])
+                     for t in (0, span - 1)]
+        return max(0, max(endpoints) + 1.0 + edge['residual'])
+    rect = [inset(edges['left'], h) / w, inset(edges['top'], w) / h,
+            1 - inset(edges['right'], h) / w, 1 - inset(edges['bottom'], w) / h]
+    if rect[2] - rect[0] < 0.3 or rect[3] - rect[1] < 0.3:
+        return full
+    found = [e for e in edges.values() if e is not None]
+    return dict(analysis_shape=[h, w], rect=[round(float(v), 5) for v in rect],
+                confidence=round(float(np.mean([e['confidence'] for e in found])), 3) if found else 0.0,
+                detected_edges=len(found), status="detected" if len(found) == 4 else
+                "partial" if found else "uncertain", edges=edges)
 
-        # 行/列上「内容像素占比 > 0.2」的最大连续区间
-        rl, rs, re = _longest_run(content.mean(axis=1) > 0.2)
-        cl, cs, ce = _longest_run(content.mean(axis=0) > 0.2)
-        if rl < 0.3 * hh or cl < 0.3 * ww:
-            return fallback
 
-        # 向内收 3.5%（对齐用户手工框的松紧，宁可略紧不留边框），并做边界保护
-        x0 = max(0.0, cs / ww + 0.035)
-        x1 = min(1.0, (ce + 1) / ww - 0.035)
-        y0 = max(0.0, rs / hh + 0.035)
-        y1 = min(1.0, (re + 1) / hh - 0.035)
-        if x1 - x0 < 0.2 or y1 - y0 < 0.2:
-            return fallback
-        return [round(x0, 4), round(y0, 4), round(x1, 4), round(y1, 4)]
-    except Exception:
-        return fallback
+def detect_film_rect(lin_oriented):
+    """Return normalized crop coordinates; uncertain sides retain the full image."""
+    return detect_film_frame(lin_oriented)['rect']
 
 
 def _robust_slope(x, y, max_tan, iters=240, thresh=1.5):
@@ -642,55 +779,152 @@ def _robust_slope(x, y, max_tan, iters=240, thresh=1.5):
     return float(m)
 
 
-def estimate_skew(lin, max_angle=8.0):
-    """估计画面倾斜角（度），用于自动校平。
+def _frame_level(frame, max_angle=8.0):
+    """Consensus of measured frame edges; returns None when angle is unknown."""
+    candidates = []
+    for name, edge in frame['edges'].items():
+        if edge is not None and edge['confidence'] >= 0.55:
+            sign = 1 if name in ('top', 'right') else -1
+            angle = sign * np.degrees(np.arctan(edge['slope']))
+            candidates.append((float(angle), edge['confidence'], name))
+    if len(candidates) < 2:
+        return None
+    # A pair of opposite edges is more useful than a single strong subject line.
+    groups = []
+    for angle, _, _ in candidates:
+        group = [v for v in candidates if abs(v[0] - angle) <= 0.25]
+        names = {v[2] for v in group}
+        opposite = {'top', 'bottom'} <= names or {'left', 'right'} <= names
+        if len(group) >= 2:
+            groups.append((sum(v[1] for v in group) + (0.35 if opposite else 0), group))
+    if not groups:
+        return None
+    group = max(groups, key=lambda v: v[0])[1]
+    angle = float(np.average([v[0] for v in group], weights=[v[1] for v in group]))
+    if abs(angle) > max_angle:
+        return None
+    return round(angle, 2) if abs(angle) >= 0.08 else 0.0
 
-    只用【画面/片框的边界】测倾斜，不受图像内容干扰：
-    先按 detect_film_rect 同法分出「内容」像素，再对上下边逐列取
-    内容起止行、对左右边逐行取内容起止列，各自稳健拟合直线求斜率，
-    四条边的角度取中位数。这样测的是胶片画幅本身的水平，
-    比"旋转让边缘投影最尖"的老办法稳得多（后者会被砖缝、树枝带偏）。
-    返回应施加的旋转角（PIL rotate 同向，正=逆时针）；测不准返回 0。
+
+def _aligned_frame_rect(frame, angle):
+    """Transform frame half-planes, then inscribe a safe axis-aligned rectangle.
+
+    Include the original sensor bounds so rotation can never introduce black
+    corners. All calculations use image-edge coordinates (PIL's rotation center).
+    No second edge detection on an interpolated/rotated image is needed.
     """
-    V = np.clip(np.asarray(stats_view(lin, max_side=760), np.float32), 0.0, 1.0)
-    luma = V @ LUMA_W if V.ndim == 3 else V
-    H, W = luma.shape
-    med = float(np.median(luma))
-    p_hi = float(np.percentile(luma, 99.5))
-    if p_hi <= 1e-4:
-        return 0.0
-    content = (luma < 0.8 * p_hi) & (luma > 0.3 * med)
-    max_tan = np.tan(np.radians(max_angle))
-    angs = []
+    h, w = frame['analysis_shape']
+    center = np.array([w / 2, h / 2])
+    rad = np.radians(angle)
+    rotation = np.array([[np.cos(rad), np.sin(rad)], [-np.sin(rad), np.cos(rad)]])
+    planes = [(np.array([1., 0.]), 0.), (np.array([-1., 0.]), -float(w)),
+              (np.array([0., 1.]), 0.), (np.array([0., -1.]), -float(h))]
+    for name, edge in frame['edges'].items():
+        if edge is None:
+            continue
+        m = edge['slope']
+        # Narrow clean-up margin, sized in analysis pixels plus fit uncertainty.
+        margin = 1.0 + edge['residual'] + min(h, w) * 0.002
+        b = edge['offset'] + .5 - m * (edge['center'] + .5) + margin
+        if name == 'top':
+            n = np.array([-m, 1.])
+        elif name == 'bottom':
+            n = np.array([-m, -1.]); b -= h
+        elif name == 'left':
+            n = np.array([1., -m])
+        else:
+            n = np.array([-1., -m]); b -= w
+        planes.append((n, b))
+    transformed = [(rotation @ n, b + (rotation @ n - n) @ center) for n, b in planes]
+    # Near-horizontal/vertical boundaries yield monotone inward updates.
+    rect = np.array([0., 0., float(w), float(h)])
+    for _ in range(24):
+        previous = rect.copy()
+        for n, b in transformed:
+            nx, ny = n
+            if abs(nx) >= abs(ny):
+                y = rect[1] if ny >= 0 else rect[3]
+                value = (b - ny * y) / nx
+                if nx > 0:
+                    rect[0] = max(rect[0], value)
+                else:
+                    rect[2] = min(rect[2], value)
+            else:
+                x = rect[0] if nx >= 0 else rect[2]
+                value = (b - nx * x) / ny
+                if ny > 0:
+                    rect[1] = max(rect[1], value)
+                else:
+                    rect[3] = min(rect[3], value)
+        if np.max(np.abs(rect - previous)) < 1e-5:
+            break
+    rect /= np.array([w, h, w, h])
+    if rect[2] - rect[0] < .3 or rect[3] - rect[1] < .3:
+        return None
+    # Round inward, not toward a potentially invalid pixel beyond the boundary.
+    rect[:2] = np.ceil(rect[:2] * 1e6) / 1e6
+    rect[2:] = np.floor(rect[2:] * 1e6) / 1e6
+    return rect.tolist()
 
-    # 上/下边：逐列取「首个/末个内容行」，拟合出的斜率 m=dy/dx → 角 = atan(m)
-    xs = np.where(content.sum(axis=0) > 0.3 * H)[0]
-    if len(xs) > 0.3 * W:
-        top = np.array([np.argmax(content[:, x]) for x in xs], float)
-        bot = np.array([H - 1 - np.argmax(content[::-1, x]) for x in xs], float)
-        xf = xs.astype(float)
-        for e in (top, bot):
-            m = _robust_slope(xf, e, max_tan)
-            if m is not None:
-                angs.append(np.degrees(np.arctan(m)))
 
-    # 左/右边：逐行取「首个/末个内容列」，斜率 m=dx/dy → 角 = -atan(m)
-    ys = np.where(content.sum(axis=1) > 0.3 * W)[0]
-    if len(ys) > 0.3 * H:
-        lef = np.array([np.argmax(content[y]) for y in ys], float)
-        rig = np.array([W - 1 - np.argmax(content[y][::-1]) for y in ys], float)
-        yf = ys.astype(float)
-        for e in (lef, rig):
-            m = _robust_slope(yf, e, max_tan)
-            if m is not None:
-                angs.append(-np.degrees(np.arctan(m)))
+def detect_film_alignment(lin_oriented, current_angle=0.0, auto_level=True, reference=None):
+    """Joint crop/level from the original image; current angle is an absolute angle.
 
-    if len(angs) < 2:            # 至少两条边一致才敢转
-        return 0.0
-    ang = float(np.median(angs))
-    if abs(ang) > max_angle:
-        return 0.0
-    return ang if abs(ang) >= 0.25 else 0.0
+    Repeated Auto clicks are idempotent. If angle evidence is insufficient, keep
+    the user's existing angle and still crop any reliable boundaries.
+    """
+    frame = detect_film_frame(lin_oriented)
+    estimated = _frame_level(frame) if auto_level else None
+    angle = float(current_angle) if estimated is None else estimated
+    borrowed_angle = False
+    if (estimated is None and auto_level and abs(current_angle) < 0.01 and
+            reference is not None and reference.get('angle') is not None):
+        angle = float(reference['angle'])
+        borrowed_angle = True
+    result = dict(frame, angle=round(angle, 2), leveled=estimated is not None,
+                  angle_status='detected' if estimated is not None else 'preserved')
+    if frame['status'] == 'uncertain' and reference is None:
+        result.update(angle=float(current_angle), leveled=False, angle_status='preserved')
+        return result
+    if borrowed_angle:
+        result.update(angle_status='reference', leveled=True)
+    # A deep edge inconsistent with the rest is probably a road/horizon.
+    consistency_angle = estimated
+    if consistency_angle is None and reference is not None:
+        consistency_angle = reference.get('angle')
+    if consistency_angle is not None:
+        for name, edge in frame['edges'].items():
+            if edge is None:
+                continue
+            sign = 1 if name in ('top', 'right') else -1
+            edge_angle = sign * np.degrees(np.arctan(edge['slope']))
+            if abs(edge_angle - consistency_angle) > 1.2:
+                result['edges'] = dict(result['edges'])
+                result['edges'][name] = None
+    rect = _aligned_frame_rect(result, angle)
+    if rect is None:
+        result.update(rect=[0., 0., 1., 1.], status='uncertain',
+                      angle=float(current_angle), leveled=False, angle_status='preserved')
+    else:
+        reference_edges = []
+        if reference is not None:
+            for i, name in enumerate(('left', 'top', 'right', 'bottom')):
+                if result['edges'].get(name) is None:
+                    value = reference['rect'][i]
+                    rect[i] = max(rect[i], value) if i < 2 else min(rect[i], value)
+                    reference_edges.append(name)
+        count = sum(e is not None for e in result['edges'].values())
+        result.update(rect=rect, detected_edges=count,
+                      reference_edges=reference_edges,
+                      reference_samples=reference['samples'] if reference_edges or borrowed_angle else 0,
+                      status='referenced' if reference_edges else 'detected' if count == 4 else 'partial')
+    return result
+
+
+def estimate_skew(lin, max_angle=8.0):
+    """Return the absolute leveling angle, or zero when evidence is insufficient."""
+    angle = _frame_level(detect_film_frame(lin), max_angle)
+    return 0.0 if angle is None else angle
 
 
 def _deskew_lin(lin, angle):
@@ -1530,22 +1764,17 @@ def main():
             do_level = getattr(args, "auto_level", False)
             do_crop = getattr(args, "auto_crop", False) and not args.crop_rect
             if do_level or do_crop:
-                # 在「方向调整后」的下采样图上检测：先算校平角、按角旋正小图，
-                # 再检测画面区域，使裁切框与全图去斜后同一坐标系；逐张各用各的
+                # Use one geometry solution for both leveling and cropping.
                 fargs = argparse.Namespace(**vars(args))
-                small = orient_image(stats_view(lin, max_side=800),
-                                     args.rotate, args.flip)
+                small = orient_image(stats_view(lin, max_side=1500), args.rotate, args.flip)
+                alignment = detect_film_alignment(small, args.level_angle, auto_level=do_level)
                 if do_level:
-                    ang = estimate_skew(small)
-                    fargs.level_angle = ang
-                    if abs(ang) >= 0.1:
-                        small = _deskew_lin(small, ang)
-                    print(f"[{idx}/{len(files)}] 自动校平：{ang:+.2f}°")
+                    fargs.level_angle = alignment['angle']
+                    print(f"[{idx}/{len(files)}] 自动校平：{fargs.level_angle:+.2f}°")
                 if do_crop:
-                    rect = detect_film_rect(small)
-                    fargs.crop_rect = rect
+                    fargs.crop_rect = alignment['rect']
                     print(f"[{idx}/{len(files)}] 自动画面区域："
-                          f"{','.join(f'{v:.3f}' for v in rect)}")
+                          f"{','.join(f'{v:.3f}' for v in alignment['rect'])}")
             P = convert_negative(lin, fargs)
             dst = out_path_for(src, args.output, batch, ext, args.suffix)
             save_image(P, dst, bits, quality=args.quality, resize=args.resize)

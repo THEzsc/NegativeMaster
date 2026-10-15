@@ -1,0 +1,6 @@
+/* Self-hosted, original unmodified SIL OFL fonts. See the accompanying licenses. */
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 400; font-display: swap; src: url('./BarlowCondensed-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 500; font-display: swap; src: url('./BarlowCondensed-Medium.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 600; font-display: swap; src: url('./BarlowCondensed-SemiBold.ttf') format('truetype'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('./IBMPlexMono-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('./IBMPlexMono-Medium.ttf') format('truetype'); }

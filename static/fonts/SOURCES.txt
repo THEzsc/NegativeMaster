@@ -1,0 +1,12 @@
+These unmodified fonts are distributed under the SIL Open Font License 1.1.
+Barlow Condensed: https://github.com/google/fonts/tree/main/ofl/barlowcondensed
+Barlow project: https://github.com/jpt/barlow
+IBM Plex Mono: https://github.com/google/fonts/tree/main/ofl/ibmplexmono
+IBM project: https://github.com/IBM/plex
+Downloaded 2026-10-15. License files: barlowcondensed-OFL.txt and ibmplexmono-OFL.txt.
+
+These are suitable approximate type families; they are NOT authenticated
+manufacturer edge-print fonts. The dot style is drawn from original 5x7
+bitmap patterns in contact_sheet.py, not extracted from copyrighted film scans.
+Chinese archival header text uses an available system CJK font. No proprietary
+operating system font files are copied or distributed with this project.

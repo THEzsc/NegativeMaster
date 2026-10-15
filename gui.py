@@ -29,6 +29,7 @@ import os
 import sys
 import json
 import hashlib
+import film_reference
 import argparse
 import subprocess
 import xml.etree.ElementTree as ET
@@ -183,7 +184,8 @@ def _data_to_xml(data, src):
     ET.SubElement(root, "crop", **{k: str(cn.get(k, "")) for k in
                                    ("x0", "y0", "x1", "y1")})
     ET.SubElement(root, "view", fmt=str(data.get("curFmt", "free")),
-                  orient=str(data.get("orient", "land")))
+                  orient=str(data.get("orient", "land")),
+                  geometry_source=str(data.get("geometrySource", "manual")))
     try:
         ET.indent(root)  # Python 3.9+ 美化缩进
     except Exception:
@@ -219,6 +221,7 @@ def _xml_to_data(xmlstr):
     if v is not None:
         data["curFmt"] = v.get("fmt", "free")
         data["orient"] = v.get("orient", "land")
+        data["geometrySource"] = v.get("geometry_source", "manual")
     return data
 
 
@@ -361,10 +364,12 @@ def api_autocrop():
     rot = int(body.get("rotate", 0) or 0)
     flip = str(body.get("flip", "none"))
     oriented = decast.orient_image(CACHE["prev"], rot, flip)
-    ang = decast.estimate_skew(oriented) if body.get("level") else 0.0
-    src = decast._deskew_lin(oriented, ang) if abs(ang) >= 0.1 else oriented
-    rect = decast.detect_film_rect(src)
-    return jsonify(ok=True, rect=rect, angle=round(float(ang), 2))
+    reference = (film_reference.reference_for(CACHE.get("path"), rot, flip)
+                 if body.get("use_reference", True) else None)
+    result = decast.detect_film_alignment(
+        oriented, current_angle=float(body.get("level_angle", 0.0) or 0.0),
+        auto_level=bool(body.get("level", True)), reference=reference)
+    return jsonify(ok=True, **result)
 
 
 @app.route("/api/wbtemp", methods=["POST"])
@@ -569,9 +574,6 @@ INDEX_HTML = r"""<!doctype html>
 <html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>胶片去色罩 · 可视化</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg: #0b0c10;
@@ -602,7 +604,7 @@ INDEX_HTML = r"""<!doctype html>
 }
 body {
   margin: 0;
-  font: 13px/1.5 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
   background: var(--bg);
   color: var(--fg);
   height: 100vh;
@@ -925,7 +927,7 @@ input[type=range]::-webkit-slider-thumb {
   border: none;
   clip-path: polygon(0% 0%, 100% 0%, 100% 60%, 50% 100%, 0% 60%);
   filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.6));
-  transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.15s;
+  transition: transform 0.15s cubic-bezier(.16, 1, .3, 1), background-color 0.15s;
 }
 input[type=range]:hover::-webkit-slider-thumb {
   transform: translateY(-1px) scale(1.15);
@@ -1286,7 +1288,8 @@ input[type=range]:hover::-moz-range-thumb {
     <button class="navbtn" id="previmg" title="上一张 (←)">‹</button>
     <select id="fileselect" title="选择底片"></select>
     <div class="rotgroup">
-      <button id="autocrop" title="自动检测胶片画面区域并框选">Auto</button>
+      <button id="autocrop" title="检测片框，自动校平并裁剪；保留横竖和倒置方向">自动裁剪＋校平</button>
+      <label title="边界模糊时参考同文件夹附近至少五张已保存的调整"><input type="checkbox" id="cropref" checked>同卷参考</label>
       <span class="sep"></span>
       <button id="rotL" title="左转 90°">↶</button>
       <button id="rotR" title="右转 90°">↷</button>
@@ -1294,16 +1297,16 @@ input[type=range]:hover::-moz-range-thumb {
       <button class="pill" id="flipv" title="垂直翻转 V">⇅</button>
       <span class="sep"></span>
       <span class="rl">拉直</span>
-      <button id="rotm1" title="逆时针 1°">−1°</button>
-      <button id="rotm01" title="逆时针 0.1°">−.1</button>
+      <button id="rotm1" title="顺时针 1°">−1°</button>
+      <button id="rotm01" title="顺时针 0.1°">−.1</button>
       <span id="angleval">0.0</span>°
-      <button id="rotp01" title="顺时针 0.1°">+.1</button>
-      <button id="rotp1" title="顺时针 1°">+1°</button>
+      <button id="rotp01" title="逆时针 0.1°">+.1</button>
+      <button id="rotp1" title="逆时针 1°">+1°</button>
       <button id="rot0" title="拉直归零">⟲</button>
     </div>
     <button class="navbtn" id="nextimg" title="下一张 (→)">›</button>
   </div>
-  <div id="imgwrap"><img id="img">
+  <div id="imgwrap"><img id="img" alt="调片预览">
     <div id="wbsel"></div>
     <div id="basesel" class="ssel"></div>
     <div id="shadowsel" class="ssel"></div>
@@ -1590,6 +1593,7 @@ const PKEYS=["black_pct","white_pct","wb","gamma","contrast","saturation",
   "exposure","highlights","shadows","whites","blacks",
   "curve","curve_r","curve_g","curve_b","hsl","vibrance","vignette"];
 let P=dclone(D), curFile=null, fmt="tif", timer=null, loaded=false;
+let geometrySource="manual", lastAutoSummary="";
 const $=id=>document.getElementById(id);
 const SL=["gamma","contrast","saturation","denoise","sharpen","black_pct","white_pct","temp","tint",
   "exposure","highlights","shadows","whites","blacks","vibrance","vignette",
@@ -1779,6 +1783,7 @@ function cropMove(e){
     e.preventDefault(); return;
   }
   if(!drag) return;
+  if(drag.mode!=="pan"){geometrySource="manual";lastAutoSummary="";}
   if(drag.mode==="pan"){
     TX=drag.tx+(e.clientX-drag.cx); TY=drag.ty+(e.clientY-drag.cy);
     drag.moved=true; applyTransform(); return;
@@ -2101,13 +2106,13 @@ $("rotL").onclick=()=>{ transformRegions(rRotCCW); P.rotate=(P.rotate+(mirrored(
 $("rotR").onclick=()=>{ transformRegions(rRotCW); P.rotate=(P.rotate+(mirrored()?270:90))%360;
   applyFormat(curFmt); refl(); render();};
 // 左下角旋转/拉直按钮
-function updAngle(){ const el=$("angleval"); if(el) el.textContent=(+(P.level_angle||0)).toFixed(1); }
-function nudgeAngle(d){ P.level_angle=clamp(Math.round(((+P.level_angle||0)+d)*10)/10,-45,45); updAngle(); render(); }
+function updAngle(){ const el=$("angleval"); if(el) el.textContent=(+(P.level_angle||0)).toFixed(2); }
+function nudgeAngle(d){ geometrySource="manual";lastAutoSummary=""; P.level_angle=clamp(Math.round(((+P.level_angle||0)+d)*10)/10,-45,45); updAngle(); render(); }
 $("rotm1").onclick=()=>nudgeAngle(-1);
 $("rotm01").onclick=()=>nudgeAngle(-0.1);
 $("rotp01").onclick=()=>nudgeAngle(0.1);
 $("rotp1").onclick=()=>nudgeAngle(1);
-$("rot0").onclick=()=>{P.level_angle=0; updAngle(); render();};
+$("rot0").onclick=()=>{geometrySource="manual";lastAutoSummary="";P.level_angle=0; updAngle(); render();};
 // 功能说明弹窗
 $("helpbtn").onclick=()=>{$("helpmodal").style.display="flex";};
 $("helpclose").onclick=()=>{$("helpmodal").style.display="none";};
@@ -2128,18 +2133,31 @@ $("fmts").querySelectorAll("button").forEach(b=>b.onclick=()=>{
   b.classList.add("on"); applyFormat(b.dataset.f); render();});
 $("oland").onclick=()=>{orient="land";$("oland").classList.add("on");$("oport").classList.remove("on");applyFormat(curFmt);render();};
 $("oport").onclick=()=>{orient="port";$("oport").classList.add("on");$("oland").classList.remove("on");applyFormat(curFmt);render();};
-$("cropfull").onclick=()=>{cropN={x0:0,y0:0,x1:1,y1:1}; aspect?applyFormat(curFmt):drawCrop(); render();};
-$("cropreset").onclick=()=>{cropN={x0:.06,y0:.06,x1:.94,y1:.94}; aspect?applyFormat(curFmt):drawCrop(); render();};
+$("cropfull").onclick=()=>{geometrySource="manual";lastAutoSummary="";cropN={x0:0,y0:0,x1:1,y1:1}; aspect?applyFormat(curFmt):drawCrop(); render();};
+$("cropreset").onclick=()=>{geometrySource="manual";lastAutoSummary="";cropN={x0:.06,y0:.06,x1:.94,y1:.94}; aspect?applyFormat(curFmt):drawCrop(); render();};
 $("autocrop").onclick=()=>{
   if(!loaded){stat("先载入图片");return;}
-  stat("自动检测画面区域…");
-  // 只框画面，不自动旋转（旋转用左下角按钮手动调，更可控）
+  const fileAtStart=curFile, rotateAtStart=P.rotate, flipAtStart=P.flip;
+  const angleAtStart=P.level_angle, cropAtStart=JSON.stringify(cropN);
+  $("autocrop").disabled=true;
+  stat("检测片框并校平…");
   fetch("/api/autocrop",{method:"POST",headers:HJ,
-    body:JSON.stringify({rotate:P.rotate,flip:P.flip,level:false})}).then(r=>r.json()).then(d=>{
+    body:JSON.stringify({rotate:P.rotate,flip:P.flip,level:true,level_angle:P.level_angle,
+      use_reference:$("cropref").checked})}).then(r=>r.json()).then(d=>{
+      if(curFile!==fileAtStart||P.rotate!==rotateAtStart||P.flip!==flipAtStart||
+         P.level_angle!==angleAtStart||JSON.stringify(cropN)!==cropAtStart)return;
       if(!d.ok){stat("✗ "+d.err);return;}
+      if(d.status==="uncertain"){stat("未找到可靠片框，已保留当前裁剪和角度");return;}
+      geometrySource="auto";
+      P.level_angle=d.angle; updAngle();
       const[x0,y0,x1,y1]=d.rect; cropN={x0,y0,x1,y1};
       curFmt="free"; syncFmtPills(); drawCrop(); render();
-      stat("已自动框选画面");});
+      const angleText=d.angle_status==="preserved"?"保留原角度":`校平 ${d.angle>0?"+":""}${d.angle.toFixed(2)}°`;
+      const source=d.reference_samples?`，弱边参考同卷 ${d.reference_samples} 张已调照片`:"";
+      lastAutoSummary=`已检测 ${d.detected_edges} 条片边，${angleText}${source}`;
+      stat(lastAutoSummary);
+    }).catch(()=>stat("自动裁剪失败，请重试"))
+      .finally(()=>{$("autocrop").disabled=false;});
 };
 window.addEventListener("resize",()=>{ if(loaded) fitWrap(); });
 
@@ -2232,6 +2250,7 @@ function loadFile(path){
       updateNavButtons();
       resetView();
       const applyRestore=(sd,label)=>{
+        geometrySource=sd?.geometrySource||"manual";lastAutoSummary="";
         if(sd){
           if(sd.P) P=Object.assign(dclone(D),sd.P);
           if(sd.cropN) cropN=Object.assign({},sd.cropN);
@@ -2266,7 +2285,7 @@ function saveSettings(path,silent){
     .then(r=>r.json()).then(d=>{ if(!silent) stat(d.ok?"✓ 参数已保存":"✗ "+d.err); });
 }
 function currentSettings(){
-  return {P:P,cropN:cropN,curFmt:curFmt,orient:orient};
+  return {P:P,cropN:cropN,curFmt:curFmt,orient:orient,geometrySource:geometrySource};
 }
 // ---- 调整参数后自动存 XML 边车（挨着照片，随照片一起搬移）----
 let lastSavedSig=null, xmlTimer=null;
@@ -2281,7 +2300,7 @@ function autosaveXml(){
     if(sig2===lastSavedSig) return;    // 期间基线已更新（如刚载入），不写
     fetch("/api/sidecar",{method:"POST",headers:HJ,
       body:JSON.stringify({path:curFile,data})}).then(r=>r.json()).then(d=>{
-        if(d.ok){ lastSavedSig=sig2; markEdited(curFile); stat("✓ 调整已自动存 XML"); }});
+        if(d.ok){ lastSavedSig=sig2; markEdited(curFile); stat(lastAutoSummary?lastAutoSummary+" · 已保存":"✓ 调整已自动存 XML"); }});
     // 顺带同步内部 JSON 记忆，保证「应用到整卷」等也拿到最新
     fetch("/api/settings",{method:"POST",headers:HJ,
       body:JSON.stringify({path:curFile,data})});
@@ -2457,6 +2476,22 @@ applyTransform();
 </script></body></html>"""
 
 
+
+# Shared workbench shell and the independent roll-layout routes.
+from sheet_app import create_sheet_blueprint
+app.register_blueprint(create_sheet_blueprint(make_opts, _xml_to_data, settings_file,
+                                             lambda: START_DIRS))
+_header = app.jinja_env.get_template("shell_header.html").render(active="tune")
+INDEX_HTML = INDEX_HTML.replace('<body>', '<body class="tune-mode">' + _header)
+INDEX_HTML = INDEX_HTML.replace('</head>', '<link rel="stylesheet" href="/static/workbench.css">'
+                               '<script src="/static/theme.js"></script></head>')
+INDEX_HTML = INDEX_HTML.replace('</body>', '<script src="/static/legacy_bridge.js"></script></body>')
+INDEX_HTML = INDEX_HTML.replace('<title>胶片去色罩 · 可视化</title>',
+                               '<title>调片 · NegativeMaster</title>')
+INDEX_HTML = INDEX_HTML.replace('<h1>胶片去色罩 · 可视化', '<h1>调片设置')
+
+
+
 def daemonize(logpath):
     """双 fork + setsid，彻底脱离控制终端与进程组，成为独立后台进程。"""
     if os.fork() > 0:
@@ -2485,7 +2520,7 @@ def main():
     if dirs:
         START_DIRS = dirs
     else:
-        cand = ["/Users/apple/Pictures/胶片扫描", "/Users/apple/Downloads",
+        cand = [os.path.expanduser("~/Pictures/胶片扫描"), os.path.expanduser("~/Downloads"),
                 os.path.expanduser("~/Pictures")]
         START_DIRS = [c for c in cand if os.path.isdir(c)]
     if a.daemon:
