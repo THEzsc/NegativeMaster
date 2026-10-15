@@ -99,6 +99,10 @@ function activateFrame(id){
   syncFrameControls();window.SheetFrame?.setView('frame');if(window.SheetUI)window.SheetUI.close(false);else document.body.classList.remove('frames-open');saveDraft();
 }
 function frameConfig(){return state.frames[state.active]||{};}
+function frameRotation(f=frameConfig()){
+  const item=state.items.find(item=>item.id===state.active);
+  return SheetModel.frameRotation(item?.width||0,item?.height||0,f);
+}
 function syncFrameControls(){
   const item=state.items.find(i=>i.id===state.active),f=frameConfig(),index=state.items.indexOf(item),disabled=!item||state.preparing;
   $('active-frame-name').textContent=item?.name||'未选择';$('frame-label').value=f.label||'';$('frame-fit').value=f.fit||'';
@@ -244,7 +248,7 @@ for(const tab of document.querySelectorAll('[data-pane]')){tab.addEventListener(
 $('choose-directory').onclick=pickDirectory;$('empty-open').onclick=pickDirectory;$('import-photos').onclick=()=>$('photo-input').click();$('photo-input').onchange=()=>{uploadPhotos([...$('photo-input').files]);$('photo-input').value='';};$('directory-form').onsubmit=e=>{e.preventDefault();const directory=$('sheet-directory').value.trim();if(directory)prepare({directory});};
 $('select-all').onclick=()=>transaction(()=>state.order=state.items.map(i=>i.id));$('select-none').onclick=()=>transaction(()=>state.order=[]);$('reverse-order').onclick=()=>transaction(()=>{state.items.reverse();state.order.reverse();});$('frame-up').onclick=()=>moveFrame(-1);$('frame-down').onclick=()=>moveFrame(1);
 function editFrame(action){if(state.active===null||state.preparing)return;transaction(()=>{state.frames[state.active]??={};action(state.frames[state.active]);});}
-$('frame-rotate-left').onclick=()=>editFrame(f=>f.rotation=((f.rotation||0)+270)%360);$('frame-rotate-right').onclick=()=>editFrame(f=>f.rotation=((f.rotation||0)+90)%360);$('frame-label').onchange=()=>editFrame(f=>f.label=$('frame-label').value);$('frame-fit').onchange=()=>editFrame(f=>f.fit=$('frame-fit').value||undefined);
+$('frame-rotate-left').onclick=()=>editFrame(f=>f.rotation=(frameRotation(f)+270)%360);$('frame-rotate-right').onclick=()=>editFrame(f=>f.rotation=(frameRotation(f)+90)%360);$('frame-label').onchange=()=>editFrame(f=>f.label=$('frame-label').value);$('frame-fit').onchange=()=>editFrame(f=>f.fit=$('frame-fit').value||undefined);
 for(const [id,key] of [['frame-scale','scale'],['frame-x','x'],['frame-y','y']]){
   $(id).oninput=()=>{if(state.active===null||state.preparing)return;const f=state.frames[state.active]??={};f.crop??={x:.5,y:.5,scale:1};f.crop[key]=Number($(id).value);syncFrameControls();window.SheetFrame?.draw();queuePreview();};
   $(id).onchange=()=>commit(state.lastCommitted);

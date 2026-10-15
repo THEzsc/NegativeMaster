@@ -354,3 +354,19 @@ test('resizing an open drawer to desktop releases modal state and keeps the phot
   assert.equal(h.el('toggle-frames').attributes['aria-expanded'], 'true');
   assert.equal(h.el('frame-backdrop').hidden, true);
 });
+
+test('rotate buttons advance from the portrait default and reset restores automatic orientation', async () => {
+  const h = harness(); await h.load();
+  vm.runInContext('state.items[0].width=400; state.items[0].height=600; state.active=0',h.context);
+  assert.equal(h.context.frameRotation(),90);
+  await h.el('frame-rotate-left').click();
+  assert.equal(h.context.frameRotation(),0);
+  assert.equal(h.context.payload().config.frameOverrides[0].rotation,0);
+  await h.el('frame-rotate-right').click();
+  assert.equal(h.context.frameRotation(),90);
+  await h.el('frame-rotate-right').click();
+  assert.equal(h.context.frameRotation(),180);
+  await h.el('frame-reset').click();
+  assert.equal(h.context.frameRotation(),90);
+  assert.equal(h.context.payload().config.frameOverrides[0].rotation,undefined);
+});

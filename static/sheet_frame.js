@@ -54,7 +54,8 @@
       return;
     }
     const f = frameConfig();
-    const rotation = ((f.rotation || 0) % 360 + 360) % 360;
+    const rotation = (SheetModel.frameRotation(item.width || entry.image.naturalWidth,
+      item.height || entry.image.naturalHeight, f) % 360 + 360) % 360;
     const key = `${state.job}/${item.id}/${rotation}`;
     if (rotated?.key !== key) {
       const image = entry.image;
@@ -100,7 +101,8 @@
     const canPan = g.sw < rotated.surface.width - 1 || g.sh < rotated.surface.height - 1;
     canvas.classList.toggle('can-pan', canPan);
     canvas.setAttribute('aria-label', `${item.name}，旋转 ${rotation} 度，放大 ${Number(crop.scale || 1).toFixed(2)} 倍`);
-    $('frame-edit-hint').textContent = canPan ? '在画面上拖动构图，或用下方滑块精调。参考线不会导出。' : '放大或选择“铺满窗口”后，可在画面上拖动构图。';
+    const orientationHint = f.rotation == null && rotation === 90 ? '竖构图已默认横放，可用左转 / 右转调整。' : '';
+    $('frame-edit-hint').textContent = orientationHint + (canPan ? '在画面上拖动构图，或用下方滑块精调。参考线不会导出。' : '放大或选择“铺满窗口”后，可在画面上拖动构图。');
   }
 
   function step(delta) {

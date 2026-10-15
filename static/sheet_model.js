@@ -57,6 +57,10 @@
     return fraction === .5 ? lower + lower % 2 : Math.round(value);
   }
 
+  function frameRotation(width, height, override = {}) {
+    return override.rotation ?? (height > width ? 90 : 0);
+  }
+
   function cropGeometry(sourceWidth, sourceHeight, targetWidth, targetHeight, fit = 'cover', zoom = 1, cx = .5, cy = .5) {
     const sw = numberInRange(sourceWidth, 'source width', Number.MIN_VALUE);
     const sh = numberInRange(sourceHeight, 'source height', Number.MIN_VALUE);
@@ -92,5 +96,5 @@
     return {sx, sy, sw: width, sh: height, dx: Math.floor((tw - dw) / 2), dy: Math.floor((th - dh) / 2), dw, dh};
   }
 
-  return Object.freeze({selectionInOrder, restoreDraft, cropGeometry});
+  return Object.freeze({selectionInOrder, restoreDraft, frameRotation, cropGeometry});
 });

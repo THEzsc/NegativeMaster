@@ -353,8 +353,13 @@ def _cover(source: Image.Image, size: tuple[int, int], override: dict | None = N
            fit: str = "cover", padding: int = 0) -> Image.Image:
     """Fit positive pixels, with normalized crop center and an optional zoom."""
     o = override if isinstance(override, dict) else {}
-    rotation = _number(o.get("rotation", 0), "单张旋转", -360, 360)
     photo = ImageOps.exif_transpose(source)
+    # Film windows are horizontal. Only an absent rotation uses the portrait
+    # default; an explicit zero is a deliberate request to keep it upright.
+    rotation = o.get("rotation")
+    if rotation is None:
+        rotation = 90 if photo.height > photo.width else 0
+    rotation = _number(rotation, "单张旋转", -360, 360)
     if rotation % 360:
         photo = photo.rotate(-rotation, Image.Resampling.BICUBIC, expand=True)
     crop = o.get("crop") or {}

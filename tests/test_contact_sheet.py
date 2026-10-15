@@ -54,7 +54,7 @@ class ContactSheetTests(unittest.TestCase):
     def test_contain_cover_rotation_and_crop_are_visible(self):
         l=sheet.sheet_layout(1,self.config)
         sample=(l.margin+round(l.gap/2)+10,l.top+l.band+l.aperture_height//2)
-        contain=sheet.render_sheet([self.portrait],self.config)
+        contain=sheet.render_sheet([self.portrait],dict(self.config,frameOverrides=[{"rotation":0}]))
         cover_c=dict(self.config,strip={"leader":False,"fit":"cover","padding":0})
         cover=sheet.render_sheet([self.portrait],cover_c)
         self.assertEqual(contain.getpixel(sample)[:3],(8,8,8))
@@ -66,6 +66,21 @@ class ContactSheetTests(unittest.TestCase):
         crop_c=dict(cover_c,frameOverrides=[{"crop":{"x":1,"y":.5,"scale":3}}])
         middle=(l.margin+round(l.cell_width/2),l.top+l.band+l.aperture_height//2)
         self.assertEqual(sheet.render_sheet([target],crop_c).getpixel(middle)[:3],(0,0,255))
+
+    def test_portrait_defaults_horizontal_but_explicit_rotation_wins(self):
+        portrait=Image.new("RGB",(240,360),"red")
+        ImageDraw.Draw(portrait).rectangle((0,180,239,359),fill="blue")
+        auto=sheet._cover(portrait,(360,240),fit="contain")
+        self.assertEqual(auto.getpixel((10,120)),(0,0,255,255))
+        self.assertEqual(auto.getpixel((350,120)),(255,0,0,255))
+        upright=sheet._cover(portrait,(360,240),{"rotation":0},"contain")
+        self.assertEqual(upright.getpixel((10,120))[3],0)
+        reverse=sheet._cover(portrait,(360,240),{"rotation":270},"contain")
+        self.assertEqual(reverse.getpixel((10,120)),(255,0,0,255))
+        # Respect EXIF before deciding whether the source is portrait.
+        landscape=Image.new("RGB",(360,240),"green")
+        landscape.getexif()[274]=6
+        self.assertEqual(sheet._cover(landscape,(360,240),fit="contain").getpixel((10,120))[3],255)
 
     def test_custom_background_is_used_without_serializing_or_mutating_it(self):
         custom=Image.new("RGB",(20,20),(8,160,82))

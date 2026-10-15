@@ -108,3 +108,12 @@ test('the same standalone module exposes the browser global without CommonJS', (
   assert.equal(typeof context.SheetModel.restoreDraft, 'function');
   assert.equal(typeof context.SheetModel.cropGeometry, 'function');
 });
+
+test('portrait frames default sideways while explicit zero and other rotations win', () => {
+  const {frameRotation} = require('../static/sheet_model.js');
+  assert.equal(frameRotation(400,600),90);
+  assert.equal(frameRotation(600,400),0);
+  assert.equal(frameRotation(400,400),0);
+  assert.equal(frameRotation(400,600,{rotation:0}),0);
+  assert.equal(frameRotation(400,600,{rotation:270}),270);
+});
