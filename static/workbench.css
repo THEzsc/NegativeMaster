@@ -108,3 +108,9 @@ body.tune-mode{padding-top:var(--head-h);height:100dvh;overflow:hidden;backgroun
 
   .inspector-tabs button { min-height:50px }
 }
+
+/* The specimen uses the renderer itself, so lettering choices match exports. */
+.lettering-specimen{margin:0 0 18px;min-width:0}
+.lettering-specimen img{display:block;width:100%;height:auto;background:#0e0e0d;border:1px solid var(--line)}
+.lettering-specimen figcaption{margin-top:7px;font-size:11px;line-height:1.5;color:var(--mut)}
+#leader-summary{margin:0 0 16px;color:var(--fg);font-variant-numeric:tabular-nums}

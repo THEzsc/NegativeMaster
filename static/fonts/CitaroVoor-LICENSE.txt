@@ -1,0 +1,17 @@
+Citaro Voor by Jeffrey Visser
+Copyright Jeffrey Visser 2008
+
+Unmodified font files: CitaroVoor-Single.ttf and CitaroVoor-Double.ttf.
+Original file names: citaro_voor_enkele_hoogte_breed.ttf, citaro_voor_dubbele_hoogte_breed.ttf
+Licensed under Creative Commons Attribution-ShareAlike 3.0 Unported.
+https://creativecommons.org/licenses/by-sa/3.0/
+Legal code: https://creativecommons.org/licenses/by-sa/3.0/legalcode
+The font name tables explicitly include this license and URL.
+
+Author reference (Double): https://fontstruct.com/fontstructions/show/132167
+Download mirrors:
+https://www.wfonts.com/font/citaro-voor-enkele-hoogte-breed
+https://www.wfonts.com/font/citaro-voor-dubbele-hoogte-breed
+
+FontStruct is a trademark of FSI FontShop International GmbH.
+Fonts are used for optional edge lettering, not as a claim of film-maker authenticity.

@@ -105,6 +105,16 @@ class SheetApiTests(unittest.TestCase):
             time.sleep(.005)
         self.fail("Asynchronous image task did not complete")
 
+    def test_lettering_preview_is_bounded_and_rejects_unknown_styles(self):
+        for style in ("citaro","citaro-tall","film-dot","film-stamp"):
+            response=self.client.get("/api/sheet/lettering",query_string={"style":style,"text":"FOMAPAN 100"})
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.mimetype,"image/png")
+            with Image.open(io.BytesIO(response.data)) as im: self.assertEqual(im.size,(800,156))
+            response.close()
+        response=self.client.get("/api/sheet/lettering?style=missing")
+        self.assertEqual(response.status_code,400)
+
     def test_export_preferred_and_raw_jpeg_pairs_deduplicated(self):
         self.image("FRAME001.JPG", color="black")
         (self.roll / "FRAME001.ARW").write_bytes(b"not decoded")
@@ -421,7 +431,9 @@ class SheetApiTests(unittest.TestCase):
         exported = self.client.post("/api/sheet/project/export", json=dict(
             job=identifier, order=[0], stockId="test", config=dict(width=1200,
             columns=3, background=dict(mode="blur", sourceIndex="custom"),
-            header=dict(roll="2401"), frameOverrides=[override])))
+            header=dict(roll="2401",showStock=True,infoScale=1.2),
+            strip=dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="leak",leaderStrength=.6),
+            frameOverrides=[override])))
         self.assertEqual(exported.status_code, 200, exported.json)
         self.assertEqual(exported.mimetype, "application/zip")
         package = exported.data
@@ -447,6 +459,9 @@ class SheetApiTests(unittest.TestCase):
         project = imported.json["project"]
         self.assertEqual(project["version"], 1)
         self.assertEqual(project["config"]["header"]["roll"], "2401")
+        self.assertEqual(project["config"]["header"]["infoScale"], 1.2)
+        for key,value in dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="leak",leaderStrength=.6).items():
+            self.assertEqual(project["config"]["strip"][key], value)
         self.assertEqual(project["frameOptions"][project["sources"][0]], override)
         self.assertTrue(Path(project["sources"][0]).is_file())
         cached = self.blueprint.sheet_jobs[imported.json["job"]]["items"][0]["cache"]

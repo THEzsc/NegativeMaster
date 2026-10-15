@@ -86,14 +86,65 @@ class ContactSheetTests(unittest.TestCase):
         sheet._text(ImageDraw.Draw(blank),(2,2),"KODAK GOLD 200",6,(230,180,80,255),"dot",290)
         self.assertGreater(len(blank.getcolors()),1)
 
-    def test_leader_is_clipped_and_does_not_consume_photo_numbers(self):
+    def test_auto_leader_fills_bottom_and_preserves_photo_indices(self):
         cfg=dict(self.config,strip={"leader":True,"padding":0})
+        for count in (1,5,6,7,35,36):
+            layout=sheet.sheet_layout(count,cfg)
+            self.assertEqual((layout.leader_count+count)%layout.columns,0)
+            self.assertGreater(layout.leader_count,0)
+        l=sheet.sheet_layout(7,cfg)
+        self.assertEqual((l.rows,l.leader_count),(2,5))
+        photos=[self.landscape]*6+[self.portrait]
+        out=sheet.render_sheet(photos,cfg)
+        self.assertEqual(out.getpixel((l.margin+1,l.top+1))[3],0)
+        # First and last real photographs remain in the correct slots.
+        first=(l.margin+round(l.cell_width*5.5),l.top+l.band+l.aperture_height//2)
+        last=(l.margin+round(l.cell_width*5.5),l.row_y(1)+l.band+l.aperture_height//2)
+        self.assertEqual(out.getpixel(first)[:3],(217,83,41))
+        self.assertEqual(out.getpixel(last)[:3],(48,108,191))
+
+    def test_manual_leader_spans_rows_and_keeps_per_frame_overrides(self):
+        cfg=dict(self.config,strip={"leader":True,"leaderMode":"manual","leaderCount":8,"padding":0},
+                 frameOverrides=[{"rotation":90}])
         l=sheet.sheet_layout(1,cfg)
-        self.assertEqual(l.rows,2)
-        out=sheet.render_sheet([self.landscape],cfg,{"edge_text":"KODAK GOLD 200"})
-        self.assertEqual(out.getpixel((out.width-l.margin-3,l.top+2))[3],0)
-        middle=(l.margin+round(l.cell_width/2),l.row_y(1)+l.band+l.aperture_height//2)
-        self.assertEqual(out.getpixel(middle)[:3],(217,83,41))
+        self.assertEqual((l.rows,l.leader_count),(2,8))
+        out=sheet.render_sheet([self.portrait],cfg)
+        sample=(l.margin+round(l.cell_width*2)+l.gap//2+10,l.row_y(1)+l.band+l.aperture_height//2)
+        self.assertEqual(out.getpixel(sample)[:3],(48,108,191))
+        cfg["strip"]["leaderCount"]=0
+        self.assertFalse(sheet.sheet_layout(1,cfg).leader)
+        self.assertEqual(sheet.sheet_layout(1,cfg).rows,1)
+
+    def test_leak_styles_are_deterministic_and_do_not_touch_photos_or_holes(self):
+        outputs=[]
+        cfg=dict(self.config,strip={"leader":True,"leaderMode":"manual","leaderCount":1,
+                                  "leaderShape":"straight","padding":0})
+        l=sheet.sheet_layout(1,cfg)
+        for style in ("dark","clear","leak","burn"):
+            cfg["strip"]["leaderStyle"]=style
+            out=sheet.render_sheet([self.landscape],cfg)
+            self.assertEqual(out.tobytes(),sheet.render_sheet([self.landscape],cfg).tobytes())
+            sample=(l.margin+round(l.cell_width*1.5),l.top+l.band+l.aperture_height//2)
+            self.assertEqual(out.getpixel(sample)[:3],(217,83,41))
+            hole=(l.margin+round(l.cell_width/16),l.top+round(l.band*.45+l.cell_width*2.79/38/2))
+            self.assertEqual(out.getpixel(hole)[3],0)
+            outputs.append(out.tobytes())
+        self.assertEqual(len(set(outputs)),4)
+
+    def test_new_lettering_styles_have_distinct_real_samples(self):
+        samples=[]
+        for style in ("dot","mono","condensed","citaro","citaro-tall","film-dot","film-stamp"):
+            out=sheet.lettering_sample(style,"KODAK GOLD 200 / C-41")
+            self.assertEqual(out.size,(800,156))
+            self.assertGreater(len(out.getcolors(1000000)),1)
+            samples.append(out.tobytes())
+        self.assertEqual(len(set(samples)),7)
+
+    def test_leader_and_header_controls_reject_invalid_values(self):
+        for config in ({"strip":{"leaderCount":25}}, {"strip":{"leaderMode":"invalid"}},
+                       {"strip":{"leaderStyle":"invalid"}}, {"strip":{"leaderStrength":2}},
+                       {"header":{"infoScale":float("nan")}}):
+            with self.assertRaises(ValueError): sheet.normalize_config(config)
 
     def test_invalid_inputs_and_oversized_canvas_fail_before_render(self):
         with self.assertRaisesRegex(ValueError,"至少一张"):

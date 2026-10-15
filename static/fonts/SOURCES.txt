@@ -10,3 +10,10 @@ manufacturer edge-print fonts. The dot style is drawn from original 5x7
 bitmap patterns in contact_sheet.py, not extracted from copyrighted film scans.
 Chinese archival header text uses an available system CJK font. No proprietary
 operating system font files are copied or distributed with this project.
+
+Citaro Voor — Jeffrey Visser (2008), unmodified.
+Single: https://fontstruct.com/fontstructions/show/132183
+Double: https://fontstruct.com/fontstructions/show/132167
+Mirrors: https://www.wfonts.com/font/citaro-voor-enkele-hoogte-breed
+https://www.wfonts.com/font/citaro-voor-dubbele-hoogte-breed
+CC BY-SA 3.0, confirmed in both font name tables. See CitaroVoor-LICENSE.txt.

@@ -285,3 +285,10 @@ Show the actual rendered roll artifact, including a checkerboard for transparenc
 - **Don't** replace the recorded direction key with an invented seed.
 
 **Not canonized:** inherited Unicode action glyphs, localized legacy hard-coded colors, the edited-dot glow and isolated rounded histogram/image widgets remain implementation drift. They are not new shared tokens or rules, and this documentation pass does not repair code. Documentation uses the corrected current source. Final desktop/day/narrow review captures are stored as `.impeccable/review/final-*.jpg`; older captures are historical evidence.
+
+### 边字与片头
+
+- 边字包含 Citaro Voor 常规／双高度（Jeffrey Visser，CC BY-SA 3.0）、自绘曝光圆点／窄条连印，以及原有点阵、Barlow 窄体和 IBM Plex 等宽字。字体样张由导出渲染器生成；自绘字是风格模拟，不是厂家字体。
+- 片头按画格加入照片之前。自动模式使用最少的正数格数补齐末行；照片本来满行时增加一行片头。手动模式可指定 0–24 格，保留末行实际长度。片头不消耗照片帧号或逐张裁剪索引。
+- 片头有暗片、透明片基、暖色漏光、曝光灼白，可调曝光强度，并选弧形裁切或完整直边。漏光仅渲染新增片头格，使用确定性曝光场。
+- 顶栏采用更饱满的中等字重信息字，按实际字段长度分配宽度；可显示胶卷型号与 ISO、调整信息字号。所有新设置随草稿、版式与项目保存。

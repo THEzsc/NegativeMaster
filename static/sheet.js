@@ -1,6 +1,6 @@
 'use strict';
 const $=id=>document.getElementById(id), clone=o=>JSON.parse(JSON.stringify(o));
-const defaults={width:4800,columns:6,ratio:'3:2',spacing:38,margin:90,background:{mode:'blur',color:'#d7d2c6',color2:'#65776d',angle:60,blur:34,brightness:.75,sourceIndex:0},strip:{color:'#080808',opacity:1,sprockets:true,edgeText:'',secondaryText:'',edgeColor:'#dda850',fontStyle:'auto',edgeScale:1,edgeTracking:0,leader:true,startNumber:1,reverseNumbers:false,frameGap:12,padding:8,showNumbers:true,showHalfNumbers:true,fit:'contain'},header:{enabled:true,title:'',roll:'',camera:'',lens:'',date:'',process:'',notes:'',color:'#fffdfa',textColor:'#191a1b',height:180},frameOverrides:[]};
+const defaults={width:4800,columns:6,ratio:'3:2',spacing:38,margin:90,background:{mode:'blur',color:'#d7d2c6',color2:'#65776d',angle:60,blur:34,brightness:.75,sourceIndex:0},strip:{color:'#080808',opacity:1,sprockets:true,edgeText:'',secondaryText:'',edgeColor:'#dda850',fontStyle:'auto',edgeScale:1,edgeTracking:0,leader:true,leaderMode:'auto',leaderCount:3,leaderStyle:'dark',leaderStrength:.75,leaderShape:'cut',startNumber:1,reverseNumbers:false,frameGap:12,padding:8,showNumbers:true,showHalfNumbers:true,fit:'contain'},header:{enabled:true,title:'',roll:'',camera:'',lens:'',date:'',process:'',notes:'',color:'#fffdfa',textColor:'#191a1b',height:180,showStock:true,infoScale:1},frameOverrides:[]};
 const state={config:clone(defaults),stocks:[],stockId:'',job:null,items:[],order:[],frames:{},active:null,directory:'',label:'',zoom:1,previewUrl:null,history:[],future:[],preparing:false,exporting:false,prepareSeq:0,previewSeq:0,controller:null,lastCommitted:null,projectPending:null,view:"sheet",previewBusy:false,previewWanted:false};
 function status(message,error=false){$('sheet-status').textContent=message;$('sheet-statusbar').classList.toggle('error',error);}
 function get(obj,path){return path.split('.').reduce((v,k)=>v?.[k],obj);}
@@ -30,7 +30,23 @@ function applyStock(id){const previous=stock();const s=state.stocks.find(s=>s.id
 function syncControls(){
   for(const el of document.querySelectorAll('[data-config]')){const v=get(state.config,el.dataset.config);if(el.type==='checkbox')el.checked=!!v;else if(document.activeElement!==el)el.value=v??'';}
   for(const out of document.querySelectorAll('[data-output]')){const v=get(state.config,out.dataset.output);out.textContent=typeof v==='number'?(Number.isInteger(v)?String(v):v.toFixed(2)):String(v??'');out.className='value';}
-  stockOptions($('stock-search').value);stockInfo();syncBackground();syncFrameControls();updateUndo();window.SheetUI?.syncRanges();window.SheetFrame?.draw();
+  stockOptions($('stock-search').value);stockInfo();syncBackground();syncLeader();syncLettering();syncFrameControls();updateUndo();window.SheetUI?.syncRanges();window.SheetFrame?.draw();
+}
+function syncLeader(){
+  const strip=state.config.strip,count=state.order.length,columns=state.config.columns;
+  const blanks=strip.leader?(strip.leaderMode==='auto'?(count?((columns-count%columns)%columns||columns):0):strip.leaderCount):0;
+  $('leader-settings').hidden=!strip.leader;
+  $('leader-count-field').hidden=strip.leaderMode!=='manual';
+  $('leader-strength-field').hidden=!['leak','burn'].includes(strip.leaderStyle);
+  const total=count+blanks,last=total%columns||columns;
+  $('leader-summary').textContent=count?`${blanks} 格片头 + ${count} 张照片 · ${Math.ceil(total/columns)} 行 · ${last===columns?'末行已满':`末行 ${last} / ${columns} 格`}`:'载入照片后自动计算格数';
+}
+function syncLettering(){
+  const strip=state.config.strip,style=strip.fontStyle==='auto'?(stock().font_style||'condensed'):strip.fontStyle;
+  const text=strip.edgeText||stock().edge_text||'FILM 135 / ISO 200',color=strip.edgeColor||'#dda850';
+  const signature=[style,text,color].join('|'),img=$('lettering-preview');
+  if(img.dataset.signature!==signature){img.dataset.signature=signature;img.src=`/api/sheet/lettering?style=${encodeURIComponent(style)}&text=${encodeURIComponent(text)}&color=${encodeURIComponent(color)}`;}
+  $('lettering-caption').textContent=style.startsWith('citaro')?'Citaro Voor · Jeffrey Visser / CC BY-SA 3.0':style.startsWith('film-')?'自绘胶片字样 · 曝光印字的近似模拟':'实际导出字形 · 放大查看';
 }
 function syncBackground(){const mode=state.config.background.mode;for(const el of document.querySelectorAll('[data-bg]'))el.hidden=!el.dataset.bg.split(' ').includes(mode);$('preview-wrap').classList.toggle('transparent',mode==='transparent');}
 function syncBackgroundOptions(){const sel=$('background-source');sel.replaceChildren();for(const id of state.order){const item=state.items.find(i=>i.id===id);if(!item)continue;const o=document.createElement('option');o.value=String(id);o.textContent=item.name;sel.append(o);}const custom=document.createElement('option');custom.value='custom';custom.textContent='自定义背景照片';custom.disabled=!state.hasBackground;sel.append(custom);if(state.config.background.sourceIndex!=='custom'&&!state.order.includes(Number(state.config.background.sourceIndex)))state.config.background.sourceIndex=state.order[0]??0;sel.value=String(state.config.background.sourceIndex);}
@@ -75,7 +91,7 @@ function renderFrames(){
   $('export-sheet').disabled=!state.order.length||state.exporting||state.preparing;$('save-project').disabled=!state.order.length||state.preparing;
   $('view-frame').disabled=!state.items.length||state.preparing;
   for(const id of ['select-all','select-none','reverse-order'])$(id).disabled=state.preparing||!state.items.length;updateUndo();
-  syncBackgroundOptions();syncFrameControls();window.SheetFrame?.draw();
+  syncBackgroundOptions();syncLeader();syncFrameControls();window.SheetFrame?.draw();
 }
 function activateFrame(id){
   if(state.preparing)return;state.active=id;

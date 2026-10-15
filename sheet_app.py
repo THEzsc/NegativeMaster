@@ -27,7 +27,7 @@ from flask import Blueprint, jsonify, render_template, request, send_file
 from PIL import Image, ImageCms, ImageOps
 
 import decast
-from contact_sheet import render_sheet, sheet_size
+from contact_sheet import render_sheet, sheet_size, lettering_sample
 
 
 MAX_FRAMES = 240
@@ -582,6 +582,18 @@ def create_sheet_blueprint(make_opts, read_xml, settings_file, get_start_dirs):
         try:
             return jsonify(ok=True, **catalog_data())
         except Exception as exc:
+            return _error(exc)
+
+    @blueprint.get("/api/sheet/lettering")
+    def lettering():
+        try:
+            image = lettering_sample(request.args.get("style", "condensed"),
+                                     request.args.get("text", "")[:120],
+                                     request.args.get("color", "#dda850"))
+            output = io.BytesIO()
+            image.save(output, "PNG"); output.seek(0)
+            return send_file(output, mimetype="image/png", max_age=3600)
+        except ValueError as exc:
             return _error(exc)
 
     @blueprint.post("/api/sheet/prepare")
