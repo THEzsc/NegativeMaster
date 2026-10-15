@@ -29,13 +29,14 @@ import os
 import sys
 import json
 import hashlib
+import threading
 import film_reference
 import argparse
 import platform_support
 import xml.etree.ElementTree as ET
 import numpy as np
 from PIL import Image
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file, Response, g
 
 import decast  # 复用真实转换算法
 
@@ -97,6 +98,35 @@ def _base_cache_key(params, cr):
 REF = {"path": None, "centers": None, "cdfs": None}
 START_DIRS = []
 
+# The legacy engine keeps one active frame. Serialize cache users and reject
+# stale client requests so a quick frame switch cannot export the wrong photo.
+_IMAGE_LOCK = threading.RLock()
+_CACHE_ROUTES = {"/api/load", "/api/loadref", "/api/render", "/api/hist",
+                 "/api/autocrop", "/api/wbtemp", "/api/export",
+                 "/api/sidecar", "/api/settings", "/api/workflow/roll-gamma"}
+
+
+@app.before_request
+def protect_image_cache():
+    if request.path not in _CACHE_ROUTES:
+        return
+    _IMAGE_LOCK.acquire()
+    g.image_cache_locked = True
+    body = request.get_json(silent=True)
+    source = body.get("source_path") if isinstance(body, dict) else None
+    if source is not None:
+        if not isinstance(source, str):
+            return jsonify(ok=False, err="源照片路径无效"), 400
+        active = CACHE.get("path")
+        if not active or os.path.normcase(os.path.abspath(source)) != os.path.normcase(os.path.abspath(active)):
+            return jsonify(ok=False, err="当前照片已切换，请重新载入后再操作"), 409
+
+
+@app.teardown_request
+def release_image_cache(_error):
+    if g.pop("image_cache_locked", False):
+        _IMAGE_LOCK.release()
+
 
 def make_opts(params):
     """把前端参数字典拼成 decast 需要的 options 命名空间。"""
@@ -130,25 +160,29 @@ def to_jpeg(arr_float):
     return buf
 
 
-def load_full(path, raw_denoise=False):
+def load_full(path, raw_denoise=False, decode_params=None):
     """解码一张（RAW 或普通图）到线性 RGB，并缓存全分辨率 + 预览两份。
 
     raw_denoise（RAW 阶段 FBDD 降噪）只在解码时生效，
     所以同一路径下开关变化也要重新解码。
     """
     raw_denoise = bool(raw_denoise)
+    decode = {k: (decode_params or {}).get(k, DEFAULTS[k])
+              for k in ("input_gamma", "no_camera_wb", "no_autorotate")}
     if (CACHE["path"] == path and CACHE["full"] is not None
-            and CACHE["raw_dn"] == raw_denoise):
+            and CACHE["raw_dn"] == raw_denoise and CACHE.get("decode") == decode):
         return
     opts = argparse.Namespace(**DEFAULTS)
     opts.raw_denoise = raw_denoise
+    for key, value in decode.items():
+        setattr(opts, key, value)
     lin, _ = decast.load_image(path, opts)
     h, w = lin.shape[:2]
     step = max(1, int(np.ceil(max(h, w) / PREVIEW_MAXSIDE)))
     prev = lin[::step, ::step].copy()
     CACHE.update(path=path, full=lin, prev=prev, lastP=None,
                  base=None, base_key=None, base_vrect=None,
-                 raw_dn=raw_denoise, scale=max(prev.shape[:2]) / max(h, w))
+                 raw_dn=raw_denoise, decode=decode, scale=max(prev.shape[:2]) / max(h, w))
 
 
 def settings_file(path):
@@ -266,7 +300,7 @@ def api_load():
     if not os.path.isfile(path):
         return jsonify(ok=False, err="文件不存在"), 400
     try:
-        load_full(path, request.json.get("raw_denoise", False))
+        load_full(path, request.json.get("raw_denoise", False), request.json)
     except Exception as e:
         return jsonify(ok=False, err=str(e)), 500
     h, w = CACHE["full"].shape[:2]
@@ -306,7 +340,7 @@ def api_render():
 
     # RAW FBDD 降噪开关变化时重新解码当前图（load_full 内部有缓存判断）
     try:
-        load_full(CACHE["path"], params.get("raw_denoise", False))
+        load_full(CACHE["path"], params.get("raw_denoise", False), params)
     except Exception as e:
         return jsonify(ok=False, err=str(e)), 500
 
@@ -382,7 +416,7 @@ def api_wbtemp():
     if not rect:
         return jsonify(ok=False, err="没有白点框"), 400
     try:
-        load_full(CACHE["path"], params.get("raw_denoise", False))
+        load_full(CACHE["path"], params.get("raw_denoise", False), params)
     except Exception as e:
         return jsonify(ok=False, err=str(e)), 500
     opts = make_opts(params)
@@ -442,8 +476,7 @@ def api_settings():
         return jsonify(ok=False, err="缺少 path"), 400
     os.makedirs(SETTINGS_DIR, exist_ok=True)
     try:
-        with open(settings_file(path), "w", encoding="utf-8") as fh:
-            json.dump(body.get("data") or {}, fh, ensure_ascii=False, indent=1)
+        atomic_text(settings_file(path), json.dumps(body.get("data") or {}, ensure_ascii=False, indent=1))
     except Exception as e:
         return jsonify(ok=False, err=str(e)), 500
     return jsonify(ok=True)
@@ -471,8 +504,7 @@ def api_sidecar():
         return jsonify(ok=False, err="缺少 path"), 400
     sp = sidecar_path(path)
     try:
-        with open(sp, "w", encoding="utf-8") as fh:
-            fh.write(_data_to_xml(body.get("data") or {}, path))
+        atomic_text(sp, _data_to_xml(body.get("data") or {}, path))
     except Exception as e:
         return jsonify(ok=False, err=str(e)), 500
     return jsonify(ok=True, file=sp)
@@ -542,9 +574,12 @@ def api_export():
     except Exception as e:
         return jsonify(ok=False, err="输出目录创建失败：" + str(e)), 500
 
+    if os.path.normcase(os.path.abspath(out)) == os.path.normcase(os.path.abspath(src)):
+        return jsonify(ok=False, err="输出不能覆盖原始照片，请选择其他文件名"), 400
+
     # RAW FBDD 降噪开关与当前缓存不一致时重新解码（保证导出和预览一致）
     try:
-        load_full(CACHE["path"], body.get("raw_denoise", False))
+        load_full(CACHE["path"], body.get("raw_denoise", False), body)
     except Exception as e:
         return jsonify(ok=False, err=str(e)), 500
 
@@ -1573,7 +1608,7 @@ const HJ={"Content-Type":"application/json"};
 const D={crop:0,black_pct:0.5,white_pct:99.7,wb:"gray",gamma:1.8,contrast:0.08,
   saturation:1.0,denoise:0,rotate:0,flip:"h",level_angle:0,raw_denoise:false,use_match:false,
   negadoctor:false,nd_gamma:2.4,nd_exposure:1.0,
-  mode:"color",temp:0,tint:0,sharpen:0,sharpen_radius:2.0,wb_point:null,wb_rect:null,
+  mode:"color",input_gamma:"srgb",temp:0,tint:0,sharpen:0,sharpen_radius:2.0,wb_point:null,wb_rect:null,
   film_base_rect:null,shadow_rect:null,highlight_rect:null,
   exposure:0,highlights:0,shadows:0,whites:0,blacks:0,vibrance:0,vignette:0,
   curve:null,curve_r:null,curve_g:null,curve_b:null,hsl:{}};
@@ -1967,6 +2002,7 @@ $("hslreset").onclick=()=>{ P.hsl={}; hslSync(); sched(); };
 
 // ---- 控件状态回显 ----
 function refl(){
+  if($("input-gamma")) $("input-gamma").value=P.input_gamma||"srgb";
   for(const k of SL){ $(k).value=P[k]; $("v"+k).textContent=P[k]; }
   document.querySelectorAll("#modes button").forEach(b=>b.classList.toggle("on",b.dataset.m===P.mode));
   $("ndtoggle").classList.toggle("on",P.negadoctor);
@@ -1997,13 +2033,16 @@ function refl(){
 let lastURL=null, negOn=false, inflight=false, rdirty=false;
 function render(){
   if(!loaded) return;
+  window.NMWorkflow?.record();
   autosaveXml();                 // 参数一变就排一次自动保存（防抖+去重）
   if(inflight){ rdirty=true; return; }
   inflight=true; $("spin").style.display="inline";
-  const body=Object.assign({},P,{crop_rect:cropRect()});
+  const fileAtRender=curFile,sequenceAtRender=loadSequence;
+  const body=Object.assign({},P,{crop_rect:cropRect(),source_path:curFile});
   fetch("/api/render",{method:"POST",headers:HJ,body:JSON.stringify(body)})
     .then(r=>{ if(!r.ok) throw new Error("render "+r.status); return r.blob(); })
     .then(b=>{
+      if(!loaded||curFile!==fileAtRender||sequenceAtRender!==loadSequence)return;
       const img=$("img");
       img.onload=()=>{ $("imgwrap").style.display="block"; $("empty").style.display="none"; fitWrap(); };
       const old=lastURL;
@@ -2011,7 +2050,7 @@ function render(){
       if(!negOn) img.src=lastURL;
       if(old) setTimeout(()=>URL.revokeObjectURL(old),2000);  // 释放旧帧，防内存涨
     })
-    .catch(()=>{})
+    .catch(err=>stat("预览失败："+err.message))
     .finally(()=>{
       inflight=false;
       if(rdirty){ rdirty=false; render(); }          // 拖动中：立刻渲下一帧
@@ -2133,7 +2172,7 @@ $("autocrop").onclick=()=>{
   $("autocrop").disabled=true;
   stat("检测片框并校平…");
   fetch("/api/autocrop",{method:"POST",headers:HJ,
-    body:JSON.stringify({rotate:P.rotate,flip:P.flip,level:true,level_angle:P.level_angle,
+    body:JSON.stringify({source_path:curFile,rotate:P.rotate,flip:P.flip,level:true,level_angle:P.level_angle,
       use_reference:$("cropref").checked})}).then(r=>r.json()).then(d=>{
       if(curFile!==fileAtStart||P.rotate!==rotateAtStart||P.flip!==flipAtStart||
          P.level_angle!==angleAtStart||JSON.stringify(cropN)!==cropAtStart)return;
@@ -2145,7 +2184,9 @@ $("autocrop").onclick=()=>{
       curFmt="free"; syncFmtPills(); drawCrop(); render();
       const angleText=d.angle_status==="preserved"?"保留原角度":`校平 ${d.angle>0?"+":""}${d.angle.toFixed(2)}°`;
       const source=d.reference_samples?`，弱边参考同卷 ${d.reference_samples} 张已调照片`:"";
-      lastAutoSummary=`已检测 ${d.detected_edges} 条片边，${angleText}${source}`;
+      const confidence={high:"边界稳定",medium:"边界可参考",low:"请检查裁切",none:"仅参考已存调整"}[d.confidence_label]||"";
+      lastAutoSummary=`已检测 ${d.detected_edges} 条片边，${angleText}${source}`+(confidence?` · ${confidence}`:"");
+      if(d.warnings?.length)lastAutoSummary+=' · '+d.warnings.join('；');
       stat(lastAutoSummary);
     }).catch(()=>stat("自动裁剪失败，请重试"))
       .finally(()=>{$("autocrop").disabled=false;});
@@ -2229,18 +2270,26 @@ $("dir").addEventListener("keydown",e=>{ if(e.key!=="Enter")return;
 });
 
 // ---- 载入 + 每张图参数记忆 ----
-function loadFile(path){
+let loadSequence=0;
+async function loadFile(path){
+  if(batchBusy){stat("正在批量导出，请先取消或等待完成");return;}
+  const sequence=++loadSequence;
+  const wasLoaded=loaded;loaded=false;rdirty=false;
+  try{await flushAutosave();}catch(e){if(sequence===loadSequence)loaded=wasLoaded;stat("参数尚未保存，未切换照片："+e.message);return;}
+  if(sequence!==loadSequence)return;
   stat("解码中… "+LocalPaths.basename(path));
   fetch("/api/load",{method:"POST",headers:HJ,
     body:JSON.stringify({path,raw_denoise:P.raw_denoise})}).then(r=>r.json()).then(d=>{
+      if(sequence!==loadSequence)return;
       if(!d.ok){stat("✗ "+d.err);return;}
-      curFile=path; loaded=true; fullW=d.w; fullH=d.h; $("rotpad").style.display="flex";
+      curFile=path; fullW=d.w; fullH=d.h; $("rotpad").style.display="flex";
       $("meta").textContent=d.name+" · "+d.w+"×"+d.h;
       $("fileselect").value=path;                       // 同步底栏下拉与列表高亮
       [...document.querySelectorAll("#files .fitem")].forEach(c=>c.classList.toggle("on",c.dataset.path===path));
       updateNavButtons();
       resetView();
       const applyRestore=(sd,label)=>{
+        if(sequence!==loadSequence)return;
         geometrySource=sd?.geometrySource||"manual";lastAutoSummary="";
         if(sd){
           if(sd.P) P=Object.assign(dclone(D),sd.P);
@@ -2255,6 +2304,8 @@ function loadFile(path){
         }
         syncFmtPills(); refl(); drawCrop();
         lastSavedSig=settingsSig();   // 先记基线，避免刚载入未改动就误写边车
+        loaded=true;
+        window.NMWorkflow?.loaded();
         render();
       };
       if($("resetdefault").checked){    // 开关：每张一律用默认参数
@@ -2279,23 +2330,32 @@ function currentSettings(){
   return {P:P,cropN:cropN,curFmt:curFmt,orient:orient,geometrySource:geometrySource};
 }
 // ---- 调整参数后自动存 XML 边车（挨着照片，随照片一起搬移）----
-let lastSavedSig=null, xmlTimer=null;
+let lastSavedSig=null, xmlTimer=null, pendingSave=null, saveQueue=Promise.resolve();
+const queuedSignatures=new Map();
 function settingsSig(){ return JSON.stringify(currentSettings()); }
+function persistSnapshot(snapshot){
+  if(!snapshot)return saveQueue;
+  const {path,data,sig}=snapshot;
+  queuedSignatures.set(path,sig);
+  saveQueue=saveQueue.catch(()=>{}).then(async()=>{
+    for(const url of ["/api/sidecar","/api/settings"]){
+      const response=await fetch(url,{method:"POST",headers:HJ,body:JSON.stringify({path,data})});
+      const d=await response.json();if(!response.ok||!d.ok)throw new Error(d.err||"写入失败");
+    }
+    markEdited(path);if(curFile===path){lastSavedSig=sig;stat(lastAutoSummary?lastAutoSummary+" · 已保存":"✓ 调整已自动存 XML");}
+  }).finally(()=>{if(queuedSignatures.get(path)===sig)queuedSignatures.delete(path);});
+  saveQueue.catch(err=>stat("参数保存失败："+err.message));
+  return saveQueue;
+}
+function flushAutosave(){clearTimeout(xmlTimer);const snapshot=pendingSave;pendingSave=null;return persistSnapshot(snapshot);}
 function autosaveXml(){
   if(!curFile) return;
   const sig=settingsSig();
-  if(sig===lastSavedSig) return;           // 和上次保存的一样，不重复写
+  const latest=pendingSave?.path===curFile?pendingSave.sig:(queuedSignatures.get(curFile)||lastSavedSig);
+  if(sig===latest)return;
   clearTimeout(xmlTimer);
-  xmlTimer=setTimeout(()=>{
-    const data=currentSettings(), sig2=JSON.stringify(data);
-    if(sig2===lastSavedSig) return;    // 期间基线已更新（如刚载入），不写
-    fetch("/api/sidecar",{method:"POST",headers:HJ,
-      body:JSON.stringify({path:curFile,data})}).then(r=>r.json()).then(d=>{
-        if(d.ok){ lastSavedSig=sig2; markEdited(curFile); stat(lastAutoSummary?lastAutoSummary+" · 已保存":"✓ 调整已自动存 XML"); }});
-    // 顺带同步内部 JSON 记忆，保证「应用到整卷」等也拿到最新
-    fetch("/api/settings",{method:"POST",headers:HJ,
-      body:JSON.stringify({path:curFile,data})});
-  }, 900);
+  pendingSave={path:curFile,data:dclone(currentSettings()),sig};
+  xmlTimer=setTimeout(()=>flushAutosave().catch(()=>{}),900);
 }
 $("savepar").onclick=()=>{ if(!curFile){stat("先载入图片");return;} saveSettings(curFile,false); };
 $("applyroll").onclick=async()=>{
@@ -2388,7 +2448,7 @@ function exportOpts(){
     resize:parseInt($("resize").value||"0",10)||0};
 }
 $("export").onclick=()=>{ if(!loaded){stat("先载入图片");return;}
-  const body=Object.assign({},P,{crop_rect:cropRect(),out:$("out").value.trim()},exportOpts());
+  const body=Object.assign({},P,{crop_rect:cropRect(),source_path:curFile,out:$("out").value.trim()},exportOpts());
   stat("导出中（全分辨率）…");
   fetch("/api/export",{method:"POST",headers:HJ,
     body:JSON.stringify(body)}).then(r=>r.json()).then(d=>{
@@ -2426,7 +2486,7 @@ $("batch").onclick=async()=>{
       if(!ld.ok) throw new Error(ld.err||"载入失败");
       // 输出目录：留空 = 各源文件同目录/去色罩输出/（服务端自动建目录）
       const out=LocalPaths.exportDirectory(f,outdir);
-      const body=Object.assign({},params,{crop_rect:rect,out:out},exportOpts());
+      const body=Object.assign({},params,{crop_rect:rect,source_path:f,out:out},exportOpts());
       const ex=await(await fetch("/api/export",{method:"POST",headers:HJ,
         body:JSON.stringify(body)})).json();
       if(!ex.ok) throw new Error(ex.err||"导出失败");
@@ -2470,6 +2530,9 @@ applyTransform();
 
 # Shared workbench shell and the independent roll-layout routes.
 from sheet_app import create_sheet_blueprint
+from workflow_app import create_workflow_blueprint, atomic_text
+app.register_blueprint(create_workflow_blueprint(make_opts, DEFAULTS, settings_file,
+    sidecar_path, _xml_to_data, _data_to_xml, CACHE))
 app.register_blueprint(create_sheet_blueprint(make_opts, _xml_to_data, settings_file,
                                              lambda: START_DIRS))
 _header = app.jinja_env.get_template("shell_header.html").render(active="tune")
@@ -2478,6 +2541,9 @@ INDEX_HTML = INDEX_HTML.replace('</head>', '<link rel="stylesheet" href="/static
                                '<script src="/static/theme.js"></script>'
                                '<script src="/static/local_paths.js"></script></head>')
 INDEX_HTML = INDEX_HTML.replace('</body>', '<script src="/static/legacy_bridge.js"></script></body>')
+INDEX_HTML = INDEX_HTML.replace('</head>', '<link rel="stylesheet" href="/static/workflow.css"></head>')
+INDEX_HTML = INDEX_HTML.replace('</body>', '<script src="/static/workflow_model.js"></script>'
+                               '<script src="/static/workflow.js"></script></body>')
 INDEX_HTML = INDEX_HTML.replace('<title>胶片去色罩 · 可视化</title>',
                                '<title>调片 · NegativeMaster</title>')
 INDEX_HTML = INDEX_HTML.replace('<h1>胶片去色罩 · 可视化', '<h1>调片设置')

@@ -21,4 +21,4 @@ jobs:
       - run: python -m unittest discover -s tests -v
         env:
           PYTHONUTF8: '1'
-      - run: node --test tests/test_local_paths.cjs tests/test_sheet_model.cjs tests/test_sheet_workflow.cjs
+      - run: node --test tests/test_local_paths.cjs tests/test_sheet_model.cjs tests/test_sheet_workflow.cjs tests/test_workflow_model.cjs tests/test_workflow_saving.cjs
