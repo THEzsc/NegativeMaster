@@ -31,3 +31,7 @@ output/
 .impeccable/review/
 .impeccable/questions/
 *.nmproject.zip
+
+# Personal local film archive (database, thumbnails, covers)
+archive_data/
+*archive*.zip
