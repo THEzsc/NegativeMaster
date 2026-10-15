@@ -1378,7 +1378,7 @@ input[type=range]:hover::-moz-range-thumb {
       <button class="pill" id="ndtoggle" title="darktable negadoctor 负转正引擎（彩负模式）">negadoctor 引擎</button></div>
     <div id="ndrow" style="display:none">
       <label class="row">相纸反差 <span class="v" id="vnd_gamma"></span></label>
-      <input type="range" id="nd_gamma" min="1" max="8" step="0.1">
+      <input type="range" id="nd_gamma" min="1" max="8" step="0.001">
       <label class="row">亮度增益 <span class="v" id="vnd_exposure"></span></label>
       <input type="range" id="nd_exposure" min="0.3" max="3" step="0.05"></div>
     <label class="row">曝光 EV <span class="v" id="vexposure"></span></label>
@@ -1392,11 +1392,11 @@ input[type=range]:hover::-moz-range-thumb {
     <label class="row">黑色 <span class="v" id="vblacks"></span></label>
     <input type="range" id="blacks" min="-100" max="100" step="1">
     <label class="row">亮度 gamma <span class="v" id="vgamma"></span></label>
-    <input type="range" id="gamma" min="0.6" max="3" step="0.05">
+    <input type="range" id="gamma" min="0.6" max="3" step="0.001">
     <label class="row">对比度 <span class="v" id="vcontrast"></span></label>
     <input type="range" id="contrast" min="-0.5" max="0.6" step="0.02">
     <label class="row">饱和度 <span class="v" id="vsaturation"></span></label>
-    <input type="range" id="saturation" min="0" max="1.6" step="0.05">
+    <input type="range" id="saturation" min="0" max="1.6" step="0.01">
     <label class="row">鲜艳度 <span class="v" id="vvibrance"></span></label>
     <input type="range" id="vibrance" min="-100" max="100" step="1">
   </div></details>
