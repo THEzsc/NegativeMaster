@@ -590,7 +590,8 @@ def create_sheet_blueprint(make_opts, read_xml, settings_file, get_start_dirs):
             image = lettering_sample(request.args.get("style", "condensed"),
                                      request.args.get("text", "")[:120],
                                      request.args.get("color", "#dda850"),
-                                     request.args.get("arrow", "none"))
+                                     request.args.get("arrow", "none"),
+                                     request.args.get("glow", 0))
             output = io.BytesIO()
             image.save(output, "PNG"); output.seek(0)
             return send_file(output, mimetype="image/png", max_age=3600)

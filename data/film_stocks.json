@@ -15,9 +15,9 @@
       "edge_text": "KODAK GOLD 200",
       "edge_secondary": "",
       "edge_color": "#dfb975",
-      "font_style": "dot",
+      "font_style": "film-kodak",
       "edge_evidence": "approximate",
-      "notes": "保留参考图中的 GOLD 200 排版风格；GB 200 等历史/规格变体没有统一到这个展示标签。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "notes": "保留参考图中的 GOLD 200 排版风格；GB 200 等历史/规格变体没有统一到这个展示标签。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。 粗实字形参考用户提供的历史 GOLD 100-6 实拍，以开源 Barlow 字体调整，不代表所有 GOLD 批次。",
       "sources": [
         {
           "title": "Kodak GOLD 200 product page",
@@ -938,14 +938,18 @@
       ],
       "edge_text": "FUJI RVP100",
       "edge_secondary": "",
-      "edge_color": "#eee6d8",
-      "font_style": "condensed",
+      "edge_color": "#e6b441",
+      "font_style": "film-rvp",
       "edge_evidence": "verified",
-      "notes": "字串据 2005 年 FUJICHROME 边字对照表；所列规格为历史供应规格，可能已停止供应。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。",
+      "notes": "字串据 2005 年 FUJICHROME 边字对照表；所列规格为历史供应规格，可能已停止供应。 字串据引用资料核对；字体与色值为可编辑的视觉近似，未使用厂家专有边字字体。 实际片边字会随生产年代、规格和批次变化。 2026-10 参照官方 Velvia 100 技术单第 6 页核对 135 与 120 边字布局；当前为 RVP 实拍特征的原创字形重绘，不是厂家字体。",
       "sources": [
         {
           "title": "Fujifilm Professional Film Data Guide (2005), pp. 8–15, 18–21, 72–79",
           "url": "https://asset.fujifilm.com/www/us/files/2020-04/9cdee030ab7fc76bbcfddbcd38650038/ProfessionalFilmDataGuide.pdf"
+        },
+        {
+          "title": "Fujifilm Velvia 100 technical data, p. 6: processed edge markings",
+          "url": "https://asset.fujifilm.com/master/emea/files/2020-10/2f3c7f90a0b0c6e605e84f98b7d489c2/films_velvia-100_datasheet_01.pdf"
         }
       ]
     },
@@ -2094,9 +2098,9 @@
       "edge_text": "CINESTILL 800T",
       "edge_secondary": "",
       "edge_color": "#dfb975",
-      "font_style": "dot",
+      "font_style": "film-cine",
       "edge_evidence": "approximate",
-      "notes": "按 CineStill 静态摄影版本建档；不把电影原片 KeyKode 或 5219/5203 直接当作 CineStill 边字。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "notes": "按 CineStill 静态摄影版本建档；不把电影原片 KeyKode 或 5219/5203 直接当作 CineStill 边字。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。 细等宽字样参考用户提供的 800T 实拍原创重绘。齿孔样式独立选择；CineStill 官方说明其当前静态摄影胶片采用 KS 齿孔。",
       "sources": [
         {
           "title": "CineStill official four-film medium-format lineup",
@@ -2461,10 +2465,10 @@
       ],
       "edge_text": "HARMAN PHOENIX 200",
       "edge_secondary": "",
-      "edge_color": "#dfb975",
-      "font_style": "dot",
+      "edge_color": "#b89532",
+      "font_style": "film-phoenix",
       "edge_evidence": "approximate",
-      "notes": "原版 Phoenix；与 Phoenix II 分开。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "notes": "原版 Phoenix；与 Phoenix II 分开。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。 字形参考用户提供的 Phoenix II 135 实拍方形连印字；原版沿用同系列视觉近似，未宣称两代字形完全相同。",
       "sources": [
         {
           "title": "HARMAN official Phoenix 200 product specification",
@@ -2483,16 +2487,20 @@
         "135",
         "120"
       ],
-      "edge_text": "HARMAN PHOENIX II",
+      "edge_text": "HARMAN PHOENIX II 200",
       "edge_secondary": "",
-      "edge_color": "#dfb975",
-      "font_style": "dot",
+      "edge_color": "#b89532",
+      "font_style": "film-phoenix",
       "edge_evidence": "approximate",
-      "notes": "DX 200，厂家建议最佳曝光范围 100–200；新配方与原版分开。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。",
+      "notes": "DX 200，厂家建议最佳曝光范围 100–200；新配方与原版分开。 边字为按型号名称重建的排版预设，未核实为该批次真实片边字；字体与色值均为可编辑近似。 实际片边字会随生产年代、规格和批次变化。 字形参考用户提供的 Phoenix II 135 实拍方形连印字；原版沿用同系列视觉近似，未宣称两代字形完全相同。",
       "sources": [
         {
           "title": "HARMAN official Phoenix II product specification",
           "url": "https://www.harmanphoto.co.uk/harman-phoenix-ii-120"
+        },
+        {
+          "title": "HARMAN Phoenix II 35mm official product page",
+          "url": "https://www.harmanphoto.co.uk/harman-phoenix-ii-35mm"
         }
       ]
     },

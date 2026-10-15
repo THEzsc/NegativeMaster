@@ -6,7 +6,7 @@
 
 - `verified` 只表示 `edge_text` 字串在所引厂家的 Edge Print 字段、边字表或图中有直接依据；不表示字体、墨色、曝光效果、字距和位置已精确复刻，更不保证跨年份、片幅和批次一致。
 - `approximate` 的字串按型号名称重建，或参考独立摄影者的实物记录但缺少可以逐字检查的片边图。界面应显示「近似边字」，允许用户替换成手中底片的实印。
-- `font_style` 的 `dot`、`condensed`、`mono` 是点阵、窄体、等宽三种视觉方向。没有把任何商业字体或开源字体冒充厂家专有的片边字体。字形轮廓也应可编辑。
+- `font_style` 提供基础点阵/窄体/等宽、Citaro Voor，以及 RVP、Phoenix、Kodak、CineStill 等参考重绘方向。没有把任何商业字体或开源字体冒充厂家专有的片边字体。字形轮廓也应可编辑。
 - `edge_color` 是在黑底胶条排版中的展示色，不是胶片染料色度测量。反转、扫描白平衡、反色和曝光都能改变片边的视觉颜色。
 - 未核实的副码保持空白。仅 C200 的 CA24 与 SUPERIA PREMIUM 400 的 CH24 据厂家表填写，它们是特定资料版次的代际码，不是 DX 码，也不是固定乳剂批号。不要自动生成可被误认成真实 DX / KeyKode 的码。
 
@@ -92,3 +92,23 @@ Fujifilm 的 18 条字串来自厂家原始资料。2005 年 Professional Film D
 - [HARMAN official Phoenix II product specification](https://www.harmanphoto.co.uk/harman-phoenix-ii-120)
 - [HARMAN official RED 125 product specification](https://www.harmanphoto.co.uk/harman-red-125-35mm)
 - [HARMAN official SWITCH AZURE product specification](https://www.harmanphoto.co.uk/harman-switch-azure-35mm)
+
+## 2026-10 字形、齿孔与曝光参考
+
+本次参考用户提供的 Phoenix II、GOLD 100-6、电影胶片与 CineStill 800T 片边照片，以及三张漏光/光晕照片。参考照片没有收进仓库；没有找到可确认来自厂家的 RVP / Phoenix 字体文件，因此仍将这些字样标为参考重绘。
+
+| 样式 | 实现与证据边界 |
+| --- | --- |
+| RVP 厚笔曝光字 | 原创路径、斜切角、较厚笔画与轻微曝光柔边。Fujifilm 官方 Velvia 100 技术单第 6 页提供 135、120、220 的字串与编号布局，用户实拍提供字形外观。135 与 120 的箭头/印字位置不混称为统一标准。 |
+| Phoenix 方形连印 | 原创方形连续点阵，零不加斜杠。按用户 Phoenix II 135 实拍观察；原版 Phoenix 只沿用同系列风格近似，未确认两代完全相同。 |
+| Kodak 粗实印字 | 以已授权的 Barlow Condensed SemiBold 调整宽度、笔重及大写高度，参考用户历史 GOLD 100-6 实拍；不是 Kodak 原厂字体，不声称所有 GOLD 年份相同。 |
+| CineStill 细等宽 | 原创等宽连续线条，较细笔画、斜切转角和无斜杠零，参考用户 800T 实拍。 |
+| 齿孔 | 标准圆角、BH 参考弧边、小圆角方孔是排版选项。尺寸和轮廓是视觉近似，不用于冲孔生产，也不自动宣称与某型号真实片基一致。琥珀/银灰孔沿独立可选。 |
+| 漏光与字光晕 | 连续、可复现的程序化曝光模拟；不是测量得到的乳剂响应。玫瑰光雾、上下不规则烧边、橙红光带来自用户视觉参考。边字红晕单独控制，避免把高光晕染和外来漏光混成一个开关。 |
+
+补充的一手资料：
+
+- [Fujifilm Velvia 100 官方技术单，第 6 页](https://asset.fujifilm.com/master/emea/files/2020-10/2f3c7f90a0b0c6e605e84f98b7d489c2/films_velvia-100_datasheet_01.pdf)：冲洗后片边字与片幅区别，不提供字体文件。
+- [HARMAN Phoenix II 35mm 官方页](https://www.harmanphoto.co.uk/harman-phoenix-ii-35mm)和[官方技术单](https://www.harmanphoto.co.uk/amfile/file/download/file/1968/product/2208/)：型号、ISO 与片幅依据；字形外观来自用户实拍。
+- [Kodak Motion Picture Products Catalog](https://www.kodak.com/content/pdfs/Kodak-Motion-Picture-Products-Price-Catalog-EAMER.pdf)：BH 与 KS 齿孔形状和用途说明。
+- [CineStill 官方 FAQ](https://cinestillfilm.com/pages/frequently-asked-questions)：当前静态摄影产品的 KS 齿孔说明，以及 halation 与 light piping 的区分。不能因为 CineStill 源自电影技术，就默认套用 BH 齿孔。

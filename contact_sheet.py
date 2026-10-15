@@ -16,6 +16,11 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
+from film_effects import EXPOSURE_STYLES, exposure_field
+
+EDGE_STYLES = ("dot", "mono", "condensed", "citaro", "citaro-tall",
+               "film-dot", "film-stamp", "film-rvp", "film-phoenix", "film-kodak", "film-cine")
+
 BASE_WIDTH = 2400
 MAX_PIXELS = 80_000_000
 FONT_DIR = Path(__file__).resolve().parent / "static" / "fonts"
@@ -30,7 +35,9 @@ DEFAULT_CONFIG = {
               "edgeScale": 1, "edgeTracking": 0, "leaderMode": "auto", "leaderCount": 3,
               "leaderStyle": "dark", "leaderStrength": .75, "leaderShape": "cut",
               "separation": "none", "separationStrength": .65,
-              "separationHoles": True, "shadowTone": "black"},
+              "separationHoles": True, "shadowTone": "black", "sprocketStyle": "standard",
+              "sprocketRim": "none", "edgeGlow": 0, "leakSoftness": .55,
+              "leakSeed": 17, "leakPhotoCount": 0},
     "header": {"enabled": True, "title": "", "roll": "", "camera": "", "lens": "",
                "date": "", "process": "", "notes": "", "color": "#ffffff",
                "textColor": "#171717", "height": 180, "showStock": True, "infoScale": 1},
@@ -93,9 +100,15 @@ def normalize_config(config: dict | None) -> dict:
     header["height"] = _number(header["height"], "顶栏高度", 130, 400)
     strip["leaderCount"] = round(_number(strip["leaderCount"], "片头数量", 0, 24))
     strip["leaderStrength"] = _number(strip["leaderStrength"], "片头曝光强度", 0, 1)
+    strip["leakSoftness"] = _number(strip["leakSoftness"], "漏光柔和度", 0, 1)
+    strip["edgeGlow"] = _number(strip["edgeGlow"], "边字光晕", 0, 1)
+    strip["leakSeed"] = round(_number(strip["leakSeed"], "漏光纹理编号", 0, 999999))
+    strip["leakPhotoCount"] = round(_number(strip["leakPhotoCount"], "漏光延伸张数", 0, 12))
     header["infoScale"] = _number(header["infoScale"], "信息字号", .8, 1.4)
     for key, choices in (("leaderMode", ("auto", "manual")),
-                         ("leaderStyle", ("dark", "clear", "leak", "burn", "radial")),
+                         ("leaderStyle", ("dark", "clear", *EXPOSURE_STYLES)),
+                         ("sprocketStyle", ("standard", "cinema", "square")),
+                         ("sprocketRim", ("none", "amber", "silver")),
                          ("separation", ("none", "shadow", "outline", "lift", "paper")),
                          ("shadowTone", ("black", "white")),
                          ("edgeArrow", ("none", "left", "right")),
@@ -104,7 +117,7 @@ def normalize_config(config: dict | None) -> dict:
             raise ValueError("片头设置无效")
     if not isinstance(strip["separationHoles"], bool):
         raise ValueError("齿孔层次设置须为布尔值")
-    if strip["fontStyle"] not in ("auto", "dot", "mono", "condensed", "citaro", "citaro-tall", "film-dot", "film-stamp", "film-rvp"):
+    if strip["fontStyle"] not in ("auto", *EDGE_STYLES):
         raise ValueError("边字字体样式无效")
     if strip["fit"] not in ("contain", "cover"):
         raise ValueError("照片填充方式无效")
@@ -200,6 +213,7 @@ def _font(style: str, size: int, text: str = "") -> ImageFont.FreeTypeFont:
         candidates = []
     filename = {"condensed": "BarlowCondensed-Medium.ttf", "mono": "IBMPlexMono-Regular.ttf",
                 "header": "BarlowCondensed-SemiBold.ttf", "info": "IBMPlexMono-Medium.ttf",
+                "film-kodak": "BarlowCondensed-SemiBold.ttf",
                 "citaro": "CitaroVoor-Single.ttf", "citaro-tall": "CitaroVoor-Double.ttf"}.get(style, "IBMPlexMono-Regular.ttf")
     candidates += [str(FONT_DIR / filename), "DejaVuSans.ttf"]
     for path in candidates:
@@ -288,7 +302,7 @@ def _text(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, size: i
     text = str(text or "")[:250]
     if not text:
         return
-    if style in ("citaro", "citaro-tall", "film-dot", "film-stamp", "film-rvp") and (all(ord(ch) < 128 for ch in text) if style.startswith("citaro") else all(ch.upper() in _DOT for ch in text)):
+    if style in EDGE_STYLES[3:] and (all(ord(ch) < 128 for ch in text) if style.startswith("citaro") else all(ch.upper() in _DOT for ch in text)):
         mask = _edge_type_mask(text, style, size, max_width, tracking)
         draw.bitmap(xy, mask, fill=fill)
         return
@@ -341,25 +355,26 @@ def _text(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, size: i
 @lru_cache(maxsize=256)
 def _edge_type_mask(text: str, style: str, size: int, max_width: float | None, tracking: float) -> Image.Image:
     scale = 4
-    if style == "film-rvp":
-        advance=18+tracking*24/max(1,size)
+    if style in ("film-rvp", "film-cine"):
+        cine = style == "film-cine"
+        advance=(18 if cine else 19)+tracking*24/max(1,size)
         source=Image.new("L",(max(1,ceil(advance*(len(text)-1)+16)),24))
         d=ImageDraw.Draw(source)
         for i,ch in enumerate(text.upper()):
-            for path in _RVP_STROKES.get(ch,()):
+            for path in (_RVP_STROKES.get("O",()) if cine and ch == "0" else _RVP_STROKES.get(ch,())):
                 d.line([(round(i*advance+2+x*2),round(2+y*2)) for x,y in path],
-                       fill=245,width=3,joint="curve")
-        source=source.filter(ImageFilter.GaussianBlur(.22))
+                       fill=245,width=2 if cine else 4,joint="curve")
+        source=source.filter(ImageFilter.GaussianBlur(.16 if cine else .38))
         height=max(1,size*scale);width=max(1,round(source.width*height/24))
         if max_width and width>max_width*scale:
             height=max(1,round(height*max_width*scale/width));width=max(1,round(max_width*scale))
         mask=source.resize((width,height),Image.Resampling.LANCZOS)
-    elif style.startswith("citaro"):
+    elif style.startswith("citaro") or style == "film-kodak":
         font = _font(style, 96)
         bbox = font.getbbox(text, anchor="lt")
         source = Image.new("L", (max(1,round(font.getlength(text)))+4, max(1,bbox[3])+4))
         d = ImageDraw.Draw(source)
-        d.text((0,0),text,font=font,fill=255,anchor="lt")
+        d.text((0,0),text,font=font,fill=255,anchor="lt",stroke_width=1 if style=="film-kodak" else 0)
         source = source.crop(source.getbbox() or (0,0,1,1))
         height = max(1, size*scale)
         width = max(1, round(source.width*height/source.height))
@@ -373,13 +388,15 @@ def _edge_type_mask(text: str, style: str, size: int, max_width: float | None, t
             source = Image.new("L", (max(1,round(sum(p[1] for p in pieces)+advance*(len(text)-1)))+4, cap+4))
             d = ImageDraw.Draw(source); x = 0; baseline = -font.getbbox(text,anchor="ls")[1]
             for ch,step in pieces:
-                d.text((x,baseline),ch,font=font,fill=255,anchor="ls"); x+=step+advance
+                d.text((x,baseline),ch,font=font,fill=255,anchor="ls",stroke_width=1 if style=="film-kodak" else 0)
+                x+=step+advance
             width = max(1,round(source.width*height/source.height))
+        if style == "film-kodak": width=round(width*1.28)
         if max_width and width > max_width*scale:
             height=max(1,round(height*max_width*scale/width)); width=max(1,round(max_width*scale))
         mask = source.resize((width,height),Image.Resampling.LANCZOS)
     else:
-        unit = max(1,size*scale/7); pitch = unit*.76
+        unit = max(1,size*scale/7); pitch = unit*(1 if style=="film-phoenix" else .76)
         width = max(1,ceil((len(text)*6-1)*pitch+tracking*scale*(len(text)-1)))
         if max_width and width > max_width*scale:
             shrink=max_width*scale/width
@@ -388,19 +405,21 @@ def _edge_type_mask(text: str, style: str, size: int, max_width: float | None, t
         mask = Image.new("L",(width,max(1,ceil(size*scale))))
         d=ImageDraw.Draw(mask); x=0
         for ch in text.upper():
-            glyph=_DOT.get(ch,_DOT[" "])
+            glyph=_DOT.get("O" if style=="film-phoenix" and ch=="0" else ch,_DOT[" "])
             for row,bits in enumerate(glyph):
                 for col in range(5):
                     if bits & (1 << (4-col)):
                         cx=x+(col+.5)*pitch; cy=(row+.5)*unit
-                        if style=="film-dot":
+                        if style=="film-phoenix":
+                            d.rectangle((x+col*pitch,row*unit,x+(col+1)*pitch,(row+1)*unit),fill=245)
+                        elif style=="film-dot":
                             rx,ry=pitch*.43,unit*.40
                             d.ellipse((cx-rx,cy-ry,cx+rx,cy+ry),fill=245)
                         else:
                             rx,ry=pitch*.52,unit*.54
                             d.rounded_rectangle((cx-rx,cy-ry,cx+rx,cy+ry),radius=unit*.18,fill=245)
             x+=pitch*6+tracking*scale
-        mask=mask.filter(ImageFilter.GaussianBlur(.4 if style=="film-dot" else .65))
+        mask=mask.filter(ImageFilter.GaussianBlur(.22 if style=="film-phoenix" else .4 if style=="film-dot" else .65))
     width=max(1,round(mask.width/scale)); height=max(1,round(mask.height/scale))
     if max_width and width>max_width:
         ratio=max_width/width; width=max(1,round(max_width)); height=max(1,round(height*ratio))
@@ -417,18 +436,40 @@ def _edge_arrow_mask(direction: str, size: int) -> Image.Image:
         (max(1,round(size*1.75)),max(1,size)),Image.Resampling.LANCZOS)
 
 
-def lettering_sample(style: str, text: str, color: str = "#dda850", arrow: str = "none") -> Image.Image:
-    if style not in ("dot","mono","condensed","citaro","citaro-tall","film-dot","film-stamp","film-rvp"):
+def _composite_print(base: Image.Image, letters: Image.Image, size: int, strength: float) -> None:
+    """Red halation and a warm core, clipped to the existing film silhouette."""
+    alpha = base.getchannel("A")
+    mask = letters.getchannel("A")
+    for radius, color, opacity in ((size*.40,(255,30,7),.72),
+                                    (size*.11,(255,118,18),.55)):
+        halo = Image.new("RGBA",base.size,(*color,0))
+        halo.putalpha(mask.filter(ImageFilter.GaussianBlur(max(.3,radius))).point(
+            lambda v: min(255,round(v*strength*opacity*3))))
+        base.alpha_composite(halo)
+    base.alpha_composite(letters)
+    core = Image.new("RGBA",base.size,(255,240,153,0))
+    core.putalpha(mask.point(lambda v:round(v*strength*.55)))
+    base.alpha_composite(core)
+    base.putalpha(alpha)
+
+
+def lettering_sample(style: str, text: str, color: str = "#dda850", arrow: str = "none",
+                     glow: float = 0) -> Image.Image:
+    if style not in EDGE_STYLES:
         raise ValueError("边字字体样式无效")
     if arrow not in ("none","left","right"): raise ValueError("边字箭头方向无效")
-    out=Image.new("RGB",(800,156),(14,14,13)); draw=ImageDraw.Draw(out)
+    glow = _number(glow,"边字光晕",0,1)
+    out=Image.new("RGBA",(800,156),(14,14,13,255))
+    letters=Image.new("RGBA",out.size) if glow else out
+    draw=ImageDraw.Draw(letters)
     _text(draw,(28,25),text or "FILM 135 / ISO 200",38,_color(color),style,744)
     for i,number in enumerate((12,13,14)):
         x=28+i*248
         _text(draw,(x,91),str(number),25,_color(color),style,56)
         if arrow != "none": draw.bitmap((x+66,92),_edge_arrow_mask(arrow,23),fill=_color(color))
         _text(draw,(x+122,91),f"{number}A",25,_color(color),style,110)
-    return out
+    if glow: _composite_print(out,letters,38,glow)
+    return out.convert("RGB")
 
 
 def _cover(source: Image.Image, size: tuple[int, int], override: dict | None = None,
@@ -512,13 +553,28 @@ def _background(images: list[Image.Image], c: dict, size: tuple[int, int]) -> Im
     return result.resize(size, Image.Resampling.BICUBIC).convert("RGBA")
 
 
+@lru_cache(maxsize=128)
+def _hole_mask(width: int, height: int, style: str) -> Image.Image:
+    """Antialiased perforation silhouettes, shared by holes and depth effects."""
+    aa=4; w,h=width*aa,height*aa
+    mask=Image.new("L",(w,h)); d=ImageDraw.Draw(mask)
+    if style == "cinema":
+        # Flat sides and bowed ends, inspired by BH camera-negative holes.
+        d.rounded_rectangle((0,h*.12,w-1,h*.88),radius=w*.10,fill=255)
+        d.ellipse((0,0,w-1,h*.38),fill=255)
+        d.ellipse((0,h*.62,w-1,h-1),fill=255)
+    else:
+        radius=w*(.07 if style == "square" else .18)
+        d.rounded_rectangle((0,0,w-1,h-1),radius=radius,fill=255)
+    return mask.resize((width,height),Image.Resampling.LANCZOS)
+
+
 def _film_layer(layout: SheetLayout, c: dict, cells: int, cut_leader: bool = False) -> Image.Image:
     strip = c["strip"]
     width = round(layout.cell_width * cells)
     color = _color(strip["color"])
     alpha = round(color[3] * strip["opacity"])
     row = Image.new("RGBA", (width, layout.strip_height), (*color[:3], alpha))
-    draw = ImageDraw.Draw(row)
     if strip["sprockets"]:
         pitch = layout.cell_width / 8
         hw, hh = layout.cell_width * 1.98 / 38, layout.cell_width * 2.79 / 38
@@ -532,7 +588,16 @@ def _film_layer(layout: SheetLayout, c: dict, cells: int, cut_leader: bool = Fal
                 shoulder_end = min(layout.cell_width * .96, layout.strip_height * 1.08)
                 if cut_leader and y == hole_y and x-hw/2 < shoulder_end:
                     continue
-                draw.rounded_rectangle((x-hw/2, y, x+hw/2, y+hh), radius=max(1, hw*.18), fill=(0,0,0,0))
+                hole=_hole_mask(max(2,round(hw)),max(2,round(hh)),strip["sprocketStyle"])
+                hx,hy=round(x-hw/2),round(y)
+                if strip["sprocketRim"] != "none":
+                    pad=max(1,round(layout.scale))
+                    padded=Image.new("L",(hole.width+2*pad,hole.height+2*pad))
+                    padded.paste(hole,(pad,pad))
+                    rim=ImageChops.subtract(padded.filter(ImageFilter.MaxFilter(2*pad+1)),padded)
+                    tone=(176,102,44,alpha) if strip["sprocketRim"] == "amber" else (209,205,190,alpha)
+                    row.paste(tone,(hx-pad,hy-pad,hx+hole.width+pad,hy+hole.height+pad),rim)
+                row.paste((0,0,0,0),(hx,hy,hx+hole.width,hy+hole.height),hole)
     return row
 
 
@@ -581,40 +646,13 @@ def _leader_field(size: tuple[int, int], start: float, end: float,
     start/end are positions along the roll, independent of rows and frame gaps.
     All exposure styles decay to the chosen film color at the photo boundary.
     """
-    import numpy as np
-    style, strength = strip["leaderStyle"], strip["leaderStrength"]
-    base = np.asarray(_color(strip["color"])[:3], dtype=np.float32)
+    base = _color(strip["color"])[:3]
+    style = strip["leaderStyle"]
     if style in ("dark", "clear"):
-        return Image.new("RGB", size, tuple(int(v) for v in base) if style == "dark" else (224,216,194))
-    w, h = min(size[0], 1600), min(size[1], 320)
-    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
-    p = start + (xx+.5)/w * (end-start)
-    yy = (yy+.5)/h
-    fade = np.maximum(0,1-p)**2.1
-    if style == "radial":
-        # Two off-film sources: soft fans enter from the upper and lower edge.
-        # Angular lobes are smooth light rays, not a row of repeated gradients.
-        x = p*aspect
-        def fan(origin, distance, phase):
-            dx=x-origin
-            angle=np.arctan2(dx,distance)
-            rays=np.maximum(0,np.cos(angle*11+phase))**3
-            spread=np.exp(-np.sqrt(dx*dx+distance*distance)/1.45)
-            return spread*(.60+.40*rays)
-        top=fan(aspect*.055,yy+.16,.3)
-        bottom=fan(aspect*.14,1.16-yy,1.2)
-        heat=np.clip((top+bottom)*fade*strength*1.5,0,1)
-    elif style == "burn":
-        heat=np.clip((1.55+.14*np.cos(yy*5))*fade**.8*strength,0,1)
-    else:
-        edge=np.exp(-((yy-.18)/.34)**2)
-        heat=np.clip((1.05+.33*edge)*fade*strength,0,1)
-    colors=np.array([base,[91,20,11],[205,56,16],[251,153,55],[255,243,207]],dtype=np.float32)
-    pos=heat*4; low=np.minimum(pos.astype(int),3); mix=(pos-low)[...,None]
-    rgb=colors[low]*(1-mix)+colors[low+1]*mix
-    # Coordinate-based grain stays continuous across cells, rows and reopenings.
-    grain=(np.sin(p*1931+yy*427)*np.sin(p*827-yy*967)*heat)[...,None]
-    return Image.fromarray(np.clip(rgb+grain,0,255).astype("uint8")).resize(size,Image.Resampling.BICUBIC)
+        return Image.new("RGB", size, base if style == "dark" else (224,216,194))
+    light = exposure_field(size,start,end,aspect,style,strip["leaderStrength"],
+                           strip["leakSoftness"],strip["leakSeed"])
+    return ImageChops.screen(Image.new("RGB",size,base),light)
 
 
 def _place_strip(canvas: Image.Image, row: Image.Image, xy: tuple[int,int],
@@ -669,10 +707,21 @@ def _place_strip(canvas: Image.Image, row: Image.Image, xy: tuple[int,int],
 def _edge_labels(row: Image.Image, layout: SheetLayout, c: dict, stock: dict,
                  indices: list[int], count: int) -> None:
     strip = c["strip"]
+    if strip["edgeGlow"]:
+        # Only the two narrow film bands need glow buffers, even at 10K export.
+        letters=Image.new("RGBA",(row.width,2*layout.band))
+        compact=replace(layout,strip_height=2*layout.band)
+        _edge_labels(letters,compact,dict(c,strip=dict(strip,edgeGlow=0)),stock,indices,count)
+        for source_y,target_y in ((0,0),(layout.band,row.height-layout.band)):
+            region=row.crop((0,target_y,row.width,target_y+layout.band))
+            ink=letters.crop((0,source_y,row.width,source_y+layout.band))
+            _composite_print(region,ink,max(1,round(layout.cell_width*.026*strip["edgeScale"])),strip["edgeGlow"])
+            row.paste(region,(0,target_y))
+        return
     style = strip["fontStyle"]
     if style == "auto":
         style = stock.get("font_style", "condensed")
-    if style not in ("dot", "condensed", "mono", "citaro", "citaro-tall", "film-dot", "film-stamp", "film-rvp"):
+    if style not in EDGE_STYLES:
         style = "condensed"
     primary = strip["edgeText"] if strip["edgeText"] is not None else stock.get("edge_text", stock.get("name", ""))
     secondary = strip["secondaryText"] if strip["secondaryText"] is not None else stock.get("edge_secondary", "")
@@ -782,7 +831,7 @@ def render_sheet(images: list[Image.Image], config: dict | None = None,
         cut_leader = row_index == 0 and layout.leader and c["strip"]["leaderShape"] == "cut"
         row = _film_layer(layout,c,len(slots),cut_leader)
         leader_cells=max(0,min(len(slots),layout.leader_count-first))
-        if leader_cells:
+        if leader_cells and c["strip"]["leaderStyle"] in ("dark", "clear"):
             leader_width=round(leader_cells*layout.cell_width)
             field=_leader_field((leader_width,layout.strip_height),first/layout.leader_count,
                                 (first+leader_cells)/layout.leader_count,
@@ -797,6 +846,18 @@ def render_sheet(images: list[Image.Image], config: dict | None = None,
                          round(c["strip"]["padding"]*layout.scale))
             px=round(col*layout.cell_width+layout.gap/2)
             row.alpha_composite(photo,(px,layout.band))
+        affected = layout.leader_count + min(len(images),c["strip"]["leakPhotoCount"])
+        if c["strip"]["leaderStyle"] in EXPOSURE_STYLES and first < affected:
+            cells = min(len(slots),affected-first)
+            width = round(cells*layout.cell_width)
+            light = exposure_field((width,layout.strip_height),first/affected,
+                                   (first+cells)/affected,affected*layout.cell_width/layout.strip_height,
+                                   c["strip"]["leaderStyle"],c["strip"]["leaderStrength"],
+                                   c["strip"]["leakSoftness"],c["strip"]["leakSeed"])
+            region = row.crop((0,0,width,layout.strip_height))
+            exposed = ImageChops.screen(region.convert("RGB"),light).convert("RGBA")
+            exposed.putalpha(region.getchannel("A"))
+            row.paste(exposed,(0,0))
         _edge_labels(row,layout,c,stock,indices,len(images))
         if cut_leader:
             _clip_leader(row, layout.cell_width)

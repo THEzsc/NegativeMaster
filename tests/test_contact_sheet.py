@@ -135,7 +135,7 @@ class ContactSheetTests(unittest.TestCase):
         cfg=dict(self.config,strip={"leader":True,"leaderMode":"manual","leaderCount":1,
                                   "leaderShape":"straight","padding":0})
         l=sheet.sheet_layout(1,cfg)
-        for style in ("dark","clear","leak","burn","radial"):
+        for style in ("dark","clear",*sheet.EXPOSURE_STYLES):
             cfg["strip"]["leaderStyle"]=style
             out=sheet.render_sheet([self.landscape],cfg)
             self.assertEqual(out.tobytes(),sheet.render_sheet([self.landscape],cfg).tobytes())
@@ -144,7 +144,7 @@ class ContactSheetTests(unittest.TestCase):
             hole=(l.margin+round(l.cell_width/16),l.top+round(l.band*.45+l.cell_width*2.79/38/2))
             self.assertEqual(out.getpixel(hole)[3],0)
             outputs.append(out.tobytes())
-        self.assertEqual(len(set(outputs)),5)
+        self.assertEqual(len(set(outputs)),8)
 
     def test_continuous_leader_has_no_frame_gaps_and_fades_towards_photos(self):
         import numpy as np
@@ -213,12 +213,12 @@ class ContactSheetTests(unittest.TestCase):
 
     def test_new_lettering_styles_have_distinct_real_samples(self):
         samples=[]
-        for style in ("dot","mono","condensed","citaro","citaro-tall","film-dot","film-stamp","film-rvp"):
+        for style in sheet.EDGE_STYLES:
             out=sheet.lettering_sample(style,"KODAK GOLD 200 / C-41")
             self.assertEqual(out.size,(800,156))
             self.assertGreater(len(out.getcolors(1000000)),1)
             samples.append(out.tobytes())
-        self.assertEqual(len(set(samples)),8)
+        self.assertEqual(len(set(samples)),11)
 
     def test_edge_arrows_only_change_photo_frame_number_band(self):
         self.assertEqual(sheet.normalize_config({})["strip"]["edgeArrow"],"none")
@@ -243,8 +243,75 @@ class ContactSheetTests(unittest.TestCase):
                        {"header":{"infoScale":float("nan")}}, {"background":{"opacity":2}},
                        {"strip":{"separation":"invalid"}}, {"strip":{"separationStrength":-1}},
                        {"strip":{"shadowTone":"red"}}, {"strip":{"separationHoles":"false"}},
-                       {"strip":{"edgeArrow":"up"}}):
+                       {"strip":{"edgeArrow":"up"}}, {"strip":{"sprocketStyle":"missing"}},
+                       {"strip":{"sprocketRim":"red"}}, {"strip":{"leakSeed":-1}},
+                       {"strip":{"leakSoftness":2}}, {"strip":{"leakPhotoCount":13}},
+                       {"strip":{"edgeGlow":float("nan")}}):
             with self.assertRaises(ValueError): sheet.normalize_config(config)
+
+    def test_perforation_styles_and_rims_keep_real_transparent_holes(self):
+        shapes=[]
+        for style in ("standard","cinema","square"):
+            cfg=sheet.normalize_config(dict(self.config,width=2400,strip={"leader":False,"sprocketStyle":style}))
+            layout=sheet.sheet_layout(1,cfg)
+            plain=sheet._film_layer(layout,cfg,1)
+            shapes.append(plain.getchannel("A").tobytes())
+            hole=(round(layout.cell_width/16),round(layout.band*.45+layout.cell_width*2.79/76))
+            self.assertEqual(plain.getpixel(hole)[3],0)
+            for rim in ("amber","silver"):
+                cfg["strip"]["sprocketRim"]=rim
+                edged=sheet._film_layer(layout,cfg,1)
+                self.assertEqual(edged.getchannel("A").tobytes(),plain.getchannel("A").tobytes())
+                self.assertNotEqual(edged.tobytes(),plain.tobytes())
+            cfg["strip"].update(separation="shadow",shadowTone="white")
+            out=sheet.render_sheet([self.landscape],cfg)
+            self.assertLess(out.getpixel((layout.margin+hole[0],layout.top+hole[1]))[3],200)
+        self.assertEqual(len(set(shapes)),3)
+
+    def test_exposure_coordinates_are_continuous_seeded_and_resolution_stable(self):
+        import numpy as np
+        for style in sheet.EXPOSURE_STYLES:
+            args=dict(aspect=6,style=style,strength=.85,softness=.55,seed=42)
+            whole=sheet.exposure_field((1200,200),0,1,**args)
+            left=sheet.exposure_field((600,200),0,.5,**args)
+            right=sheet.exposure_field((600,200),.5,1,**args)
+            stitched=Image.new("RGB",whole.size);stitched.paste(left);stitched.paste(right,(600,0))
+            self.assertLessEqual(np.abs(np.asarray(whole).astype(int)-np.asarray(stitched).astype(int)).max(),1)
+            high=sheet.exposure_field((4800,800),0,1,**args).resize(whole.size,Image.Resampling.LANCZOS)
+            self.assertLess(np.abs(np.asarray(whole).astype(int)-np.asarray(high).astype(int)).mean(),3)
+            self.assertNotEqual(whole.tobytes(),sheet.exposure_field(whole.size,0,1,**dict(args,seed=43)).tobytes())
+            self.assertNotEqual(whole.tobytes(),sheet.exposure_field(whole.size,0,1,**dict(args,softness=.1)).tobytes())
+            self.assertEqual(sheet.exposure_field(whole.size,0,1,**dict(args,strength=0)).getextrema(),((0,0),)*3)
+
+    def test_opt_in_photo_exposure_stops_at_requested_photo_and_preserves_sources(self):
+        before=self.landscape.tobytes()
+        for style in sheet.EXPOSURE_STYLES:
+            cfg=dict(self.config,columns=2,strip={"leader":True,"leaderMode":"manual",
+                     "leaderCount":1,"leaderShape":"straight","leaderStyle":style,"leakPhotoCount":1})
+            layout=sheet.sheet_layout(3,cfg)
+            actual=sheet.render_sheet([self.landscape]*3,cfg)
+            plain=sheet.render_sheet([self.landscape]*3,dict(cfg,strip=dict(cfg["strip"],leakPhotoCount=0)))
+            first=(layout.margin+round(layout.cell_width)+layout.gap,layout.top+layout.band,
+                   layout.margin+round(layout.cell_width*2)-layout.gap,layout.top+layout.band+layout.aperture_height)
+            self.assertIsNotNone(ImageChops.difference(actual.crop(first),plain.crop(first)).convert("RGB").getbbox(),style)
+            self.assertEqual(actual.crop((0,layout.row_y(1),layout.width,layout.height)).tobytes(),
+                             plain.crop((0,layout.row_y(1),layout.width,layout.height)).tobytes())
+        self.assertEqual(self.landscape.tobytes(),before)
+        # Can expose a photo without a blank leader, without adding fake slots.
+        cfg["strip"].update(leader=False,leakPhotoCount=1)
+        self.assertEqual(sheet.sheet_layout(3,cfg).leader_count,0)
+        self.assertIsNotNone(sheet.render_sheet([self.landscape]*3,cfg))
+
+    def test_edge_glow_preserves_holes_and_photo_pixels(self):
+        cfg=dict(self.config,strip={"leader":False,"fontStyle":"film-cine","edgeText":"CINESTILL 800T"})
+        plain=sheet.render_sheet([self.landscape],cfg)
+        cfg["strip"]["edgeGlow"]=1
+        glow=sheet.render_sheet([self.landscape],cfg)
+        layout=sheet.sheet_layout(1,cfg)
+        self.assertEqual(plain.getchannel("A").tobytes(),glow.getchannel("A").tobytes())
+        self.assertNotEqual(plain.tobytes(),glow.tobytes())
+        box=(0,layout.top+layout.band,layout.width,layout.top+layout.band+layout.aperture_height)
+        self.assertEqual(plain.crop(box).tobytes(),glow.crop(box).tobytes())
 
     def test_invalid_inputs_and_oversized_canvas_fail_before_render(self):
         with self.assertRaisesRegex(ValueError,"至少一张"):
