@@ -78,6 +78,8 @@
         <h3>胶片条层次</h3>
         <label class="form-field"><span class="field-label">分离效果</span><select data-config="strip.separation"><option value="none">无效果</option><option value="shadow">柔和投影</option><option value="outline">浅色细边</option><option value="lift">细边 + 投影</option><option value="paper">纸白衬边</option></select></label>
         <label class="form-field" id="separation-strength-field" hidden><span class="field-label">效果强度 <output data-output="strip.separationStrength" data-format="percent"></output></span><input type="range" min="0" max="1" step=".05" data-config="strip.separationStrength"></label>
+        <label class="form-field" id="shadow-tone-field" hidden><span class="field-label">投影颜色</span><select data-config="strip.shadowTone"><option value="black">黑色投影</option><option value="white">白色投影</option></select></label>
+        <label class="check-line" id="separation-holes-field" hidden><input type="checkbox" data-config="strip.separationHoles">齿孔内缘也应用效果</label>
         <label class="form-field"><span class="field-label">片条不透明度 <output data-output="strip.opacity"></output></span><input type="range" min=".25" max="1" step=".05" data-config="strip.opacity"></label>
       </section>
       <section class="inspector-pane" id="pane-header" role="tabpanel" aria-labelledby="tab-header" hidden>

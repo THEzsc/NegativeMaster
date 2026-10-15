@@ -432,7 +432,7 @@ class SheetApiTests(unittest.TestCase):
             job=identifier, order=[0], stockId="test", config=dict(width=1200,
             columns=3, background=dict(mode="blur", sourceIndex="custom",opacity=.4),
             header=dict(roll="2401",showStock=True,infoScale=1.2),
-            strip=dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="radial",leaderStrength=.6,separation="lift",separationStrength=.8),
+            strip=dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="radial",leaderStrength=.6,separation="lift",separationStrength=.8,shadowTone="white",separationHoles=False),
             frameOverrides=[override])))
         self.assertEqual(exported.status_code, 200, exported.json)
         self.assertEqual(exported.mimetype, "application/zip")
@@ -461,7 +461,7 @@ class SheetApiTests(unittest.TestCase):
         self.assertEqual(project["config"]["header"]["roll"], "2401")
         self.assertEqual(project["config"]["header"]["infoScale"], 1.2)
         self.assertEqual(project["config"]["background"]["opacity"], .4)
-        for key,value in dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="radial",leaderStrength=.6,separation="lift",separationStrength=.8).items():
+        for key,value in dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="radial",leaderStrength=.6,separation="lift",separationStrength=.8,shadowTone="white",separationHoles=False).items():
             self.assertEqual(project["config"]["strip"][key], value)
         self.assertEqual(project["frameOptions"][project["sources"][0]], override)
         self.assertTrue(Path(project["sources"][0]).is_file())

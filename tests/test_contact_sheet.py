@@ -1,7 +1,7 @@
 """Contact-sheet layout, image handling and alpha regression checks."""
 import unittest
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 import contact_sheet as sheet
 
@@ -170,10 +170,10 @@ class ContactSheetTests(unittest.TestCase):
             self.assertEqual(out.getpixel((0,0))[3],128)
             self.assertEqual(out.getpixel((l.margin+round(l.cell_width/2),l.top+l.band+l.aperture_height//2))[3],255)
 
-    def test_strip_separation_stays_outside_photos_and_sprockets(self):
+    def test_strip_separation_can_exclude_sprockets(self):
         outputs=[]
         for effect in ("none","shadow","outline","lift","paper"):
-            cfg=dict(self.config,strip={"leader":False,"padding":0,"separation":effect})
+            cfg=dict(self.config,strip={"leader":False,"padding":0,"separation":effect,"separationHoles":False})
             l=sheet.sheet_layout(1,cfg);out=sheet.render_sheet([self.landscape],cfg)
             hole=(l.margin+round(l.cell_width/16),l.top+round(l.band*.45+l.cell_width*2.79/38/2))
             self.assertEqual(out.getpixel(hole)[3],0)
@@ -182,6 +182,34 @@ class ContactSheetTests(unittest.TestCase):
         self.assertEqual(len(set(outputs)),5)
         # Decorations clip safely against a zero-margin canvas.
         sheet.render_sheet([self.landscape],dict(cfg,margin=0))
+
+    def test_separation_defaults_to_punched_edges_and_keeps_photos_intact(self):
+        self.assertTrue(sheet.normalize_config({})["strip"]["separationHoles"])
+        for effect in ("shadow","outline","lift","paper"):
+            cfg=dict(self.config,columns=12,strip={"leader":False,"padding":0,"separation":effect})
+            l=sheet.sheet_layout(1,cfg);out=sheet.render_sheet([self.landscape],cfg)
+            x=l.margin+round(l.cell_width/16)
+            y=l.top+round(l.band*.45+l.cell_width*2.79/38/2)
+            plain=sheet.render_sheet([self.landscape],dict(cfg,strip=dict(cfg["strip"],separation="none")))
+            hole=ImageChops.subtract(out.getchannel("A"),plain.getchannel("A")).crop((x-4,y-4,x+5,y+5))
+            self.assertGreater(hole.getextrema()[1],0,effect)
+            self.assertLess(out.getpixel((x,y))[3],200,effect)
+            self.assertEqual(out.getpixel((l.margin+round(l.cell_width/2),l.top+l.band+l.aperture_height//2)),(217,83,41,255))
+
+    def test_white_and_black_shadows_share_geometry_at_preview_and_export_sizes(self):
+        for width in (1200,4800):
+            images=[self.landscape]*6
+            cfg=dict(self.config,width=width,strip={"leader":False,"padding":0,"separation":"shadow"})
+            l=sheet.sheet_layout(6,cfg)
+            dark=sheet.render_sheet(images,cfg)
+            cfg["strip"]["shadowTone"]="white"
+            light=sheet.render_sheet(images,cfg)
+            self.assertEqual(dark.getchannel("A").tobytes(),light.getchannel("A").tobytes())
+            x=l.margin+round(l.cell_width/16)
+            y=l.top+round(l.band*.45+l.cell_width*2.79/38/2)
+            self.assertGreater(dark.getpixel((x,y))[3],0)
+            self.assertEqual(dark.getpixel((x,y))[:3],(0,0,0))
+            self.assertEqual(light.getpixel((x,y))[:3],(255,255,255))
 
     def test_new_lettering_styles_have_distinct_real_samples(self):
         samples=[]
@@ -196,7 +224,8 @@ class ContactSheetTests(unittest.TestCase):
         for config in ({"strip":{"leaderCount":25}}, {"strip":{"leaderMode":"invalid"}},
                        {"strip":{"leaderStyle":"invalid"}}, {"strip":{"leaderStrength":2}},
                        {"header":{"infoScale":float("nan")}}, {"background":{"opacity":2}},
-                       {"strip":{"separation":"invalid"}}, {"strip":{"separationStrength":-1}}):
+                       {"strip":{"separation":"invalid"}}, {"strip":{"separationStrength":-1}},
+                       {"strip":{"shadowTone":"red"}}, {"strip":{"separationHoles":"false"}}):
             with self.assertRaises(ValueError): sheet.normalize_config(config)
 
     def test_invalid_inputs_and_oversized_canvas_fail_before_render(self):

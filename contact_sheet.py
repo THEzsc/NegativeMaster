@@ -8,7 +8,7 @@ editable typographic approximation, never a claim to the maker's exact font.
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from math import ceil, cos, isfinite, radians, sin
 from pathlib import Path
@@ -29,7 +29,8 @@ DEFAULT_CONFIG = {
               "showNumbers": True, "showHalfNumbers": True, "fit": "contain",
               "edgeScale": 1, "edgeTracking": 0, "leaderMode": "auto", "leaderCount": 3,
               "leaderStyle": "dark", "leaderStrength": .75, "leaderShape": "cut",
-              "separation": "none", "separationStrength": .65},
+              "separation": "none", "separationStrength": .65,
+              "separationHoles": True, "shadowTone": "black"},
     "header": {"enabled": True, "title": "", "roll": "", "camera": "", "lens": "",
                "date": "", "process": "", "notes": "", "color": "#ffffff",
                "textColor": "#171717", "height": 180, "showStock": True, "infoScale": 1},
@@ -96,9 +97,12 @@ def normalize_config(config: dict | None) -> dict:
     for key, choices in (("leaderMode", ("auto", "manual")),
                          ("leaderStyle", ("dark", "clear", "leak", "burn", "radial")),
                          ("separation", ("none", "shadow", "outline", "lift", "paper")),
+                         ("shadowTone", ("black", "white")),
                          ("leaderShape", ("cut", "straight"))):
         if strip[key] not in choices:
             raise ValueError("片头设置无效")
+    if not isinstance(strip["separationHoles"], bool):
+        raise ValueError("齿孔层次设置须为布尔值")
     if strip["fontStyle"] not in ("auto", "dot", "mono", "condensed", "citaro", "citaro-tall", "film-dot", "film-stamp"):
         raise ValueError("边字字体样式无效")
     if strip["fit"] not in ("contain", "cover"):
@@ -545,7 +549,7 @@ def _place_strip(canvas: Image.Image, row: Image.Image, xy: tuple[int,int],
     if effect == "none" or strength == 0:
         canvas.alpha_composite(row,xy)
         return
-    # Build an outer silhouette: the decoration must never paint inside holes.
+    # Use the punched film geometry, independent of photo/film opacity.
     # Work at <= 1600 px for predictable preview and large-export costs.
     ratio=min(1,1600/row.width)
     work=(max(1,round(row.width*ratio)),max(1,round(row.height*ratio)))
@@ -555,17 +559,30 @@ def _place_strip(canvas: Image.Image, row: Image.Image, xy: tuple[int,int],
     pad=max(4,ceil(20*scale))
     mask=Image.new("L",(work[0]+2*pad,work[1]+2*pad),0)
     mask.paste(silhouette.getchannel("A"),(pad,pad))
+    outer=mask.copy()
+    if strip["separationHoles"] and strip["sprockets"]:
+        scaled=replace(layout,cell_width=layout.cell_width*ratio,
+                       band=layout.band*ratio,strip_height=work[1])
+        geometry=_film_layer(scaled,{"strip":dict(strip,color="#ffffff",opacity=1)},
+                             round(row.width/layout.cell_width),cut_leader)
+        if cut_leader: _clip_leader(geometry,scaled.cell_width)
+        mask.paste(geometry.getchannel("A").resize(work,Image.Resampling.LANCZOS),(pad,pad))
     decor=Image.new("RGBA",mask.size,(0,0,0,0))
     if effect in ("shadow","lift","paper"):
         shifted=Image.new("L",mask.size,0)
         shifted.paste(mask,(0,max(1,round(4*scale))))
         shadow=shifted.filter(ImageFilter.GaussianBlur(max(.7,5*scale)))
         shadow=ImageChops.subtract(shadow,mask).point(lambda v:round(v*.72*strength))
-        dark=Image.new("RGBA",mask.size,(0,0,0,0));dark.putalpha(shadow)
-        decor.alpha_composite(dark)
+        tone=255 if strip["shadowTone"] == "white" else 0
+        cast=Image.new("RGBA",mask.size,(tone,tone,tone,0));cast.putalpha(shadow)
+        decor.alpha_composite(cast)
     if effect in ("outline","lift","paper"):
         radius=max(1,round((6 if effect == "paper" else 1.5)*scale))
-        border=ImageChops.subtract(mask.filter(ImageFilter.MaxFilter(2*radius+1)),mask)
+        border=ImageChops.subtract(outer.filter(ImageFilter.MaxFilter(2*radius+1)),outer)
+        # Keep broad paper borders from closing narrow sprocket openings.
+        rim=min(radius,max(1,int(layout.cell_width*ratio*1.98/38*.22)))
+        inside=ImageChops.subtract(mask.filter(ImageFilter.MaxFilter(2*rim+1)),mask)
+        border=ImageChops.lighter(border,ImageChops.multiply(inside,outer))
         border=border.point(lambda v:round(v*strength))
         light=Image.new("RGBA",mask.size,(247,241,226,0));light.putalpha(border)
         decor.alpha_composite(light)
