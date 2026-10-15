@@ -6,10 +6,5 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 PY="$DIR/.venv/bin/python"
 
-if [ ! -x "$PY" ]; then
-  python3 -m venv "$DIR/.venv"
-  "$PY" -m pip install --upgrade pip
-  "$PY" -m pip install -r "$DIR/requirements.txt"
-fi
-
-exec "$PY" "$DIR/decast.py" "$@"
+if [ ! -x "$PY" ]; then PY=python3; fi
+exec "$PY" "$DIR/launcher.py" cli "$@"

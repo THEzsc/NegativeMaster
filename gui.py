@@ -31,7 +31,7 @@ import json
 import hashlib
 import film_reference
 import argparse
-import subprocess
+import platform_support
 import xml.etree.ElementTree as ET
 import numpy as np
 from PIL import Image
@@ -407,26 +407,17 @@ def api_wbtemp():
 
 @app.route("/api/pick")
 def api_pick():
-    """弹 macOS 原生选择对话框（osascript）。mode=dir 选文件夹 /
-    file 选文件 / save 选保存路径。对话框可能弹在浏览器窗口后面。"""
+    """在桌面系统上选择文件夹、图片或导出路径。"""
     mode = request.args.get("mode", "dir")
-    if mode == "file":
-        script = 'POSIX path of (choose file with prompt "选择图片文件")'
-    elif mode == "save":
-        script = 'POSIX path of (choose file name with prompt "导出为…")'
-    else:
-        script = 'POSIX path of (choose folder with prompt "选择文件夹")'
+    if mode not in {"dir", "file", "save"}:
+        return jsonify(ok=False, err="无效的选择类型"), 400
     try:
-        r = subprocess.run(["osascript", "-e", script],
-                           capture_output=True, text=True, timeout=300)
-        p = (r.stdout or "").strip()
-        if r.returncode != 0 or not p:
-            return jsonify(ok=False, err="已取消")
+        p = platform_support.pick_path(mode)
+        if not p:
+            return jsonify(ok=False, cancelled=True, err="已取消")
         return jsonify(ok=True, path=p)
-    except subprocess.TimeoutExpired:
-        return jsonify(ok=False, err="选择超时"), 408
-    except Exception as e:
-        return jsonify(ok=False, err=str(e)), 500
+    except platform_support.DialogError as e:
+        return jsonify(ok=False, err=str(e)), 503
 
 
 @app.route("/api/settings", methods=["GET", "POST"])
@@ -540,7 +531,7 @@ def api_export():
     try:
         if not out:
             out = os.path.splitext(src)[0] + "_pos." + ext
-        elif out.endswith("/") or os.path.isdir(out):
+        elif out.endswith((os.sep, "/")) or os.path.isdir(out):
             # 传目录（或以 / 结尾）时：自动建目录，文件名用 源名_pos.扩展名
             os.makedirs(out, exist_ok=True)
             out = os.path.join(out, base)
@@ -2172,11 +2163,11 @@ function fillFiles(files,edited){
     const cb=document.createElement("input"); cb.type="checkbox"; cb.className="fck";
     cb.onclick=e=>e.stopPropagation();
     const dot=document.createElement("span"); dot.className="editdot"; dot.title="已调整（有 XML 参数）";
-    const sp=document.createElement("span"); sp.textContent=f.split("/").pop(); sp.title=f;
+    const sp=document.createElement("span"); sp.textContent=LocalPaths.basename(f); sp.title=f;
     el.appendChild(cb); el.appendChild(dot); el.appendChild(sp);
     el.onclick=()=>loadFile(f);
     box.appendChild(el);
-    const op=document.createElement("option"); op.value=f; op.textContent=(ed.has(f)?"● ":"")+f.split("/").pop(); sel.appendChild(op);
+    const op=document.createElement("option"); op.value=f; op.textContent=(ed.has(f)?"● ":"")+LocalPaths.basename(f); sel.appendChild(op);
   });
   applyFilter(); updateNavButtons();
 }
@@ -2216,7 +2207,7 @@ function listFiles(dir){
 $("filter").addEventListener("input",applyFilter);
 $("refresh").onclick=()=>listFiles($("dir").value.trim());
 
-// ---- macOS 原生选择框（服务端 osascript 弹窗）----
+// ---- 桌面系统原生选择框 ----
 function pick(mode,cb){
   stat("等待系统选择框…（可能弹在浏览器窗口后面）");
   fetch("/api/pick?mode="+mode).then(r=>r.json()).then(d=>{
@@ -2239,7 +2230,7 @@ $("dir").addEventListener("keydown",e=>{ if(e.key!=="Enter")return;
 
 // ---- 载入 + 每张图参数记忆 ----
 function loadFile(path){
-  stat("解码中… "+path.split("/").pop());
+  stat("解码中… "+LocalPaths.basename(path));
   fetch("/api/load",{method:"POST",headers:HJ,
     body:JSON.stringify({path,raw_denoise:P.raw_denoise})}).then(r=>r.json()).then(d=>{
       if(!d.ok){stat("✗ "+d.err);return;}
@@ -2434,13 +2425,13 @@ $("batch").onclick=async()=>{
         body:JSON.stringify({path:f})})).json();
       if(!ld.ok) throw new Error(ld.err||"载入失败");
       // 输出目录：留空 = 各源文件同目录/去色罩输出/（服务端自动建目录）
-      const out=outdir? outdir.replace(/\/?$/,"/") : f.replace(/\/[^/]*$/,"/")+"去色罩输出/";
+      const out=LocalPaths.exportDirectory(f,outdir);
       const body=Object.assign({},params,{crop_rect:rect,out:out},exportOpts());
       const ex=await(await fetch("/api/export",{method:"POST",headers:HJ,
         body:JSON.stringify(body)})).json();
       if(!ex.ok) throw new Error(ex.err||"导出失败");
-      okc++; blog("✓ "+f.split("/").pop()+" → "+ex.out);
-    }catch(err){ blog("✗ "+f.split("/").pop()+"："+err.message); }
+      okc++; blog("✓ "+LocalPaths.basename(f)+" → "+ex.out);
+    }catch(err){ blog("✗ "+LocalPaths.basename(f)+"："+err.message); }
     done++; bar.firstElementChild.style.width=(done/items.length*100)+"%";
     stat("批量导出 "+done+"/"+items.length+"…");
   }
@@ -2484,27 +2475,13 @@ app.register_blueprint(create_sheet_blueprint(make_opts, _xml_to_data, settings_
 _header = app.jinja_env.get_template("shell_header.html").render(active="tune")
 INDEX_HTML = INDEX_HTML.replace('<body>', '<body class="tune-mode">' + _header)
 INDEX_HTML = INDEX_HTML.replace('</head>', '<link rel="stylesheet" href="/static/workbench.css">'
-                               '<script src="/static/theme.js"></script></head>')
+                               '<script src="/static/theme.js"></script>'
+                               '<script src="/static/local_paths.js"></script></head>')
 INDEX_HTML = INDEX_HTML.replace('</body>', '<script src="/static/legacy_bridge.js"></script></body>')
 INDEX_HTML = INDEX_HTML.replace('<title>胶片去色罩 · 可视化</title>',
                                '<title>调片 · NegativeMaster</title>')
 INDEX_HTML = INDEX_HTML.replace('<h1>胶片去色罩 · 可视化', '<h1>调片设置')
 
-
-
-def daemonize(logpath):
-    """双 fork + setsid，彻底脱离控制终端与进程组，成为独立后台进程。"""
-    if os.fork() > 0:
-        os._exit(0)          # 父进程立即退出，命令即刻返回
-    os.setsid()              # 新会话，脱离原进程组
-    if os.fork() > 0:
-        os._exit(0)          # 再 fork，确保不是会话首进程
-    sys.stdout.flush(); sys.stderr.flush()
-    with open(os.devnull, "r") as nul:
-        os.dup2(nul.fileno(), 0)
-    lf = open(logpath, "a", buffering=1)
-    os.dup2(lf.fileno(), 1)
-    os.dup2(lf.fileno(), 2)
 
 
 def main():
@@ -2515,8 +2492,16 @@ def main():
                     help="监听端口，默认 8765")
     ap.add_argument("--daemon", action="store_true",
                     help="转入后台运行（日志写到 gui.log）")
+    browser = ap.add_mutually_exclusive_group()
+    browser.add_argument("--open-browser", action="store_true", help="启动后打开默认浏览器")
+    browser.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
     a = ap.parse_args()
-    dirs = [os.path.abspath(d) for d in a.dirs if os.path.isdir(d)]
+    if not 1 <= a.port <= 65535:
+        ap.error("端口须在 1 至 65535 之间")
+    invalid_dirs = [d for d in a.dirs if not os.path.isdir(os.path.expanduser(d))]
+    if invalid_dirs:
+        ap.error("找不到起始目录：" + ", ".join(invalid_dirs))
+    dirs = [os.path.abspath(os.path.expanduser(d)) for d in a.dirs]
     if dirs:
         START_DIRS = dirs
     else:
@@ -2524,10 +2509,16 @@ def main():
                 os.path.expanduser("~/Pictures")]
         START_DIRS = [c for c in cand if os.path.isdir(c)]
     if a.daemon:
-        daemonize(os.path.join(os.path.dirname(os.path.abspath(__file__)), "gui.log"))
+        logpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gui.log")
+        arguments = [arg for arg in sys.argv[1:] if arg != "--daemon"]
+        try:
+            pid = platform_support.launch_background(__file__, arguments, logpath)
+        except (OSError, RuntimeError) as exc:
+            ap.exit(1, str(exc) + "\n")
+        print(f"后台进程 PID: {pid}；日志: {logpath}")
+        return
     print("起始目录:", START_DIRS)
-    print(f"在浏览器打开: http://127.0.0.1:{a.port}")
-    app.run(host="127.0.0.1", port=a.port, debug=False, threaded=True)
+    platform_support.serve(app, a.port, open_browser=a.open_browser)
 
 
 if __name__ == "__main__":

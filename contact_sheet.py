@@ -11,6 +11,7 @@ from copy import deepcopy
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from math import ceil, cos, isfinite, radians, sin
+import os
 from pathlib import Path
 from typing import Any
 
@@ -201,13 +202,16 @@ def _font(style: str, size: int, text: str = "") -> ImageFont.FreeTypeFont:
     size = max(1, int(size))
     # Use the OS's licensed CJK font for multilingual headers without bundling it.
     if any(ord(ch) > 255 for ch in text):
+        windows_fonts = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
         candidates = [
+            str(windows_fonts / "msyh.ttc"),
+            str(windows_fonts / "msjh.ttc"),
+            str(windows_fonts / "simsun.ttc"),
             "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
             "/System/Library/Fonts/PingFang.ttc",
             "/System/Library/Fonts/STHeiti Medium.ttc",
             "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
             "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-            "C:/Windows/Fonts/msyh.ttc",
         ]
     else:
         candidates = []

@@ -8,7 +8,7 @@ web
 
 ## Users
 
-The owner photographs film negatives, adjusts individual frames, and exports photographs and full-roll contact sheets locally on macOS.
+The owner photographs film negatives, adjusts individual frames, and exports photographs and full-roll contact sheets locally on Windows, macOS or Linux. The SwiftUI front end remains macOS-only.
 
 ## Product Purpose
 
