@@ -430,9 +430,9 @@ class SheetApiTests(unittest.TestCase):
         override = dict(rotation=90, label="23", crop=dict(x=.4, y=.6, scale=1.4))
         exported = self.client.post("/api/sheet/project/export", json=dict(
             job=identifier, order=[0], stockId="test", config=dict(width=1200,
-            columns=3, background=dict(mode="blur", sourceIndex="custom"),
+            columns=3, background=dict(mode="blur", sourceIndex="custom",opacity=.4),
             header=dict(roll="2401",showStock=True,infoScale=1.2),
-            strip=dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="leak",leaderStrength=.6),
+            strip=dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="radial",leaderStrength=.6,separation="lift",separationStrength=.8),
             frameOverrides=[override])))
         self.assertEqual(exported.status_code, 200, exported.json)
         self.assertEqual(exported.mimetype, "application/zip")
@@ -460,7 +460,8 @@ class SheetApiTests(unittest.TestCase):
         self.assertEqual(project["version"], 1)
         self.assertEqual(project["config"]["header"]["roll"], "2401")
         self.assertEqual(project["config"]["header"]["infoScale"], 1.2)
-        for key,value in dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="leak",leaderStrength=.6).items():
+        self.assertEqual(project["config"]["background"]["opacity"], .4)
+        for key,value in dict(fontStyle="citaro",leaderMode="manual",leaderCount=4,leaderStyle="radial",leaderStrength=.6,separation="lift",separationStrength=.8).items():
             self.assertEqual(project["config"]["strip"][key], value)
         self.assertEqual(project["frameOptions"][project["sources"][0]], override)
         self.assertTrue(Path(project["sources"][0]).is_file())

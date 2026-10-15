@@ -135,7 +135,7 @@ class ContactSheetTests(unittest.TestCase):
         cfg=dict(self.config,strip={"leader":True,"leaderMode":"manual","leaderCount":1,
                                   "leaderShape":"straight","padding":0})
         l=sheet.sheet_layout(1,cfg)
-        for style in ("dark","clear","leak","burn"):
+        for style in ("dark","clear","leak","burn","radial"):
             cfg["strip"]["leaderStyle"]=style
             out=sheet.render_sheet([self.landscape],cfg)
             self.assertEqual(out.tobytes(),sheet.render_sheet([self.landscape],cfg).tobytes())
@@ -144,7 +144,44 @@ class ContactSheetTests(unittest.TestCase):
             hole=(l.margin+round(l.cell_width/16),l.top+round(l.band*.45+l.cell_width*2.79/38/2))
             self.assertEqual(out.getpixel(hole)[3],0)
             outputs.append(out.tobytes())
-        self.assertEqual(len(set(outputs)),4)
+        self.assertEqual(len(set(outputs)),5)
+
+    def test_continuous_leader_has_no_frame_gaps_and_fades_towards_photos(self):
+        import numpy as np
+        for style in ("leak","burn","radial"):
+            cfg=dict(self.config,strip={"leader":True,"leaderMode":"manual","leaderCount":3,
+                                      "leaderShape":"straight","leaderStyle":style,"leaderStrength":1})
+            l=sheet.sheet_layout(1,cfg)
+            out=sheet.render_sheet([self.landscape],cfg)
+            boundary=l.margin+round(l.cell_width)
+            y=l.top+l.band+l.aperture_height//2
+            pixels=np.asarray(out).astype(int)
+            self.assertLess(abs(pixels[y,boundary-1,:3]-pixels[y,boundary+1,:3]).max(),8)
+            self.assertGreater(pixels[y,boundary,0],15)
+            field=sheet._leader_field((1200,100),0,1,6,sheet.normalize_config(cfg)["strip"])
+            array=np.asarray(field).astype(int)
+            self.assertGreater(array[:,:100].mean(),array[:,-100:].mean()+30)
+            self.assertLess(abs(array[:,-1,:]-8).max(),4)
+
+    def test_background_opacity_only_changes_background_and_export_retains_alpha(self):
+        for mode in ("solid","gradient","blur"):
+            cfg=dict(self.config,background={"mode":mode,"opacity":.5})
+            l=sheet.sheet_layout(1,cfg);out=sheet.render_sheet([self.landscape],cfg)
+            self.assertEqual(out.getpixel((0,0))[3],128)
+            self.assertEqual(out.getpixel((l.margin+round(l.cell_width/2),l.top+l.band+l.aperture_height//2))[3],255)
+
+    def test_strip_separation_stays_outside_photos_and_sprockets(self):
+        outputs=[]
+        for effect in ("none","shadow","outline","lift","paper"):
+            cfg=dict(self.config,strip={"leader":False,"padding":0,"separation":effect})
+            l=sheet.sheet_layout(1,cfg);out=sheet.render_sheet([self.landscape],cfg)
+            hole=(l.margin+round(l.cell_width/16),l.top+round(l.band*.45+l.cell_width*2.79/38/2))
+            self.assertEqual(out.getpixel(hole)[3],0)
+            self.assertEqual(out.getpixel((l.margin+round(l.cell_width/2),l.top+l.band+l.aperture_height//2)),(217,83,41,255))
+            outputs.append(out.tobytes())
+        self.assertEqual(len(set(outputs)),5)
+        # Decorations clip safely against a zero-margin canvas.
+        sheet.render_sheet([self.landscape],dict(cfg,margin=0))
 
     def test_new_lettering_styles_have_distinct_real_samples(self):
         samples=[]
@@ -158,7 +195,8 @@ class ContactSheetTests(unittest.TestCase):
     def test_leader_and_header_controls_reject_invalid_values(self):
         for config in ({"strip":{"leaderCount":25}}, {"strip":{"leaderMode":"invalid"}},
                        {"strip":{"leaderStyle":"invalid"}}, {"strip":{"leaderStrength":2}},
-                       {"header":{"infoScale":float("nan")}}):
+                       {"header":{"infoScale":float("nan")}}, {"background":{"opacity":2}},
+                       {"strip":{"separation":"invalid"}}, {"strip":{"separationStrength":-1}}):
             with self.assertRaises(ValueError): sheet.normalize_config(config)
 
     def test_invalid_inputs_and_oversized_canvas_fail_before_render(self):

@@ -22,13 +22,14 @@ FONT_DIR = Path(__file__).resolve().parent / "static" / "fonts"
 DEFAULT_CONFIG = {
     "width": 2400, "columns": 6, "ratio": "3:2", "spacing": 28, "margin": 90,
     "background": {"mode": "blur", "color": "#e8e5dc", "color2": "#1b2f34", "angle": 45,
-                   "blur": 30, "brightness": .7, "sourceIndex": 0},
+                   "blur": 30, "brightness": .7, "sourceIndex": 0, "opacity": 1},
     "strip": {"color": "#080808", "opacity": 1, "sprockets": True, "edgeText": None,
               "secondaryText": None, "edgeColor": None, "fontStyle": "auto", "leader": True,
               "startNumber": 1, "reverseNumbers": False, "frameGap": 12, "padding": 8,
               "showNumbers": True, "showHalfNumbers": True, "fit": "contain",
               "edgeScale": 1, "edgeTracking": 0, "leaderMode": "auto", "leaderCount": 3,
-              "leaderStyle": "dark", "leaderStrength": .75, "leaderShape": "cut"},
+              "leaderStyle": "dark", "leaderStrength": .75, "leaderShape": "cut",
+              "separation": "none", "separationStrength": .65},
     "header": {"enabled": True, "title": "", "roll": "", "camera": "", "lens": "",
                "date": "", "process": "", "notes": "", "color": "#ffffff",
                "textColor": "#171717", "height": 180, "showStock": True, "infoScale": 1},
@@ -78,6 +79,8 @@ def normalize_config(config: dict | None) -> dict:
     if bg["mode"] not in ("blur", "solid", "gradient", "transparent"):
         raise ValueError("背景模式无效")
     bg["blur"] = _number(bg["blur"], "背景模糊", 0, 200)
+    bg["opacity"] = _number(bg["opacity"], "背景不透明度", 0, 1)
+    strip["separationStrength"] = _number(strip["separationStrength"], "片条分离强度", 0, 1)
     bg["brightness"] = _number(bg["brightness"], "背景亮度", 0, 2)
     bg["angle"] = _number(bg["angle"], "渐变角度", -360, 360)
     strip["opacity"] = _number(strip["opacity"], "胶片不透明度", 0, 1)
@@ -91,7 +94,8 @@ def normalize_config(config: dict | None) -> dict:
     strip["leaderStrength"] = _number(strip["leaderStrength"], "片头曝光强度", 0, 1)
     header["infoScale"] = _number(header["infoScale"], "信息字号", .8, 1.4)
     for key, choices in (("leaderMode", ("auto", "manual")),
-                         ("leaderStyle", ("dark", "clear", "leak", "burn")),
+                         ("leaderStyle", ("dark", "clear", "leak", "burn", "radial")),
+                         ("separation", ("none", "shadow", "outline", "lift", "paper")),
                          ("leaderShape", ("cut", "straight"))):
         if strip[key] not in choices:
             raise ValueError("片头设置无效")
@@ -492,33 +496,83 @@ def _clip_leader(row: Image.Image, cell_width: float) -> None:
     row.putalpha(alpha)
 
 
-def _leader_panel(size: tuple[int, int], index: int, total: int, strip: dict) -> Image.Image:
-    """Deterministic simulated exposure; bounded working raster keeps exports cheap."""
+def _leader_field(size: tuple[int, int], start: float, end: float,
+                  aspect: float, strip: dict) -> Image.Image:
+    """One continuous exposure field along the entire leader, including its bands.
+
+    start/end are positions along the roll, independent of rows and frame gaps.
+    All exposure styles decay to the chosen film color at the photo boundary.
+    """
     import numpy as np
     style, strength = strip["leaderStyle"], strip["leaderStrength"]
-    alpha = round(255 * strip["opacity"])
+    base = np.asarray(_color(strip["color"])[:3], dtype=np.float32)
     if style in ("dark", "clear"):
-        color = (13, 12, 10) if style == "dark" else (224, 216, 194)
-        return Image.new("RGBA", size, (*color, alpha))
-    w, h = min(size[0], 480), min(size[1], 320)
+        return Image.new("RGB", size, tuple(int(v) for v in base) if style == "dark" else (224,216,194))
+    w, h = min(size[0], 1600), min(size[1], 320)
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
-    xx /= max(1, w - 1); yy /= max(1, h - 1)
-    progress = (index + xx) / max(1, total)
-    # A nonuniform soft exposure front, fading as film travels into the cassette.
-    front = .32 + .06*np.sin(yy*7 + index*.8)
-    broad = np.exp(-((progress-front)/.34)**2)
-    edge = np.exp(-((yy-(.18+.07*np.sin(xx*5+index)))/.22)**2)
-    heat = np.clip((broad*.85 + edge*.3) * strength, 0, 1)
-    if style == "burn":
-        heat = np.clip((1-progress*.82 + edge*.25) * strength * 1.45, 0, 1)
-    colors = np.array([[12, 9, 8], [91, 20, 11], [205, 56, 16], [251, 153, 55], [255, 243, 207]], dtype=np.float32)
-    pos = heat*4; low = np.minimum(pos.astype(int), 3); mix = (pos-low)[...,None]
-    rgb = colors[low]*(1-mix)+colors[low+1]*mix
-    # Fixed seed: preview, export, undo and reopening retain the same exposure.
-    noise = np.random.default_rng(135+index).normal(0, 1.1, (h,w,1))
-    rgba = np.empty((h,w,4), dtype=np.uint8)
-    rgba[:,:,:3] = np.clip(rgb+noise, 0, 255).astype(np.uint8); rgba[:,:,3] = alpha
-    return Image.fromarray(rgba).resize(size, Image.Resampling.BICUBIC)
+    p = start + (xx+.5)/w * (end-start)
+    yy = (yy+.5)/h
+    fade = np.maximum(0,1-p)**2.1
+    if style == "radial":
+        # Two off-film sources: soft fans enter from the upper and lower edge.
+        # Angular lobes are smooth light rays, not a row of repeated gradients.
+        x = p*aspect
+        def fan(origin, distance, phase):
+            dx=x-origin
+            angle=np.arctan2(dx,distance)
+            rays=np.maximum(0,np.cos(angle*11+phase))**3
+            spread=np.exp(-np.sqrt(dx*dx+distance*distance)/1.45)
+            return spread*(.60+.40*rays)
+        top=fan(aspect*.055,yy+.16,.3)
+        bottom=fan(aspect*.14,1.16-yy,1.2)
+        heat=np.clip((top+bottom)*fade*strength*1.5,0,1)
+    elif style == "burn":
+        heat=np.clip((1.55+.14*np.cos(yy*5))*fade**.8*strength,0,1)
+    else:
+        edge=np.exp(-((yy-.18)/.34)**2)
+        heat=np.clip((1.05+.33*edge)*fade*strength,0,1)
+    colors=np.array([base,[91,20,11],[205,56,16],[251,153,55],[255,243,207]],dtype=np.float32)
+    pos=heat*4; low=np.minimum(pos.astype(int),3); mix=(pos-low)[...,None]
+    rgb=colors[low]*(1-mix)+colors[low+1]*mix
+    # Coordinate-based grain stays continuous across cells, rows and reopenings.
+    grain=(np.sin(p*1931+yy*427)*np.sin(p*827-yy*967)*heat)[...,None]
+    return Image.fromarray(np.clip(rgb+grain,0,255).astype("uint8")).resize(size,Image.Resampling.BICUBIC)
+
+
+def _place_strip(canvas: Image.Image, row: Image.Image, xy: tuple[int,int],
+                 layout: SheetLayout, strip: dict, cut_leader: bool) -> None:
+    effect, strength=strip["separation"],strip["separationStrength"]
+    if effect == "none" or strength == 0:
+        canvas.alpha_composite(row,xy)
+        return
+    # Build an outer silhouette: the decoration must never paint inside holes.
+    # Work at <= 1600 px for predictable preview and large-export costs.
+    ratio=min(1,1600/row.width)
+    work=(max(1,round(row.width*ratio)),max(1,round(row.height*ratio)))
+    silhouette=Image.new("RGBA",work,(255,255,255,255))
+    if cut_leader: _clip_leader(silhouette,layout.cell_width*ratio)
+    scale=layout.scale*ratio
+    pad=max(4,ceil(20*scale))
+    mask=Image.new("L",(work[0]+2*pad,work[1]+2*pad),0)
+    mask.paste(silhouette.getchannel("A"),(pad,pad))
+    decor=Image.new("RGBA",mask.size,(0,0,0,0))
+    if effect in ("shadow","lift","paper"):
+        shifted=Image.new("L",mask.size,0)
+        shifted.paste(mask,(0,max(1,round(4*scale))))
+        shadow=shifted.filter(ImageFilter.GaussianBlur(max(.7,5*scale)))
+        shadow=ImageChops.subtract(shadow,mask).point(lambda v:round(v*.72*strength))
+        dark=Image.new("RGBA",mask.size,(0,0,0,0));dark.putalpha(shadow)
+        decor.alpha_composite(dark)
+    if effect in ("outline","lift","paper"):
+        radius=max(1,round((6 if effect == "paper" else 1.5)*scale))
+        border=ImageChops.subtract(mask.filter(ImageFilter.MaxFilter(2*radius+1)),mask)
+        border=border.point(lambda v:round(v*strength))
+        light=Image.new("RGBA",mask.size,(247,241,226,0));light.putalpha(border)
+        decor.alpha_composite(light)
+    full_pad=max(1,round(pad/ratio))
+    if ratio < 1: decor=decor.resize((row.width+2*full_pad,row.height+2*full_pad),Image.Resampling.BICUBIC)
+    canvas.alpha_composite(decor,(xy[0]-full_pad,xy[1]-full_pad))
+    canvas.alpha_composite(row,xy)
 
 
 def _edge_labels(row: Image.Image, layout: SheetLayout, c: dict, stock: dict,
@@ -622,6 +676,9 @@ def render_sheet(images: list[Image.Image], config: dict | None = None,
     stock = stock if isinstance(stock,dict) else {}
     layout = sheet_layout(len(images),c)
     canvas = _background(images,c,(layout.width,layout.height))
+    if c["background"]["opacity"] < 1:
+        opacity=c["background"]["opacity"]
+        canvas.putalpha(canvas.getchannel("A").point(lambda v:round(v*opacity)))
     _header(canvas,layout,c,stock)
     total = layout.leader_count + len(images)
     for row_index, first in enumerate(range(0, total, layout.columns)):
@@ -629,21 +686,26 @@ def render_sheet(images: list[Image.Image], config: dict | None = None,
         indices = [slot - layout.leader_count for slot in slots]
         cut_leader = row_index == 0 and layout.leader and c["strip"]["leaderShape"] == "cut"
         row = _film_layer(layout,c,len(slots),cut_leader)
-        for col, (slot,index) in enumerate(zip(slots,indices)):
-            if index < 0:
-                photo = _leader_panel((layout.aperture_width,layout.aperture_height), slot,
-                                      layout.leader_count, c["strip"])
-            else:
-                override=c["frameOverrides"][index] if index<len(c["frameOverrides"]) else {}
-                fit="contain" if c["ratio"]=="original" else c["strip"]["fit"]
-                photo=_cover(images[index],(layout.aperture_width,layout.aperture_height),override,fit,
-                             round(c["strip"]["padding"]*layout.scale))
+        leader_cells=max(0,min(len(slots),layout.leader_count-first))
+        if leader_cells:
+            leader_width=round(leader_cells*layout.cell_width)
+            field=_leader_field((leader_width,layout.strip_height),first/layout.leader_count,
+                                (first+leader_cells)/layout.leader_count,
+                                layout.leader_count*layout.cell_width/layout.strip_height,c["strip"]).convert("RGBA")
+            field.putalpha(row.getchannel("A").crop((0,0,leader_width,layout.strip_height)))
+            row.paste(field,(0,0))
+        for col,index in enumerate(indices):
+            if index < 0: continue
+            override=c["frameOverrides"][index] if index<len(c["frameOverrides"]) else {}
+            fit="contain" if c["ratio"]=="original" else c["strip"]["fit"]
+            photo=_cover(images[index],(layout.aperture_width,layout.aperture_height),override,fit,
+                         round(c["strip"]["padding"]*layout.scale))
             px=round(col*layout.cell_width+layout.gap/2)
             row.alpha_composite(photo,(px,layout.band))
         _edge_labels(row,layout,c,stock,indices,len(images))
         if cut_leader:
             _clip_leader(row, layout.cell_width)
-        canvas.alpha_composite(row,(layout.margin,layout.row_y(row_index)))
+        _place_strip(canvas,row,(layout.margin,layout.row_y(row_index)),layout,c["strip"],cut_leader)
     watermark=c.get("watermark")
     if isinstance(watermark,dict):
         watermark=watermark.get("text","")

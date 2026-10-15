@@ -117,3 +117,10 @@ test('portrait frames default sideways while explicit zero and other rotations w
   assert.equal(frameRotation(400,600,{rotation:0}),0);
   assert.equal(frameRotation(400,600,{rotation:270}),270);
 });
+
+test('hex entry normalizes shorthand and rejects incomplete or non-color text', () => {
+  const {normalizeHex}=require('../static/sheet_model.js');
+  assert.equal(normalizeHex(' #AbC '),'#aabbcc');
+  assert.equal(normalizeHex('E8E1D3'),'#e8e1d3');
+  for(const invalid of ['#','12','abcde','red','#ffxx00','url(x)'])assert.equal(normalizeHex(invalid),null);
+});

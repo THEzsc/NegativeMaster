@@ -1,6 +1,6 @@
 'use strict';
 const $=id=>document.getElementById(id), clone=o=>JSON.parse(JSON.stringify(o));
-const defaults={width:4800,columns:6,ratio:'3:2',spacing:38,margin:90,background:{mode:'blur',color:'#d7d2c6',color2:'#65776d',angle:60,blur:34,brightness:.75,sourceIndex:0},strip:{color:'#080808',opacity:1,sprockets:true,edgeText:'',secondaryText:'',edgeColor:'#dda850',fontStyle:'auto',edgeScale:1,edgeTracking:0,leader:true,leaderMode:'auto',leaderCount:3,leaderStyle:'dark',leaderStrength:.75,leaderShape:'cut',startNumber:1,reverseNumbers:false,frameGap:12,padding:8,showNumbers:true,showHalfNumbers:true,fit:'contain'},header:{enabled:true,title:'',roll:'',camera:'',lens:'',date:'',process:'',notes:'',color:'#fffdfa',textColor:'#191a1b',height:180,showStock:true,infoScale:1},frameOverrides:[]};
+const defaults={width:4800,columns:6,ratio:'3:2',spacing:38,margin:90,background:{mode:'blur',color:'#d7d2c6',color2:'#65776d',angle:60,blur:34,brightness:.75,sourceIndex:0,opacity:1},strip:{color:'#080808',opacity:1,sprockets:true,edgeText:'',secondaryText:'',edgeColor:'#dda850',fontStyle:'auto',edgeScale:1,edgeTracking:0,leader:true,leaderMode:'auto',leaderCount:3,leaderStyle:'dark',leaderStrength:.75,leaderShape:'cut',separation:'none',separationStrength:.65,startNumber:1,reverseNumbers:false,frameGap:12,padding:8,showNumbers:true,showHalfNumbers:true,fit:'contain'},header:{enabled:true,title:'',roll:'',camera:'',lens:'',date:'',process:'',notes:'',color:'#fffdfa',textColor:'#191a1b',height:180,showStock:true,infoScale:1},frameOverrides:[]};
 const state={config:clone(defaults),stocks:[],stockId:'',job:null,items:[],order:[],frames:{},active:null,directory:'',label:'',zoom:1,previewUrl:null,history:[],future:[],preparing:false,exporting:false,prepareSeq:0,previewSeq:0,controller:null,lastCommitted:null,projectPending:null,view:"sheet",previewBusy:false,previewWanted:false};
 function status(message,error=false){$('sheet-status').textContent=message;$('sheet-statusbar').classList.toggle('error',error);}
 function get(obj,path){return path.split('.').reduce((v,k)=>v?.[k],obj);}
@@ -29,15 +29,15 @@ function stockInfo(){const s=stock();$('stock-summary').textContent=s.name?`${s.
 function applyStock(id){const previous=stock();const s=state.stocks.find(s=>s.id===id);if(!s)return;state.stockId=id;state.config.strip.edgeText=s.edge_text||s.name.toUpperCase();state.config.strip.secondaryText=s.edge_secondary||'';state.config.strip.edgeColor=s.edge_color||'#dda850';state.config.strip.fontStyle='auto';if(!state.config.header.title||state.config.header.title===previous.name)state.config.header.title=s.name;if(!state.config.header.process||state.config.header.process===previous.process)state.config.header.process=s.process;stockInfo();}
 function syncControls(){
   for(const el of document.querySelectorAll('[data-config]')){const v=get(state.config,el.dataset.config);if(el.type==='checkbox')el.checked=!!v;else if(document.activeElement!==el)el.value=v??'';}
-  for(const out of document.querySelectorAll('[data-output]')){const v=get(state.config,out.dataset.output);out.textContent=typeof v==='number'?(Number.isInteger(v)?String(v):v.toFixed(2)):String(v??'');out.className='value';}
-  stockOptions($('stock-search').value);stockInfo();syncBackground();syncLeader();syncLettering();syncFrameControls();updateUndo();window.SheetUI?.syncRanges();window.SheetFrame?.draw();
+  for(const out of document.querySelectorAll('[data-output]')){const v=get(state.config,out.dataset.output);out.textContent=out.dataset.format==='percent'?`${Math.round(v*100)}%`:typeof v==='number'?(Number.isInteger(v)?String(v):v.toFixed(2)):String(v??'');out.className='value';}
+  stockOptions($('stock-search').value);stockInfo();syncBackground();syncLeader();syncLettering();syncFrameControls();updateUndo();window.SheetUI?.syncRanges();window.SheetColors?.sync();window.SheetFrame?.draw();
 }
 function syncLeader(){
   const strip=state.config.strip,count=state.order.length,columns=state.config.columns;
   const blanks=strip.leader?(strip.leaderMode==='auto'?(count?((columns-count%columns)%columns||columns):0):strip.leaderCount):0;
   $('leader-settings').hidden=!strip.leader;
   $('leader-count-field').hidden=strip.leaderMode!=='manual';
-  $('leader-strength-field').hidden=!['leak','burn'].includes(strip.leaderStyle);
+  $('leader-strength-field').hidden=!['leak','burn','radial'].includes(strip.leaderStyle);
   const total=count+blanks,last=total%columns||columns;
   $('leader-summary').textContent=count?`${blanks} 格片头 + ${count} 张照片 · ${Math.ceil(total/columns)} 行 · ${last===columns?'末行已满':`末行 ${last} / ${columns} 格`}`:'载入照片后自动计算格数';
 }
@@ -48,7 +48,7 @@ function syncLettering(){
   if(img.dataset.signature!==signature){img.dataset.signature=signature;img.src=`/api/sheet/lettering?style=${encodeURIComponent(style)}&text=${encodeURIComponent(text)}&color=${encodeURIComponent(color)}`;}
   $('lettering-caption').textContent=style.startsWith('citaro')?'Citaro Voor · Jeffrey Visser / CC BY-SA 3.0':style.startsWith('film-')?'自绘胶片字样 · 曝光印字的近似模拟':'实际导出字形 · 放大查看';
 }
-function syncBackground(){const mode=state.config.background.mode;for(const el of document.querySelectorAll('[data-bg]'))el.hidden=!el.dataset.bg.split(' ').includes(mode);$('preview-wrap').classList.toggle('transparent',mode==='transparent');}
+function syncBackground(){const mode=state.config.background.mode;for(const el of document.querySelectorAll('[data-bg]'))el.hidden=!el.dataset.bg.split(' ').includes(mode);$('preview-wrap').classList.toggle('transparent',mode==='transparent'||state.config.background.opacity<1);$('separation-strength-field').hidden=state.config.strip.separation==='none';}
 function syncBackgroundOptions(){const sel=$('background-source');sel.replaceChildren();for(const id of state.order){const item=state.items.find(i=>i.id===id);if(!item)continue;const o=document.createElement('option');o.value=String(id);o.textContent=item.name;sel.append(o);}const custom=document.createElement('option');custom.value='custom';custom.textContent='自定义背景照片';custom.disabled=!state.hasBackground;sel.append(custom);if(state.config.background.sourceIndex!=='custom'&&!state.order.includes(Number(state.config.background.sourceIndex)))state.config.background.sourceIndex=state.order[0]??0;sel.value=String(state.config.background.sourceIndex);}
 function renderFrames(){
   const list=$('frame-list'),scroll=list.scrollTop,focused=document.activeElement?.closest('.frame-item');
@@ -219,13 +219,23 @@ async function uploadPhotos(files){
   try{const form=new FormData();for(const file of files)form.append('files',file);const d=await jsonRequest('/api/sheet/upload',{method:'POST',body:form});if(sequence===state.prepareSeq)await awaitJob(d.job,sequence,null);}
   catch(e){failPrepare(sequence,e);}
 }
-async function exportSheet(){if(state.exporting||state.preparing||!state.order.length)return;state.exporting=true;$('export-sheet').disabled=true;const label=$('export-sheet').firstChild;label.textContent='正在导出…';try{const body=payload();body.format=$('export-format').value;body.out=$('export-out').value.trim();if(body.config.background.mode==='transparent'&&body.format==='jpg')status('JPEG 将透明区域合成白色背景');const d=await post('/api/sheet/export',body);for(;;){const r=await jsonRequest(`/api/sheet/export/${d.export}`);status(r.message||'正在生成高清整卷图片…');if(r.state==='failed')throw new Error(r.error||r.err||'导出失败');if(r.state==='ready'){status(`已保存：${r.out}`);$('last-export').hidden=false;$('last-export-path').textContent=r.out;$('download-last-export').href=`/api/sheet/download/${d.export}`;$('download-last-export').download='';const a=document.createElement('a');a.href=`/api/sheet/download/${d.export}`;a.download='';document.body.append(a);a.click();a.remove();break;}await new Promise(resolve=>setTimeout(resolve,500));}}catch(e){status(e.message,true);}finally{state.exporting=false;label.textContent='导出整卷图片';renderFrames();}}
+async function exportSheet(){if(state.exporting||state.preparing||!state.order.length)return;state.exporting=true;$('export-sheet').disabled=true;const label=$('export-sheet').firstChild;label.textContent='正在导出…';try{const body=payload();body.format=$('export-format').value;body.out=$('export-out').value.trim();if((body.config.background.mode==='transparent'||body.config.background.opacity<1)&&body.format==='jpg')status('JPEG 将透明区域合成白色背景');const d=await post('/api/sheet/export',body);for(;;){const r=await jsonRequest(`/api/sheet/export/${d.export}`);status(r.message||'正在生成高清整卷图片…');if(r.state==='failed')throw new Error(r.error||r.err||'导出失败');if(r.state==='ready'){status(`已保存：${r.out}`);$('last-export').hidden=false;$('last-export-path').textContent=r.out;$('download-last-export').href=`/api/sheet/download/${d.export}`;$('download-last-export').download='';const a=document.createElement('a');a.href=`/api/sheet/download/${d.export}`;a.download='';document.body.append(a);a.click();a.remove();break;}await new Promise(resolve=>setTimeout(resolve,500));}}catch(e){status(e.message,true);}finally{state.exporting=false;label.textContent='导出整卷图片';renderFrames();}}
 function downloadObject(obj,filename){const url=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function savedPresets(){try{return JSON.parse(localStorage.getItem('nm.sheet.presets')||'{}');}catch(e){return {};}}
 function presetOptions(){const select=$('saved-preset');select.replaceChildren();const first=document.createElement('option');first.value='';first.textContent='选择版式';select.append(first);for(const name of Object.keys(savedPresets())){const o=document.createElement('option');o.value=name;o.textContent=name;select.append(o);}}
 for(const el of document.querySelectorAll('[data-config]')){
   const handler=e=>{
-    if(el.type==='number'&&(el.value.trim()===''||!el.checkValidity())){
+    if(el.dataset.color!==undefined){
+      if(e.type!=='change')return;
+      const normalized=SheetModel.normalizeHex(el.value);
+      if(!normalized){
+        el.setAttribute('aria-invalid','true');
+        if(e.type==='change'){el.value=get(state.config,el.dataset.config);el.removeAttribute('aria-invalid');status('请输入 #RRGGBB 色值，已保留上次颜色',true);}
+        return;
+      }
+      if(e.type==='change')el.value=normalized;
+    }
+    if(el.type==='number' &&(el.value.trim()===''||!el.checkValidity())){
       el.setAttribute('aria-invalid','true');
       if(e.type==='change'){el.value=get(state.config,el.dataset.config);el.removeAttribute('aria-invalid');status('请输入允许范围内的数值，已保留上次设置',true);}
       return;
@@ -236,7 +246,7 @@ for(const el of document.querySelectorAll('[data-config]')){
     else if(el.dataset.kind==='boolean')value=el.value==='true';
     else if(el.type==='range'||el.type==='number'||['width','columns','spacing','margin','background.angle'].includes(el.dataset.config))value=Number(el.value);
     else if(el.dataset.config==='background.sourceIndex')value=el.value==='custom'?'custom':Number(el.value);
-    else value=el.value;
+    else value=el.dataset.color!==undefined?SheetModel.normalizeHex(el.value):el.value;
     set(state.config,el.dataset.config,value);if(e.type==='change')commit(state.lastCommitted);syncControls();queuePreview();
   };
   el.addEventListener('input',handler);

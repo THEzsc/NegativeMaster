@@ -57,6 +57,12 @@
     return fraction === .5 ? lower + lower % 2 : Math.round(value);
   }
 
+  function normalizeHex(value) {
+    const text=String(value).trim().replace(/^#/, '');
+    if (/^[0-9a-f]{3}$/i.test(text)) return '#'+[...text].map(ch=>ch+ch).join('').toLowerCase();
+    return /^[0-9a-f]{6}$/i.test(text) ? '#'+text.toLowerCase() : null;
+  }
+
   function frameRotation(width, height, override = {}) {
     return override.rotation ?? (height > width ? 90 : 0);
   }
@@ -96,5 +102,5 @@
     return {sx, sy, sw: width, sh: height, dx: Math.floor((tw - dw) / 2), dy: Math.floor((th - dh) / 2), dw, dh};
   }
 
-  return Object.freeze({selectionInOrder, restoreDraft, frameRotation, cropGeometry});
+  return Object.freeze({selectionInOrder, restoreDraft, normalizeHex, frameRotation, cropGeometry});
 });

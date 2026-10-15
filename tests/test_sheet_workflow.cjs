@@ -79,7 +79,7 @@ function harness({draft, withFrame = false, withUI = false} = {}) {
     createElement: tag => new Element(tag, document),
     addEventListener(name, listener) { (documentListeners[name] ??= []).push(listener); },
     querySelectorAll(selector) {
-      if (selector === '[data-config]') return [columns];
+      if (selector === '[data-config]') return [columns,colorInput];
       if (selector === '.frame-item') return this.getElementById('frame-list').children;
       return [];
     },
@@ -87,6 +87,7 @@ function harness({draft, withFrame = false, withUI = false} = {}) {
   };
   document.body = new Element('body', document); document.activeElement = document.body;
   const columns = new Element('input', document); columns.type = 'number'; columns.min = 2; columns.max = 12; columns.dataset.config = 'columns';
+  const colorInput = new Element('input',document);colorInput.type='text';colorInput.dataset.config='background.color';colorInput.dataset.color='';
   document.getElementById('prepare-progress').append(new Element('i', document));
   document.getElementById('empty-sheet').append(new Element('h1', document), new Element('p', document));
   document.getElementById('sheet-preview').hidden = true;
@@ -143,7 +144,7 @@ function harness({draft, withFrame = false, withUI = false} = {}) {
     const request = pending('/api/sheet/preview')[0]; if (request) image(request, job);
     await finished; await flush();
   }
-  return {context, window, document, resize: width => { window.innerWidth = width; windowListeners.resize?.(); }, key: fields => { for (const listener of documentListeners.keydown || []) listener({preventDefault() {}, ...fields}); }, el: id => document.getElementById(id), columns, pending, requests, reply, image, flush, advance, paint, ready, load, objectUrls, localStorage,
+  return {context, window, document, resize: width => { window.innerWidth = width; windowListeners.resize?.(); }, key: fields => { for (const listener of documentListeners.keydown || []) listener({preventDefault() {}, ...fields}); }, el: id => document.getElementById(id), columns, colorInput, pending, requests, reply, image, flush, advance, paint, ready, load, objectUrls, localStorage,
     start: () => windowListeners.DOMContentLoaded()};
 }
 
@@ -369,4 +370,18 @@ test('rotate buttons advance from the portrait default and reset restores automa
   await h.el('frame-reset').click();
   assert.equal(h.context.frameRotation(),90);
   assert.equal(h.context.payload().config.frameOverrides[0].rotation,undefined);
+});
+
+test('custom color entry commits only complete colors and undo restores the previous color',async()=>{
+  const h=harness();await h.load();
+  const original=h.context.payload().config.background.color;
+  h.colorInput.value='#abc';await h.colorInput.dispatch('input');
+  assert.equal(h.context.payload().config.background.color,original);
+  h.colorInput.value='#abcde';await h.colorInput.dispatch('change');
+  assert.equal(h.context.payload().config.background.color,original);
+  assert.equal(h.colorInput.value,original);
+  h.colorInput.value='#abc';await h.colorInput.dispatch('change');
+  assert.equal(h.context.payload().config.background.color,'#aabbcc');
+  await h.el('undo').click();
+  assert.equal(h.context.payload().config.background.color,original);
 });
