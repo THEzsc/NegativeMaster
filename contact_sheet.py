@@ -430,7 +430,7 @@ def _background(images: list[Image.Image], c: dict, size: tuple[int, int]) -> Im
     return result.resize(size, Image.Resampling.BICUBIC).convert("RGBA")
 
 
-def _film_layer(layout: SheetLayout, c: dict, cells: int) -> Image.Image:
+def _film_layer(layout: SheetLayout, c: dict, cells: int, cut_leader: bool = False) -> Image.Image:
     strip = c["strip"]
     width = round(layout.cell_width * cells)
     color = _color(strip["color"])
@@ -445,22 +445,51 @@ def _film_layer(layout: SheetLayout, c: dict, cells: int) -> Image.Image:
         for i in range(cells * 8):
             x = (i + .5) * pitch
             for y in (hole_y, layout.strip_height - hole_y - hh):
+                # Leave the cut shoulder unpunched instead of opening a half
+                # sprocket into its silhouette. Full-width film retains its pitch.
+                shoulder_end = min(layout.cell_width * .96, layout.strip_height * 1.08)
+                if cut_leader and y == hole_y and x-hw/2 < shoulder_end:
+                    continue
                 draw.rounded_rectangle((x-hw/2, y, x+hw/2, y+hh), radius=max(1, hw*.18), fill=(0,0,0,0))
     return row
 
 
 def _clip_leader(row: Image.Image, cell_width: float) -> None:
-    """A cut tongue at the beginning of the roll, entirely inside its first blank."""
-    h, w = row.height, row.width
-    mask = Image.new("L", row.size, 255)
-    md = ImageDraw.Draw(mask)
-    end = cell_width * .88
-    curve = []
-    for i in range(65):
-        t = i / 64
-        curve.append((end * t, h * .47 * (1 - (3*t*t - 2*t*t*t))))
-    md.polygon([(0, 0), (end, 0), *reversed(curve)], fill=0)
-    row.putalpha(ImageChops.multiply(row.getchannel("A"), mask))
+    """Flat leader tongue with a compact, tangent-continuous S shoulder.
+
+    Keep the cut within the first blank. Supersample only that small end,
+    with a bounded mask allocation even for large exports.
+    """
+    h = row.height
+    end = min(cell_width * .96, h * 1.08)
+    tongue = end * .55
+    level = h * .48
+    radius = min(h * .035, tongue * .15)
+    width = min(row.width, ceil(end) + 2)
+    aa = max(1, min(4, int((4_000_000 / max(1, width * h)) ** .5)))
+    mask = Image.new("L", (width * aa, h * aa), 0)
+    shoulder = end - tongue
+    p0, p1 = (tongue, level), (tongue + shoulder * .48, level)
+    p2, p3 = (end - shoulder * .48, 0), (end, 0)
+    points = [(radius, level), p0]
+    for i in range(1, 97):
+        t = i / 96; u = 1 - t
+        points.append((u**3*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t**3*p3[0],
+                       u**3*p0[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t**3*p3[1]))
+    points += [(width, 0), (width, h), (radius, h)]
+    for i in range(1, 25):
+        angle = radians(90 + i * 90 / 24)
+        points.append((radius + radius*cos(angle), h-radius + radius*sin(angle)))
+    points.append((0, level+radius))
+    for i in range(1, 25):
+        angle = radians(180 + i * 90 / 24)
+        points.append((radius + radius*cos(angle), level+radius + radius*sin(angle)))
+    ImageDraw.Draw(mask).polygon([(x*aa,y*aa) for x,y in points], fill=255)
+    if aa > 1:
+        mask = mask.resize((width,h), Image.Resampling.LANCZOS)
+    alpha = row.getchannel("A")
+    alpha.paste(ImageChops.multiply(alpha.crop((0,0,width,h)), mask), (0,0))
+    row.putalpha(alpha)
 
 
 def _leader_panel(size: tuple[int, int], index: int, total: int, strip: dict) -> Image.Image:
@@ -598,7 +627,8 @@ def render_sheet(images: list[Image.Image], config: dict | None = None,
     for row_index, first in enumerate(range(0, total, layout.columns)):
         slots = list(range(first, min(first + layout.columns, total)))
         indices = [slot - layout.leader_count for slot in slots]
-        row = _film_layer(layout,c,len(slots))
+        cut_leader = row_index == 0 and layout.leader and c["strip"]["leaderShape"] == "cut"
+        row = _film_layer(layout,c,len(slots),cut_leader)
         for col, (slot,index) in enumerate(zip(slots,indices)):
             if index < 0:
                 photo = _leader_panel((layout.aperture_width,layout.aperture_height), slot,
@@ -611,7 +641,7 @@ def render_sheet(images: list[Image.Image], config: dict | None = None,
             px=round(col*layout.cell_width+layout.gap/2)
             row.alpha_composite(photo,(px,layout.band))
         _edge_labels(row,layout,c,stock,indices,len(images))
-        if row_index == 0 and layout.leader and c["strip"]["leaderShape"] == "cut":
+        if cut_leader:
             _clip_leader(row, layout.cell_width)
         canvas.alpha_composite(row,(layout.margin,layout.row_y(row_index)))
     watermark=c.get("watermark")
