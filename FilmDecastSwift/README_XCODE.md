@@ -1,68 +1,55 @@
-# FilmDecast —— 在 Xcode 里调试运行
+# NegativeMaster · SwiftUI 工作台
 
-SwiftUI 原生版胶片去色罩工具。要求 **macOS 14+**、Xcode 15 及以上。
+这是原生 SwiftUI 前端：NavigationSplitView 缩略图侧栏、独立检查器、系统工具栏、菜单、文件面板、颜色面板与浅深色外观。使用系统提供的外观适配 macOS 27；照片和排版位于内容层，操作位于系统导航层。
 
-## 包结构
+前端不嵌入网页。图像处理复用仓库中已验证的 Python 算法，Swift 与独立本地进程通过 JSON 管道通信，不监听网络端口。打包脚本包含 Python、图像库、胶卷资料、字体与全部渲染资源。
 
-```
-FilmDecastSwift/
-├── Package.swift
-└── Sources/
-    ├── FilmDecastCore/     引擎库（纯计算，不依赖 UI）
-    │   ├── Models.swift            数据模型（LinearImage / DevelopParams / …）
-    │   ├── NegativeEngine.swift    读取 / 反转 / 白平衡 / 匹配 / 探测画面
-    │   └── ImageExporter.swift     导出 16bit TIFF / JPEG
-    └── FilmDecastApp/      SwiftUI 界面层（executable target「FilmDecast」）
-        ├── FilmDecastApp.swift     @main 入口，窗口默认 1280x800
-        ├── AppState.swift          应用状态 / 防抖渲染调度 / 导出 / 参数记忆
-        ├── ContentView.swift       三栏布局 + 左侧文件列表 + 中间预览
-        ├── CropOverlayView.swift   可拖动裁切框（手柄缩放 / 比例锁定）
-        ├── ControlsView.swift      右侧控制面板（分组 GroupBox）
-        └── HistogramView.swift     RGB 直方图（Canvas）
-```
+## 使用
 
-## 方式一：直接打开 Swift 包（推荐）
+双击项目根目录的 `NegativeMaster.app`，也可以拖到「应用程序」。构建时按本机处理器架构打包；当前交付包是 Apple Silicon 版，已在 macOS 27.0.1 验证启动。
 
-```bash
-cd /Users/apple/Pictures/胶片扫描/去色罩工具/FilmDecastSwift
-xed .            # 或者在 Finder 里双击 Package.swift
-```
+- **调片**：打开文件夹或导入照片，左侧选择，右侧切换光线、色彩、曲线、细节、裁剪、导出。
+- **整卷排版**：导入成片或打开胶卷文件夹。文件夹优先使用已导出成片，其次读取各照片保存的参数；未调整的 RAW 会提示跳过。
+- **构图**：选择一张排版照片，拖动画面调整裁切中心，支持独立旋转、缩放、填充、帧号标签和排序。
+- **保存**：调片自动保存同目录 XML 和内部 JSON。整卷草稿自动保存，也可保存包含照片和背景的 ZIP 项目，和网页版互通。
+- **快捷键**：⌘O 打开文件夹、⇧⌘O 导入照片、⌘L 输入本地路径、⌘S 保存参数、⇧⌘S 保存整卷项目、⌘E 导出、⌘Z 撤销、⇧⌘Z 重做、⌘B 查看底片、⌘0 适合窗口、⌥⌘I 检查器。
 
-1. Xcode 打开后等待包解析完成（本包无第三方依赖，几秒即可）。
-2. 顶部 scheme 选 **FilmDecast**（可执行目标），目的地选 **My Mac**。
-3. `Cmd+R` 直接运行调试。断点、Instruments 都可正常使用。
+## 功能范围
 
-命令行也可以直接跑：
+调片：彩负、黑白、正片；RAW 解码选项；去色罩、Negadoctor、曝光、色阶、Gamma、对比度、白平衡框选取样及色温色调、分区取样、四通道 PCHIP 曲线、八色 HSL、鲜艳度、降噪、锐化、晕影、参照匹配、预设增删、裁剪比例、旋转镜像、自动裁剪校平与同卷参考、逐片参数、XML 互通、整卷参数／仅白平衡同步、批量按各自参数导出、TIFF 8/16 位、JPEG、PNG、质量与尺寸控制。
+
+整卷：100 款胶卷资料和来源、边字字体／内容／颜色／大小／字距／光晕、帧号／半格编号／箭头、列数／间距／照片比例、片条透明度、齿孔孔形和孔沿、自动或手动片头、片头形状、六类漏光／曝光效果与强度／柔和度／纹理／延伸照片数、分离投影／衬边、模糊照片／纯色／渐变／透明背景及自定义背景、信息横幅、逐帧构图与拖动排序、选择集、撤销重做、草稿、版式预设、便携项目、PNG/JPEG 高清导出。
+
+旧 SwiftUI 版 UserDefaults 中的调整会在没有 XML/JSON 参数时读取并迁移。原来的 `FilmDecastCore` 与 `SmokeTest` 保留供引擎开发与对照。
+
+## 构建
+
+需要 macOS 和 Swift 6.3 工具链（本机 Command Line Tools 可构建）。
 
 ```bash
-swift run FilmDecast     # 或 swift build 后运行 .build/debug/FilmDecast
+cd FilmDecastSwift
+./build-app.sh
+open ../NegativeMaster.app
 ```
 
-## 方式二：新建 macOS App 工程
+首次构建使用项目 `.venv` 的固定依赖，并将其连同 Python 标准库和动态库放入应用。后续构建复用已打包运行时；如果依赖有变，删除生成的应用后重新打包，或更换输出路径：
 
-如果想要正式的 `.app`（图标、签名、发布）：
+```bash
+./build-app.sh /absolute/path/NegativeMaster.app
+```
 
-1. Xcode → File → New → Project → **macOS App**（Interface 选 SwiftUI，
-   Language 选 Swift），最低部署版本设为 **macOS 14.0**。
-2. 删掉模板自动生成的 `ContentView.swift` 和 `XxxApp.swift`。
-3. 把 `Sources/FilmDecastCore` 和 `Sources/FilmDecastApp` 两个文件夹整体
-   拖进工程（勾选 "Copy items if needed" 或用引用方式均可）。
-   也可以改用 File → Add Package Dependencies → Add Local，把本包作为
-   本地包依赖，只拖 `FilmDecastApp` 里的界面文件。
-4. **关闭 App Sandbox**：Target → Signing & Capabilities → 删除
-   "App Sandbox" 能力；或保留沙盒但勾上
-   "User Selected File – Read/Write"（本 App 全部通过 NSOpenPanel /
-   NSSavePanel 访问文件，用户选择读写权限即可满足）。
-5. 签名用本机的 "Sign to Run Locally" 即可，无需开发者账号。
+开发时可以直接 `swift run FilmDecast`，它会使用源项目 `.venv`；打包后的应用使用内置运行时。源目录仍存在时与网页版共享 settings/presets；移动应用到其他机器后，内部配置放在 `~/Library/Application Support/NegativeMaster`。照片旁的 XML 不依赖此目录。
 
-## 注意事项
+## 验证
 
-- **SPM 可执行目标默认无沙盒、无需 Info.plist、无需签名**，
-  文件读写没有限制，方式一开箱即用。
-- RAW 解码走系统 `CIRAWFilter`（Sony ARW、ARQ / Canon CR2、CR3 / Nikon NEF /
-  Fuji RAF / DNG / Panasonic RW2 等），不依赖 Python 环境。
-- 每张图的调整参数自动记到 `UserDefaults`（key = 文件路径），
-  下次打开同一文件自动恢复；「恢复默认参数」可清回默认。
-- 预览为 1500px 下采样。裁切框内的颜色是按「真裁切」统计渲染的，
-  与导出结果一致；框外区域是整幅统计的背景渲染，仅供定位参考。
-- 全分辨率图只在内存中保留当前一张；批量导出逐张解码、逐张释放。
+```bash
+../.venv/bin/python -m unittest discover -s ../tests -v
+swift run -c release SmokeTest
+```
+
+`tests/test_native_bridge.py` 覆盖原生传输、完整调色参数、解码选项、预设 CRUD、XML 往返、TIFF/JPEG/PNG 导出、原图保护、整卷预览／导出、单帧构图以及带背景项目的导入导出。真实相机 RAW 的支持仍取决于 LibRaw 对机型的支持。
+
+Apple 设计依据：
+- https://developer.apple.com/design/human-interface-guidelines/toolbars
+- https://developer.apple.com/design/human-interface-guidelines/sidebars
+- https://developer.apple.com/documentation/technologyoverviews/liquid-glass

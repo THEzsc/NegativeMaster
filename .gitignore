@@ -11,6 +11,7 @@ gui.log
 # Swift Package Manager / Xcode
 FilmDecastSwift/.build/
 FilmDecastSwift/.swiftpm/
+NegativeMaster.app/
 DerivedData/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
@@ -31,3 +32,6 @@ output/
 .impeccable/review/
 .impeccable/questions/
 *.nmproject.zip
+
+# Local native build and verification artifacts
+work/
