@@ -99,7 +99,8 @@ def save_preset(name, d):
 def srgb_to_linear(x):
     """sRGB EOTF：编码值 -> 线性光。x 为 [0,1] float。"""
     a = 0.055
-    return np.where(x <= 0.04045, x / 12.92, ((x + a) / (1 + a)) ** 2.4)
+    return np.where(x <= 0.04045, x / 12.92,
+                    (np.maximum(x + a, 0) / (1 + a)) ** 2.4)
 
 
 def load_image(path, args):
@@ -130,21 +131,58 @@ def load_image(path, args):
         return lin, True
 
     if ext in IMG_EXTS:
-        im = Image.open(path)
-        arr = np.asarray(im)
+        # Pillow converts RGB 16-bit TIFF to RGB 8-bit on read. Preserve the
+        # original samples: small transmittance errors grow after -log10().
+        if ext in (".tif", ".tiff"):
+            import tifffile
+            with tifffile.TiffFile(path) as tif:
+                series = tif.series[0]
+                page = tif.pages[0]
+                if page.photometric.name in ("RGB", "MINISBLACK", "MINISWHITE"):
+                    arr = series.asarray()
+                    if arr.ndim == 3 and "S" in series.axes:
+                        arr = np.moveaxis(arr, series.axes.index("S"), -1)
+                    if page.photometric.name == "MINISWHITE":
+                        peak = np.iinfo(arr.dtype).max if arr.dtype.kind == "u" else 1.0
+                        arr = peak - arr
+                else:
+                    with Image.open(path) as im:
+                        arr = np.asarray(im.convert("RGB"))
+        else:
+            with Image.open(path) as im:
+                if im.mode not in ("RGB", "RGBA", "L", "LA", "I", "I;16", "F"):
+                    im = im.convert("RGB")
+                arr = np.asarray(im)
         if arr.ndim == 2:  # 灰度 -> 复制成三通道
             arr = np.stack([arr] * 3, axis=-1)
+        if arr.ndim != 3 or arr.shape[-1] not in (2, 3, 4):
+            raise ValueError("需要单幅灰度或 RGB 图像，不支持多页/多维图像")
+        if arr.shape[-1] == 2:  # 灰度 + alpha
+            arr = np.repeat(arr[..., :1], 3, axis=-1)
         if arr.shape[-1] == 4:  # 去 alpha
             arr = arr[..., :3]
-        maxv = 65535.0 if arr.dtype == np.uint16 else 255.0
+        if arr.dtype.kind == "u":
+            maxv = float(np.iinfo(arr.dtype).max)
+        elif arr.dtype.kind == "f":
+            maxv = 1.0  # floating TIFF values are normalized transmittance
+        elif arr.dtype.kind == "i" and arr.min() >= 0 and arr.max() <= 65535:
+            maxv = 65535.0  # Pillow may expose 16-bit PNG as mode I
+        else:
+            raise ValueError("图像必须使用无符号整数或归一化浮点 RGB 数据")
         enc = arr.astype(np.float32) / maxv
+        if not np.isfinite(enc).all():
+            raise ValueError("图像包含 NaN 或无穷值，无法计算胶片密度")
+        enc = np.clip(enc, 0.0, 1.0)
         # 普通图像默认按 sRGB 反伽马回到线性，使密度运算正确
         if args.input_gamma == "srgb":
             lin = srgb_to_linear(enc)
         elif args.input_gamma == "linear":
             lin = enc
         else:
-            lin = np.power(np.clip(enc, 0, 1), float(args.input_gamma))
+            input_gamma = float(args.input_gamma)
+            if not np.isfinite(input_gamma) or input_gamma <= 0:
+                raise ValueError("输入 gamma 必须是正有限数、srgb 或 linear")
+            lin = np.power(enc, input_gamma)
         return lin.astype(np.float32), False
 
     raise RuntimeError(f"不支持的文件类型：{ext}")
@@ -873,6 +911,29 @@ def detect_film_alignment(lin_oriented, current_angle=0.0, auto_level=True, refe
     Repeated Auto clicks are idempotent. If angle evidence is insufficient, keep
     the user's existing angle and still crop any reliable boundaries.
     """
+    def diagnostics(result):
+        # Confidence must describe the edges still used after angle-consistency
+        # filtering, not the stronger edges we discarded as probable subjects.
+        found = [e for e in result.get('edges', {}).values() if e is not None]
+        count = len(found)
+        mean = float(np.mean([e['confidence'] for e in found])) if found else 0.0
+        evidence = mean * count / 4 if result['status'] != 'uncertain' else 0.0
+        warnings = []
+        if count < 4:
+            warnings.append(f"仅实测到 {count} 条片边，请复核其余方向的裁切范围。")
+        if result.get('reference_edges'):
+            warnings.append("部分边界来自同卷手动参考，不是本张实测结果。")
+        if result.get('angle_status') == 'reference':
+            warnings.append("校平角来自同卷手动参考，请检查翻拍机位是否一致。")
+        elif auto_level and result.get('angle_status') == 'preserved':
+            warnings.append("片边角度证据不足，已保留当前校平角。")
+        result.update(confidence=round(mean, 3), detected_edges=count,
+                      geometry_confidence=round(evidence, 3),
+                      confidence_label='high' if evidence >= .8 else
+                      'medium' if evidence >= .45 else 'low' if evidence > 0 else 'none',
+                      edge_coverage=round(count / 4, 2), warnings=warnings)
+        return result
+
     frame = detect_film_frame(lin_oriented)
     estimated = _frame_level(frame) if auto_level else None
     angle = float(current_angle) if estimated is None else estimated
@@ -885,7 +946,7 @@ def detect_film_alignment(lin_oriented, current_angle=0.0, auto_level=True, refe
                   angle_status='detected' if estimated is not None else 'preserved')
     if frame['status'] == 'uncertain' and reference is None:
         result.update(angle=float(current_angle), leveled=False, angle_status='preserved')
-        return result
+        return diagnostics(result)
     if borrowed_angle:
         result.update(angle_status='reference', leveled=True)
     # A deep edge inconsistent with the rest is probably a road/horizon.
@@ -918,7 +979,7 @@ def detect_film_alignment(lin_oriented, current_angle=0.0, auto_level=True, refe
                       reference_edges=reference_edges,
                       reference_samples=reference['samples'] if reference_edges or borrowed_angle else 0,
                       status='referenced' if reference_edges else 'detected' if count == 4 else 'partial')
-    return result
+    return diagnostics(result)
 
 
 def estimate_skew(lin, max_angle=8.0):
@@ -1022,13 +1083,13 @@ def _tone_curve(P, gamma, contrast):
     return P
 
 
-def negadoctor(lin, dmin, args):
+def negadoctor(lin, dmin, args, stats_lin=None):
     """darktable negadoctor 负转正（逐通道），比线性密度拉伸更"胶片化"：
     密度相对片基 Dmin 取对数、D_max 定反差、相纸 gamma、外加高光指数柔化(soft-clip)。
 
     darktable 的默认参数假定扫描件已归一化到片基≈1、且密度范围完整；翻拍负片往往偏暗、
-    动态范围压缩，直接套会一片死黑。因此这里在保持公式结构的前提下做**逐通道自动曝光**：
-    让最亮的场景（负片最密处）映到接近白，顺带把橙色色罩当作各通道增益一并中和。
+    动态范围压缩，直接套会一片死黑。因此这里在保持公式结构的前提下做标量自动曝光：
+    让最亮的场景（负片最密处）映到接近白，三个通道共用曝光系数。
     nd_exposure 作为全局亮度增益微调（默认 1.0），nd_gamma 控制反差。"""
     THR = 2.3283e-10
     Dmax = float(getattr(args, "nd_dmax", 2.046))
@@ -1037,25 +1098,39 @@ def negadoctor(lin, dmin, args):
     gamma = float(getattr(args, "nd_gamma", 4.0))
     softclip = float(getattr(args, "nd_softclip", 0.75))
     gain = float(getattr(args, "nd_exposure", 1.0))
+    if not np.isfinite([Dmax, offset, black, gamma, softclip, gain]).all():
+        raise ValueError("negadoctor 参数必须是有限数")
+    if Dmax <= 0 or gamma <= 0 or gain < 0 or not 0 <= softclip <= 1:
+        raise ValueError("negadoctor 需要 Dmax/gamma > 0、exposure >= 0、softclip 在 0~1")
     dmin = np.asarray(dmin, dtype=np.float32).reshape(1, 1, 3)
+    if not np.isfinite(dmin).all():
+        raise ValueError("片基取样无效，请重新选择有效区域")
+    dmin = np.maximum(dmin, THR)
     x = np.maximum(lin.astype(np.float32), THR)
     log_density = np.log10(x / dmin)                      # 相对片基的密度（逐通道）
     corrected = log_density / Dmax + offset               # wb_high=wb_low=1
-    ten = np.power(10.0, corrected)
+    # float64 also covers the documented Dmax=0.1 / offset=1 range.
+    ten = np.power(10.0, np.clip(corrected.astype(np.float64), -300, 300))
     # 标量自动曝光：按亮度取最亮场景（负片最密处）映到接近印相白点；
     # 用同一系数缩放三通道，不动色彩平衡（残留偏色交给后面的灰世界白平衡）。
-    view = stats_view(ten).reshape(-1, 3)
+    if stats_lin is None:
+        view = stats_view(ten).reshape(-1, 3)
+    else:
+        stats_density = np.log10(np.maximum(stats_lin, THR) / dmin)
+        stats_corrected = stats_density / Dmax + offset
+        view = np.power(10.0, np.clip(stats_corrected.astype(np.float64), -300, 300)).reshape(-1, 3)
     ten_lo = float(np.percentile(view @ np.array([0.299, 0.587, 0.114],
                                                  dtype=view.dtype), 0.5))
     auto_exp = 1.0 / max(1.0 + black - ten_lo, 1e-3)
     exp = auto_exp * gain
     print_lin = np.maximum(exp * (1.0 + black - ten), 0.0)
-    pg = np.power(print_lin, gamma)
+    # Values far above white are indistinguishable after highlight compression.
+    pg = np.power(np.minimum(print_lin, 100.0), min(gamma, 100.0))
     scc = max(1.0 - softclip, 1e-4)
     out = np.where(pg > softclip,
-                   softclip + (1.0 - np.exp(-(pg - softclip) / scc)) * scc,
+                   softclip - np.expm1(-np.maximum(pg - softclip, 0.0) / scc) * scc,
                    pg)
-    return np.clip(out, 0.0, 1.0)
+    return np.clip(out, 0.0, 1.0).astype(np.float32)
 
 
 def convert_base(lin, args):
@@ -1084,6 +1159,11 @@ def convert_base(lin, args):
         # 非「整幅预览」时算安全内缩框；下面裁切框会和它取交集，任意角度都不出黑角
         if not getattr(args, "stats_rect", None):
             _safe_rect = _safe_inset_rect(lin.shape[:2], _lvl)
+
+    # Film base usually lies outside the final crop. Sampling must retain the
+    # oriented, leveled full image rather than clamp a removed border onto the
+    # nearest image pixel (which previously produced a false base measurement).
+    sample_source = lin
 
     # 2) 裁切
     #    crop_rect: 任意位置矩形裁切（会真正裁掉，用于导出/最终结果）
@@ -1150,14 +1230,14 @@ def convert_base(lin, args):
         else:
             x0, y0, x1, y1 = rect
         x0, y0, x1, y1 = [float(v) for v in (x0, y0, x1, y1)]
-        xa = int(round(min(x0, x1) * w)) - off_x
-        xb = int(round(max(x0, x1) * w)) - off_x
-        ya = int(round(min(y0, y1) * h)) - off_y
-        yb = int(round(max(y0, y1) * h)) - off_y
-        hh2, ww2 = lin.shape[:2]
+        xa = int(round(min(x0, x1) * w))
+        xb = int(round(max(x0, x1) * w))
+        ya = int(round(min(y0, y1) * h))
+        yb = int(round(max(y0, y1) * h))
+        hh2, ww2 = sample_source.shape[:2]
         xa = max(0, min(xa, ww2 - 1)); xb = max(xa + 1, min(xb, ww2))
         ya = max(0, min(ya, hh2 - 1)); yb = max(ya + 1, min(yb, hh2))
-        return np.median(np.clip(lin[ya:yb, xa:xb], eps, 1.0)
+        return np.median(np.clip(sample_source[ya:yb, xa:xb], eps, 1.0)
                          .reshape(-1, 3), axis=0)
 
     _fb = _sample_lin_median(getattr(args, "film_base_rect", None))
@@ -1226,7 +1306,8 @@ def convert_base(lin, args):
         else:                                       # 自动：片基≈负片最亮（高百分位）
             Vv = _trim_margin(np.clip(stats_view(stats_lin), eps, 1.0))
             dmin = np.percentile(Vv.reshape(-1, 3), 99.5, axis=0)
-        P = negadoctor(N, dmin, args)
+        P = negadoctor(N, dmin, args,
+                       stats_lin=_trim_margin(np.clip(stats_view(stats_lin), eps, 1.0)))
     else:
         # 彩色负片：密度空间去色罩 + 反转（原有算法，保持不变）
         N = np.clip(lin, eps, 1.0)
@@ -1283,7 +1364,11 @@ def convert_base(lin, args):
         # 灰世界白平衡（在已反转的正片上做，去掉残留偏色）
         # 只用「中间调」像素估计：排除接近黑的片基/边框和过曝高光，更稳健
         if wb_sample_rect is None and wb_px is None and getattr(args, "wb", "gray") == "gray":
-            flat = P.reshape(-1, 3)
+            wb_stats = P
+            if stats_rect and not crop_rect:
+                xa, ya, xb, yb = _rect_px(stats_rect, w, h)
+                wb_stats = P[ya:yb, xa:xb]
+            flat = _trim_margin(wb_stats).reshape(-1, 3)
             lum = flat @ np.array([0.299, 0.587, 0.114], dtype=flat.dtype)
             mask = (lum > 0.15) & (lum < 0.9)
             sample = flat[mask] if mask.sum() > 0.02 * len(flat) else flat
@@ -1297,7 +1382,7 @@ def convert_base(lin, args):
                             getattr(args, "tint", 0.0))
 
         # 6) 影调：gamma + 对比度 S 曲线（negadoctor 自带相纸 gamma/柔化，故跳过）
-        if not getattr(args, "negadoctor", False):
+        if mode == "positive" or not getattr(args, "negadoctor", False):
             P = _tone_curve(P, getattr(args, "gamma", 1.8),
                             getattr(args, "contrast", 0.08))
 
