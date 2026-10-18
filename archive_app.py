@@ -21,13 +21,15 @@ import zipfile
 
 from flask import Blueprint, jsonify, render_template, request, send_file
 from PIL import Image, ImageOps, UnidentifiedImageError
+import film_artwork
 
 BASE_DIR = Path(__file__).resolve().parent
 STATUSES = {"planned": "待拍摄", "shooting": "拍摄中", "developing": "冲洗中", "scanning": "待扫描", "archived": "已归档"}
 TEXT_LIMITS = {"title": 160, "roll_number": 60, "stock_id": 100, "stock_name": 160,
                "format": 40, "camera": 160, "lens": 160, "place": 240, "lab": 160,
                "process": 100, "development": 500, "storage": 200, "notes": 12000,
-               "cover_source": 500, "cover_credit": 240}
+               "cover_source": 500, "cover_credit": 240, "cover_artwork": 100,
+               "cover_license": 160, "cover_license_url": 500}
 DATE_FIELDS = ("date_start", "date_end", "developed_on")
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
 RAW_EXTS = {".dng", ".cr2", ".cr3", ".nef", ".arw", ".raf", ".rw2", ".orf", ".pef", ".srw"}
@@ -84,9 +86,10 @@ def clean_roll(body):
     if not isinstance(tags, list) or len(tags) > 30:
         raise ArchiveError("标签最多 30 个。")
     result["tags"] = list(dict.fromkeys(text_value(t, 50, "标签") for t in tags if t))
-    source = result["cover_source"]
-    if source and (urlparse(source).scheme not in {"https", "http"} or not urlparse(source).netloc):
-        raise ArchiveError("封面来源请使用 http / https 网页地址，拍摄者请填在署名栏。")
+    for key in ("cover_source", "cover_license_url"):
+        source = result[key]
+        if source and (urlparse(source).scheme not in {"https", "http"} or not urlparse(source).netloc):
+            raise ArchiveError("封面来源与许可请使用 http / https 网页地址，拍摄者请填在署名栏。")
     return result
 
 
@@ -138,6 +141,9 @@ class ArchiveStore:
         if row is None:
             raise LookupError("没有找到这卷胶片，可能已被删除。")
         result = json.loads(row["data"])
+        # Version 1 archives predate the optional artwork provenance fields.
+        for key in TEXT_LIMITS:
+            result.setdefault(key, "")
         result.update(id=row["id"], created_at=row["created_at"], updated_at=row["updated_at"], cover=row["cover"])
         result["frame_count"] = db.execute("SELECT COUNT(*) FROM frames WHERE roll_id=?", (identifier,)).fetchone()[0]
         if frames:
@@ -228,6 +234,10 @@ def create_archive_blueprint(data_dir=None):
         stocks = json.loads((BASE_DIR / "data/film_stocks.json").read_text(encoding="utf-8"))["stocks"]
         return jsonify(ok=True, stocks=stocks, statuses=STATUSES, storage=str(store.root))
 
+    @bp.get("/api/archive/artwork")
+    def artwork_catalog():
+        return jsonify(ok=True, **film_artwork.catalog())
+
     @bp.get("/api/archive/rolls")
     def list_rolls():
         with store.connection() as db:
@@ -239,7 +249,7 @@ def create_archive_blueprint(data_dir=None):
         status = request.args.get("status", "")
         year = request.args.get("year", "")
         if q:
-            rolls = [r for r in rolls if q in " ".join(str(r[k]) for k in TEXT_LIMITS if k not in {"cover_source", "cover_credit"}).casefold() + " " + " ".join(r["tags"]).casefold()]
+            rolls = [r for r in rolls if q in " ".join(str(r.get(k, "")) for k in TEXT_LIMITS if not k.startswith("cover_")).casefold() + " " + " ".join(r["tags"]).casefold()]
         if status:
             rolls = [r for r in rolls if r["status"] == status]
         if year:
@@ -272,6 +282,9 @@ def create_archive_blueprint(data_dir=None):
                 if submitted.get("updated_at") != current["updated_at"]:
                     return jsonify(ok=False, error="这卷资料已在其他窗口更新。请重新打开后再编辑。"), 409
                 clean = clean_roll(submitted)
+                # Editing roll metadata must not detach a cover's attribution.
+                for key in ("cover_source", "cover_credit", "cover_artwork", "cover_license", "cover_license_url"):
+                    clean[key] = current.get(key, "")
                 cursor = db.execute("UPDATE rolls SET data=?,updated_at=? WHERE id=? AND updated_at=?",
                                     (json.dumps(clean, ensure_ascii=False), now(), identifier, submitted["updated_at"]))
                 if not cursor.rowcount:
@@ -382,15 +395,28 @@ def create_archive_blueprint(data_dir=None):
     def cover(identifier):
         with store.connection() as db:
             store.roll(db, identifier)
+        provenance = dict(cover_artwork="", cover_license="", cover_license_url="")
         if request.is_json:
             data = body()
             fid = data.get("frame_id")
-            with store.connection() as db:
-                row = db.execute("SELECT thumb FROM frames WHERE roll_id=? AND id=?", (identifier, fid)).fetchone() if fid else None
-                if fid and (not row or not row[0]):
-                    raise ArchiveError("这张照片没有可用的封面预览。")
-                asset = row[0] if row else ""
-            source, credit = "", "本卷照片" if fid else ""
+            if "artwork_id" in data:
+                if fid:
+                    raise ArchiveError("请选择图案或本卷照片中的一种封面。")
+                try:
+                    item, path = film_artwork.artwork(data["artwork_id"])
+                except ValueError as exc:
+                    raise ArchiveError(str(exc)) from None
+                asset = store.save_image(path)
+                source, credit = item["source_url"], item["credit"]
+                provenance.update(cover_artwork=item["id"], cover_license=item["license"],
+                                  cover_license_url=item["license_url"])
+            else:
+                with store.connection() as db:
+                    row = db.execute("SELECT thumb FROM frames WHERE roll_id=? AND id=?", (identifier, fid)).fetchone() if fid else None
+                    if fid and (not row or not row[0]):
+                        raise ArchiveError("这张照片没有可用的封面预览。")
+                    asset = row[0] if row else ""
+                source, credit = "", "本卷照片" if fid else ""
         else:
             uploaded = request.files.get("file")
             if uploaded is None:
@@ -408,7 +434,7 @@ def create_archive_blueprint(data_dir=None):
         with store.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             data = store.roll(db, identifier)
-            data.update(cover_source=source, cover_credit=credit)
+            data.update(cover_source=source, cover_credit=credit, **provenance)
             db.execute("UPDATE rolls SET cover=?,data=?,updated_at=? WHERE id=?", (asset, json.dumps(clean_roll(data), ensure_ascii=False), now(), identifier))
             result = store.roll(db, identifier, frames=True)
         return jsonify(ok=True, roll=result)

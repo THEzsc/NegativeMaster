@@ -79,6 +79,52 @@ class ArchiveTests(unittest.TestCase):
         self.assertGreaterEqual(len(data["stocks"]), 100)
         self.assertEqual(self.client.get("/api/archive/rolls").get_json()["stats"]["rolls"], 0)
 
+    def test_artwork_cover_attribution_survives_edit_backup_and_restore(self):
+        items = self.client.get("/api/archive/artwork").get_json()["artworks"]
+        item = next(a for a in items if "kodak-colorplus-200" in a["stock_ids"])
+        roll = self.create(stock_id="kodak-colorplus-200")
+        url = f"/api/archive/rolls/{roll['id']}"
+        result = self.write("post", url + "/cover", {"artwork_id": item["id"]})
+        self.assertEqual(result.status_code, 200, result.get_json())
+        selected = result.get_json()["roll"]
+        self.assertEqual(selected["cover_source"], item["source_url"])
+        self.assertEqual(selected["cover_license"], item["license"])
+        with self.client.get('/api/archive/assets/' + selected['cover']) as image_response:
+            self.assertEqual(image_response.status_code, 200)
+        # Old clients without the new provenance fields may still edit a roll.
+        edit = {k:v for k,v in selected.items() if not k.startswith('cover_')}
+        edit['title'] = '图案封面与资料独立保存'
+        saved = self.write('put', url, edit).get_json()['roll']
+        self.assertEqual(saved['cover_artwork'], item['id'])
+        restored = self.restore(self.backup()).get_json()
+        copy = self.client.get('/api/archive/rolls/' + restored['ids'][0]).get_json()['roll']
+        for key in ['cover', 'cover_artwork', 'cover_credit', 'cover_source', 'cover_license', 'cover_license_url']:
+            self.assertEqual(copy[key], saved[key])
+        reset = self.write('post', url + '/cover', {}).get_json()['roll']
+        self.assertEqual(reset['cover_license'], '')
+        self.assertEqual(reset['cover_artwork'], '')
+        self.assertEqual(reset['cover'], '')
+
+    def test_artwork_selection_accepts_only_bundled_ids(self):
+        roll = self.create()
+        url = f"/api/archive/rolls/{roll['id']}/cover"
+        for value in ['../../private.jpg', 'https://example.com/a.jpg', None, []]:
+            self.assertEqual(self.write('post', url, {'artwork_id':value}).status_code, 400)
+        item = self.client.get('/api/archive/artwork').get_json()['artworks'][0]
+        self.assertEqual(self.client.post(url,json={'artwork_id':item['id']}).status_code,403)
+
+    def test_legacy_rolls_without_artwork_fields_remain_searchable(self):
+        roll = self.create()
+        with self.bp.archive_store.connection() as db:
+            data = json.loads(db.execute('SELECT data FROM rolls WHERE id=?',(roll['id'],)).fetchone()[0])
+            for key in ('cover_artwork','cover_license','cover_license_url'):
+                data.pop(key)
+            db.execute('UPDATE rolls SET data=? WHERE id=?',(json.dumps(data),roll['id']))
+        response = self.client.get('/api/archive/rolls?q=海边')
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.get_json()['rolls'][0]['id'],roll['id'])
+        self.assertEqual(response.get_json()['rolls'][0]['cover_license'],'')
+
     def test_crud_persists_and_optimistic_conflict_prevents_lost_edits(self):
         roll = self.create()
         url = f"/api/archive/rolls/{roll['id']}"

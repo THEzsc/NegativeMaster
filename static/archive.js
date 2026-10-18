@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const $ = id => document.getElementById(id);
-  const state = {stocks: [], statuses: {}, rolls: [], current: null, editing: null, frame: null, sequence: 0, selectionSequence: 0, busy: false};
+  const state = {stocks: [], statuses: {}, rolls: [], current: null, editing: null, frame: null, sequence: 0, selectionSequence: 0, busy: false, artwork: null, artworkOpen: false, artworkSaving: false, artworkTab: 'images', artworkLimit: 24};
   const el = (tag, className, value) => { const node = document.createElement(tag); if (className) node.className = className; if (value !== undefined) node.textContent = value; return node; };
   const asset = name => `/api/archive/assets/${encodeURIComponent(name)}`;
   const rollUrl = id => `/api/archive/rolls/${encodeURIComponent(id)}`;
@@ -53,7 +53,7 @@
     const sequence = ++state.selectionSequence;
     const result = await api(rollUrl(id));
     if (sequence !== state.selectionSequence) return;
-    state.current = result.roll; renderDetail(); renderList();
+    state.current = result.roll; state.artworkOpen = false; renderDetail(); renderList();
     history.replaceState(null, '', `/archive#${encodeURIComponent(id)}`);
   }
   function addFact(list, title, value) { if (!value) return; list.append(el('dt', '', title), el('dd', '', value)); }
@@ -61,7 +61,8 @@
     try { const parsed = new URL(url); if (!['http:', 'https:'].includes(parsed.protocol)) return null; const a = el('a', '', title); a.href = parsed.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a; } catch { return null; }
   }
   function renderDetail() {
-    const roll = state.current; $('archive-empty').hidden = !!roll; $('roll-detail').hidden = !roll;
+    const roll = state.current; $('artwork-library').hidden = !state.artworkOpen;
+    $('archive-empty').hidden = !!roll || state.artworkOpen; $('roll-detail').hidden = !roll || state.artworkOpen;
     if (!roll) return;
     const stock = stockFor(roll);
     $('roll-counter').textContent = roll.roll_number || `ARCHIVE / ${roll.id.slice(0, 8).toUpperCase()}`;
@@ -70,6 +71,7 @@
     if (roll.cover) {
       $('cover-provenance').append(el('span', '', roll.cover_credit || '用户上传封面'));
       const source = externalLink(roll.cover_source, '查看封面来源'); if (source) { $('cover-provenance').append(document.createElement('br'), source); }
+      const license = externalLink(roll.cover_license_url, roll.cover_license); if (license) { $('cover-provenance').append(document.createElement('br'), license); }
     } else $('cover-provenance').textContent = '文字档案标签 · 非原厂包装';
     $('roll-stock').textContent = [roll.stock_name || stock?.name || '型号未记录', roll.format, roll.iso ? `ISO ${roll.iso}` : ''].filter(Boolean).join(' / ');
     $('roll-title').textContent = roll.title;
@@ -94,7 +96,71 @@
     for (const source of stock?.sources || []) { const link = externalLink(source.url, source.title); if (link) sources.append(link); }
     $('stock-description').textContent = stock?.notes || '自定义型号：可在档案备注中补充实物信息与资料来源。';
   }
-  async function acceptRoll(result, message) { state.current = result.roll; renderDetail(); await loadRolls(); if (message) status(message); }
+  async function acceptRoll(result, message, select = false) {
+    if (select || !state.current || state.current.id === result.roll.id) { state.current = result.roll; renderDetail(); }
+    await loadRolls(); if (message) status(message);
+  }
+
+  function renderArtwork() {
+    if (!state.artwork) return;
+    const references = state.artworkTab === 'references';
+    const items = references ? state.artwork.references : state.artwork.artworks;
+    const matches = ArtworkModel.filter(items, {query:$('artwork-search').value,brand:$('artwork-brand').value,
+      stockId:state.current?.stock_id,format:state.current?.format,matched:$('artwork-scope').value==='roll'});
+    $('artwork-tab-images').setAttribute('aria-pressed',String(!references));
+    $('artwork-tab-references').setAttribute('aria-pressed',String(references));
+    $('artwork-intro').textContent = references ? '按型号、规格与有效期查找历史包装，打开来源查看完整扫描。' : '真实暗盒照片，可直接用作本卷封面。不同视角与包装版本分别保留。';
+    $('artwork-count').textContent = `${matches.length} ${references?'条资料':'张图案'}${!references&&!state.current?' · 先选择或新建一卷，即可设为封面':''}`;
+    const grid=$('artwork-grid');grid.classList.toggle('reference-list',references);grid.setAttribute('aria-busy',String(state.artworkSaving));grid.replaceChildren();
+    if (!matches.length) grid.append(el('p','artwork-empty','暂时没有匹配项。试试全部型号，或在“封面 / 胶卷盒”中上传自己的实物照片。'));
+    for (const item of matches.slice(0,state.artworkLimit)) {
+      const card=el('article',references?'artwork-reference':'artwork-card');
+      if (!references) {
+        const picture=el('a','artwork-picture');picture.href=item.image;picture.target='_blank';picture.rel='noopener';picture.setAttribute('aria-label',`放大查看 ${item.brand} ${item.name}`);
+        const img=el('img');img.src=item.image;img.alt=item.variant;img.width=item.width;img.height=item.height;img.loading='lazy';picture.append(img);card.append(picture);
+      }
+      const copy=el('div','artwork-copy');copy.append(el('h3','',`${item.brand} ${item.name}`));
+      copy.append(el('p','artwork-meta',references?[item.format,item.iso?`ISO ${item.iso}`:'',item.expiry&&item.expiry!=='Unknown'?`有效期 ${item.expiry}`:''].filter(Boolean).join(' · '):item.variant.replace(/\.[^.]+$/,'')));
+      copy.append(el('p','artwork-credit',`${item.credit} · ${references?'原始扫描资料':item.license}`));
+      const links=el('div','artwork-actions');const source=externalLink(item.source_url,references?'查看包装扫描':'来源');if(source)links.append(source);
+      if (!references) {
+        const license=externalLink(item.license_url,'许可');if(license)links.append(license);
+        const button=el('button','quiet-button',state.current?.cover_artwork===item.id?'当前封面':'用作封面');button.type='button';button.disabled=state.artworkSaving||!state.current||state.current.cover_artwork===item.id;
+        button.addEventListener('click',wrap(async()=>{
+          const roll=state.current;if(!roll||state.artworkSaving)return;
+          state.artworkSaving=true;renderArtwork();status('正在保存暗盒封面…');
+          try {const result=await api(`${rollUrl(roll.id)}/cover`,'POST',{artwork_id:item.id});
+            if(state.current?.id===roll.id)state.artworkOpen=false;
+            await acceptRoll(result,'暗盒封面已保存，署名、来源与许可会随备份保留。');
+            if(state.current?.id===roll.id&&!state.artworkOpen)$('change-cover').focus();
+          } finally {state.artworkSaving=false;if(state.artworkOpen)renderArtwork();}
+        }));links.append(button);
+      }
+      copy.append(links);card.append(copy);grid.append(card);
+    }
+    $('artwork-more').hidden=matches.length<=state.artworkLimit;
+  }
+  async function openArtwork(matchRoll=false) {
+    state.artworkOpen=true;renderDetail();$('artwork-title').focus();
+    $('artwork-search').value='';$('artwork-brand').value='';$('artwork-scope').value=matchRoll&&state.current?'roll':'all';
+    $('artwork-scope').options[1].disabled=!state.current;
+    state.artworkTab='images';state.artworkLimit=24;
+    if(!state.artwork) {
+      const data=await api('/api/archive/artwork');state.artwork=data;
+      const brands=[...new Set([...data.artworks,...data.references].map(item=>item.brand))].sort();
+      $('artwork-brand').replaceChildren(new Option('全部品牌',''),...brands.map(brand=>new Option(brand,brand)));
+      $('artwork-tab-images').textContent=`可用图案 ${data.artworks.length}`;$('artwork-tab-references').textContent=`包装扫描资料 ${data.references.length}`;
+      const sources=$('artwork-source-list');sources.replaceChildren();
+      for(const source of data.sources){const p=el('p');const link=externalLink(source.url,source.name);if(link)p.append(link);p.append(el('span','',` — ${source.note}`));sources.append(p);}
+    }
+    renderArtwork();
+  }
+  $('browse-artwork').addEventListener('click',wrap(()=>openArtwork()));
+  $('choose-artwork').addEventListener('click',wrap(()=>{$('cover-dialog').close();return openArtwork(true);}));
+  $('close-artwork').addEventListener('click',()=>{state.artworkOpen=false;renderDetail();$('browse-artwork').focus();});
+  for(const [id,tab] of [['artwork-tab-images','images'],['artwork-tab-references','references']])$(id).addEventListener('click',()=>{state.artworkTab=tab;state.artworkLimit=24;renderArtwork();});
+  for(const id of ['artwork-search','artwork-brand','artwork-scope'])$(id).addEventListener(id==='artwork-search'?'input':'change',()=>{state.artworkLimit=24;renderArtwork();});
+  $('artwork-more').addEventListener('click',()=>{state.artworkLimit+=24;renderArtwork();});
   const form = $('roll-form');
   function openEditor(roll = null) {
     state.editing = roll ? structuredClone(roll) : null; form.reset();
@@ -113,7 +179,7 @@
     data.cover_source = state.editing?.cover_source || ''; data.cover_credit = state.editing?.cover_credit || '';
     if (state.editing) data.updated_at = state.editing.updated_at;
     $('save-roll').disabled = true;
-    try { const result = await api(state.editing ? rollUrl(state.editing.id) : '/api/archive/rolls', state.editing ? 'PUT' : 'POST', data); $('roll-editor').close(); await acceptRoll(result, '胶卷档案已保存。'); history.replaceState(null, '', `/archive#${result.roll.id}`); }
+    try { const creating=!state.editing; const result = await api(state.editing ? rollUrl(state.editing.id) : '/api/archive/rolls', state.editing ? 'PUT' : 'POST', data); $('roll-editor').close(); if(creating)state.artworkOpen=false; await acceptRoll(result, '胶卷档案已保存。', creating); history.replaceState(null, '', `/archive#${result.roll.id}`); }
     finally { $('save-roll').disabled = false; }
   }, 'editor-error'));
   $('delete-roll').addEventListener('click', wrap(async () => {

@@ -85,7 +85,7 @@ For manual Windows setup, use `py -3.13 -m venv .venv`, then replace
 
 ## Web UI
 
-### 本分支：负片转换与整卷影调
+### 负片转换与整卷影调
 
 调片工作台按 **转换 → 影调 → 色彩 → 导出** 组织，底片列表可收起；保留日间／夜间模式。
 每张照片支持撤销／重做（Ctrl / ⌘ Z、Ctrl / ⌘ Shift Z）。
@@ -119,6 +119,8 @@ silently with a default folder.
 The UI lets you browse a folder, load a negative, adjust the conversion while previewing, save presets, and export a single frame or a checked batch.
 
 **胶片档案**位于顶部导航（`/archive`）。按卷记录拍摄、冲洗和底片存放信息，关联本地成片，上传胶卷盒或照片封面，并搜索、筛选与备份档案。原始照片不会修改；ZIP 备份包含资料、封面与预览，不含原片。默认数据位于已忽略的 `archive_data/`，可用 `NEGATIVEMASTER_ARCHIVE_DIR` 指定长期存储目录。迁移、封面来源及功能边界见[胶片档案使用说明](data/ARCHIVE_GUIDE.md)。
+
+档案内的 **暗盒图案库**提供 74 张可离线使用的实物照片，支持品牌、型号搜索及本卷匹配，一键设为封面并保留作者、来源和许可。另有 730 条历史包装扫描资料，可跳转到原始扫描；未确认可再分发的图片仅收录来源链接。详见[图案来源与逐张署名](data/ARTWORK_SOURCES.md)。
 
 Use **box white balance** when a neutral area is noisy or grainy: enable the white-balance picker, drag a rectangle over a neutral gray/white region, and the converter will average the selected area instead of trusting one pixel.
 
