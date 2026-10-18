@@ -11,6 +11,55 @@ from PIL import Image
 EXPOSURE_STYLES = ("leak", "burn", "radial", "fog", "edge-burn", "ribbon")
 
 
+def ivory_leader_field(size, start, end, aspect, strength=.75, softness=.55, seed=17):
+    """Cream film base with a localized chromatic development boundary.
+
+    The reference is a transmitted-light contact sheet: pale honey film, subtle
+    emulsion variation and a pink/yellow/violet fringe at the photograph end.
+    This is a material replacement confined to blank leader cells, not a light
+    overlay on photographs. Coordinates stay continuous across row breaks.
+    """
+    w, h = min(size[0],1600), min(size[1],320)
+    yy, xx = np.mgrid[0:h,0:w].astype(np.float32)
+    p = start+(xx+.5)/w*(end-start)
+    y = (yy+.5)/h
+    x = p*aspect
+    phases = np.random.default_rng(seed).uniform(0,2*np.pi,10)
+    cloud = (.58*np.sin(x*1.7+y*3.1+phases[0])+
+             .27*np.sin(x*5.3-y*7.9+phases[1])+
+             .15*np.sin(x*15.7+y*13.1+phases[2]))
+    grain = (np.sin(x*173+y*211+phases[3])*np.sin(x*251-y*137+phases[4])+
+             .45*np.sin(x*397+y*353+phases[5]))
+    # Thin longitudinal density variations are quiet enough to read as film,
+    # not a dirty-paper filter. No simulated writing, barcode or brand is added.
+    density = cloud*2.7+grain*.65+np.cos(y*np.pi)*2.2
+    rgb = np.empty((h,w,3),dtype=np.float32)
+    rgb[:] = (235,216,177)
+    rgb += density[...,None]*np.array([.55,.85,1.05])
+    rgb += (np.exp(-((y-.51)/.46)**2)*3)[...,None]
+    # Work in film-height units so a six-frame leader doesn't grow a huge stripe.
+    remaining = (1-p)*aspect
+    undulation = .010*np.sin(y*8+phases[6])+.006*np.sin(y*27+phases[7])
+    center = .24+undulation
+    lower = .16+.84/(1+np.exp(-(y-.53)*9))
+    width = .018+softness*.07
+    yellow = np.exp(-((remaining-center-.13)/(width*1.35))**2)*lower
+    pink = np.exp(-((remaining-center)/(width*.95))**2)*lower
+    violet = np.exp(-((remaining-center+.075)/(width*.75))**2)*lower
+    # Subtractive color absorption retains the translucent milky base, while a
+    # narrow bright core reads like the burned emulsion edge in the reference.
+    rgb -= strength*(yellow[...,None]*np.array([0,10,123])+
+                     pink[...,None]*np.array([0,89,10])+
+                     violet[...,None]*np.array([67,56,0]))
+    core = np.exp(-((remaining-center-.055)/(.012+softness*.018))**2)*lower*strength*.38
+    rgb = rgb*(1-core[...,None])+np.array([255,244,217])*core[...,None]
+    # A very short, irregular dark tail joins the pale base to the dark strip.
+    join_width = .012+softness*.025
+    join = 1/(1+np.exp(np.clip((remaining-.025-undulation*.45)/join_width,-30,30)))
+    rgb = rgb*(1-join[...,None]*.92)+np.array([28,23,33])*join[...,None]*.92
+    return Image.fromarray(np.clip(np.rint(rgb),0,255).astype("uint8")).resize(size,Image.Resampling.BICUBIC)
+
+
 def exposure_field(size, start, end, aspect, style, strength, softness=.55, seed=17):
     """Return RGB screen-blend light, fading out at the end of the affected span."""
     w, h = min(size[0], 1600), min(size[1], 320)

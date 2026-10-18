@@ -16,7 +16,7 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
-from film_effects import EXPOSURE_STYLES, exposure_field
+from film_effects import EXPOSURE_STYLES, exposure_field, ivory_leader_field
 
 EDGE_STYLES = ("dot", "mono", "condensed", "citaro", "citaro-tall",
                "film-dot", "film-stamp", "film-rvp", "film-phoenix", "film-kodak", "film-cine")
@@ -106,13 +106,13 @@ def normalize_config(config: dict | None) -> dict:
     strip["leakPhotoCount"] = round(_number(strip["leakPhotoCount"], "漏光延伸张数", 0, 12))
     header["infoScale"] = _number(header["infoScale"], "信息字号", .8, 1.4)
     for key, choices in (("leaderMode", ("auto", "manual")),
-                         ("leaderStyle", ("dark", "clear", *EXPOSURE_STYLES)),
+                         ("leaderStyle", ("dark", "clear", "ivory", *EXPOSURE_STYLES)),
                          ("sprocketStyle", ("standard", "cinema", "square")),
                          ("sprocketRim", ("none", "amber", "silver")),
                          ("separation", ("none", "shadow", "outline", "lift", "paper")),
                          ("shadowTone", ("black", "white")),
                          ("edgeArrow", ("none", "left", "right")),
-                         ("leaderShape", ("cut", "straight"))):
+                         ("leaderShape", ("cut", "slant", "straight"))):
         if strip[key] not in choices:
             raise ValueError("片头设置无效")
     if not isinstance(strip["separationHoles"], bool):
@@ -586,8 +586,12 @@ def _film_layer(layout: SheetLayout, c: dict, cells: int, cut_leader: bool = Fal
                 # Leave the cut shoulder unpunched instead of opening a half
                 # sprocket into its silhouette. Full-width film retains its pitch.
                 shoulder_end = min(layout.cell_width * .96, layout.strip_height * 1.08)
-                if cut_leader and y == hole_y and x-hw/2 < shoulder_end:
-                    continue
+                if cut_leader:
+                    if strip["leaderShape"] == "slant":
+                        if x-hw/2 < layout.cell_width*.14*(1-y/layout.strip_height):
+                            continue
+                    elif y == hole_y and x-hw/2 < shoulder_end:
+                        continue
                 hole=_hole_mask(max(2,round(hw)),max(2,round(hh)),strip["sprocketStyle"])
                 hx,hy=round(x-hw/2),round(y)
                 if strip["sprocketRim"] != "none":
@@ -601,8 +605,8 @@ def _film_layer(layout: SheetLayout, c: dict, cells: int, cut_leader: bool = Fal
     return row
 
 
-def _clip_leader(row: Image.Image, cell_width: float) -> None:
-    """Flat leader tongue with a compact, tangent-continuous S shoulder.
+def _clip_leader(row: Image.Image, cell_width: float, shape: str = "cut") -> None:
+    """Apply a full-height diagonal cut or a tangent-continuous film tongue.
 
     Keep the cut within the first blank. Supersample only that small end,
     with a bounded mask allocation even for large exports.
@@ -615,6 +619,14 @@ def _clip_leader(row: Image.Image, cell_width: float) -> None:
     width = min(row.width, ceil(end) + 2)
     aa = max(1, min(4, int((4_000_000 / max(1, width * h)) ** .5)))
     mask = Image.new("L", (width * aa, h * aa), 0)
+    if shape == "slant":
+        ImageDraw.Draw(mask).polygon([(cell_width*.14*aa,0),(width*aa,0),
+                                     (width*aa,h*aa),(0,h*aa)],fill=255)
+        mask=mask.resize((width,h),Image.Resampling.LANCZOS)
+        alpha=row.getchannel("A")
+        alpha.paste(ImageChops.multiply(alpha.crop((0,0,width,h)),mask),(0,0))
+        row.putalpha(alpha)
+        return
     shoulder = end - tongue
     p0, p1 = (tongue, level), (tongue + shoulder * .48, level)
     p2, p3 = (end - shoulder * .48, 0), (end, 0)
@@ -644,12 +656,15 @@ def _leader_field(size: tuple[int, int], start: float, end: float,
     """One continuous exposure field along the entire leader, including its bands.
 
     start/end are positions along the roll, independent of rows and frame gaps.
-    All exposure styles decay to the chosen film color at the photo boundary.
+    Exposure fields fade out; ivory supplies its own pale emulsion material.
     """
     base = _color(strip["color"])[:3]
     style = strip["leaderStyle"]
     if style in ("dark", "clear"):
         return Image.new("RGB", size, base if style == "dark" else (224,216,194))
+    if style == "ivory":
+        return ivory_leader_field(size,start,end,aspect,strip["leaderStrength"],
+                                  strip["leakSoftness"],strip["leakSeed"])
     light = exposure_field(size,start,end,aspect,style,strip["leaderStrength"],
                            strip["leakSoftness"],strip["leakSeed"])
     return ImageChops.screen(Image.new("RGB",size,base),light)
@@ -666,7 +681,7 @@ def _place_strip(canvas: Image.Image, row: Image.Image, xy: tuple[int,int],
     ratio=min(1,1600/row.width)
     work=(max(1,round(row.width*ratio)),max(1,round(row.height*ratio)))
     silhouette=Image.new("RGBA",work,(255,255,255,255))
-    if cut_leader: _clip_leader(silhouette,layout.cell_width*ratio)
+    if cut_leader: _clip_leader(silhouette,layout.cell_width*ratio,strip["leaderShape"])
     scale=layout.scale*ratio
     pad=max(4,ceil(20*scale))
     mask=Image.new("L",(work[0]+2*pad,work[1]+2*pad),0)
@@ -677,7 +692,7 @@ def _place_strip(canvas: Image.Image, row: Image.Image, xy: tuple[int,int],
                        band=layout.band*ratio,strip_height=work[1])
         geometry=_film_layer(scaled,{"strip":dict(strip,color="#ffffff",opacity=1)},
                              round(row.width/layout.cell_width),cut_leader)
-        if cut_leader: _clip_leader(geometry,scaled.cell_width)
+        if cut_leader: _clip_leader(geometry,scaled.cell_width,strip["leaderShape"])
         mask.paste(geometry.getchannel("A").resize(work,Image.Resampling.LANCZOS),(pad,pad))
     decor=Image.new("RGBA",mask.size,(0,0,0,0))
     if effect in ("shadow","lift","paper"):
@@ -733,6 +748,8 @@ def _edge_labels(row: Image.Image, layout: SheetLayout, c: dict, stock: dict,
     tracking = strip["edgeTracking"] * layout.scale
     outer = max(1, round(layout.cell_width * .007))
     for cell, index in enumerate(indices):
+        if index < 0 and strip["leaderStyle"] == "ivory":
+            continue
         x = cell * layout.cell_width + layout.gap / 2
         edge = secondary if secondary and cell % 2 else primary
         _text(draw, (x, outer), edge, fs, edge_color, style, layout.cell_width*.84, tracking)
@@ -828,10 +845,10 @@ def render_sheet(images: list[Image.Image], config: dict | None = None,
     for row_index, first in enumerate(range(0, total, layout.columns)):
         slots = list(range(first, min(first + layout.columns, total)))
         indices = [slot - layout.leader_count for slot in slots]
-        cut_leader = row_index == 0 and layout.leader and c["strip"]["leaderShape"] == "cut"
+        cut_leader = row_index == 0 and layout.leader and c["strip"]["leaderShape"] in ("cut","slant")
         row = _film_layer(layout,c,len(slots),cut_leader)
         leader_cells=max(0,min(len(slots),layout.leader_count-first))
-        if leader_cells and c["strip"]["leaderStyle"] in ("dark", "clear"):
+        if leader_cells and c["strip"]["leaderStyle"] in ("dark", "clear", "ivory"):
             leader_width=round(leader_cells*layout.cell_width)
             field=_leader_field((leader_width,layout.strip_height),first/layout.leader_count,
                                 (first+leader_cells)/layout.leader_count,
@@ -860,7 +877,7 @@ def render_sheet(images: list[Image.Image], config: dict | None = None,
             row.paste(exposed,(0,0))
         _edge_labels(row,layout,c,stock,indices,len(images))
         if cut_leader:
-            _clip_leader(row, layout.cell_width)
+            _clip_leader(row, layout.cell_width,c["strip"]["leaderShape"])
         _place_strip(canvas,row,(layout.margin,layout.row_y(row_index)),layout,c["strip"],cut_leader)
     watermark=c.get("watermark")
     if isinstance(watermark,dict):

@@ -60,14 +60,14 @@
           <label class="form-field"><span class="field-label">片头数量</span><select data-config="strip.leaderMode"><option value="auto">自动补齐末行</option><option value="manual">手动指定格数</option></select></label>
           <label class="form-field" id="leader-count-field" hidden><span class="field-label">空白格数</span><input type="number" data-config="strip.leaderCount" min="0" max="24" step="1"></label>
           <p id="leader-summary" class="form-note" role="status"></p>
-          <label class="form-field"><span class="field-label">片头形状</span><select data-config="strip.leaderShape"><option value="cut">弧形裁切</option><option value="straight">完整直边</option></select></label>
+          <label class="form-field"><span class="field-label">片头形状</span><select data-config="strip.leaderShape"><option value="cut">弧形裁切</option><option value="slant">整幅斜切 · 参考片头</option><option value="straight">完整直边</option></select></label>
         </div>
         <h3>漏光与片基</h3>
-        <label class="form-field"><span class="field-label">曝光样式</span><select data-config="strip.leaderStyle"><option value="dark">暗片 · 无漏光</option><option value="clear">透明片基 · 无漏光</option><option value="leak">暖色漏光</option><option value="burn">曝光灼白</option><option value="radial">上下柔光放射</option><option value="fog">玫瑰光雾</option><option value="edge-burn">上下不规则烧边</option><option value="ribbon">橙红光带</option></select></label>
+        <label class="form-field"><span class="field-label">曝光样式</span><select data-config="strip.leaderStyle"><option value="dark">暗片 · 无漏光</option><option value="clear">透明片基 · 无漏光</option><option value="ivory">乳白片基 · 彩色显影边</option><option value="leak">暖色漏光</option><option value="burn">曝光灼白</option><option value="radial">上下柔光放射</option><option value="fog">玫瑰光雾</option><option value="edge-burn">上下不规则烧边</option><option value="ribbon">橙红光带</option></select></label>
         <div id="leak-settings" hidden>
-          <label class="form-field" id="leader-strength-field"><span class="field-label">曝光强度 <output data-output="strip.leaderStrength" data-format="percent"></output></span><input type="range" min="0" max="1" step=".05" data-config="strip.leaderStrength"></label>
+          <label class="form-field" id="leader-strength-field"><span class="field-label"><span id="leader-strength-label">曝光强度</span> <output data-output="strip.leaderStrength" data-format="percent"></output></span><input type="range" min="0" max="1" step=".05" data-config="strip.leaderStrength"></label>
           <label class="form-field"><span class="field-label">边缘柔和度 <output data-output="strip.leakSoftness" data-format="percent"></output></span><input type="range" min="0" max="1" step=".05" data-config="strip.leakSoftness"></label>
-          <label class="form-field"><span class="field-label">延伸到前几张照片</span><input type="number" data-config="strip.leakPhotoCount" min="0" max="12" step="1"></label>
+          <label class="form-field" id="leak-photo-field"><span class="field-label">延伸到前几张照片</span><input type="number" data-config="strip.leakPhotoCount" min="0" max="12" step="1"></label>
           <button id="reroll-leak" class="quiet-button">换一种纹理</button>
           <p class="form-note" id="leak-summary">0 表示仅片头。漏光沿胶片连续展开，左强右弱，不会在画格间断开；只影响排版导出。</p>
         </div>

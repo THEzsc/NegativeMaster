@@ -135,7 +135,7 @@ class ContactSheetTests(unittest.TestCase):
         cfg=dict(self.config,strip={"leader":True,"leaderMode":"manual","leaderCount":1,
                                   "leaderShape":"straight","padding":0})
         l=sheet.sheet_layout(1,cfg)
-        for style in ("dark","clear",*sheet.EXPOSURE_STYLES):
+        for style in ("dark","clear","ivory",*sheet.EXPOSURE_STYLES):
             cfg["strip"]["leaderStyle"]=style
             out=sheet.render_sheet([self.landscape],cfg)
             self.assertEqual(out.tobytes(),sheet.render_sheet([self.landscape],cfg).tobytes())
@@ -144,7 +144,59 @@ class ContactSheetTests(unittest.TestCase):
             hole=(l.margin+round(l.cell_width/16),l.top+round(l.band*.45+l.cell_width*2.79/38/2))
             self.assertEqual(out.getpixel(hole)[3],0)
             outputs.append(out.tobytes())
-        self.assertEqual(len(set(outputs)),8)
+        self.assertEqual(len(set(outputs)),9)
+
+    def test_ivory_material_is_continuous_and_color_edge_stays_at_leader_end(self):
+        import numpy as np
+        args=dict(aspect=6,strength=.8,softness=.55,seed=17)
+        whole=sheet.ivory_leader_field((1200,200),0,1,**args)
+        pieces=Image.new("RGB",whole.size)
+        pieces.paste(sheet.ivory_leader_field((600,200),0,.5,**args))
+        pieces.paste(sheet.ivory_leader_field((600,200),.5,1,**args),(600,0))
+        self.assertLessEqual(np.abs(np.asarray(whole).astype(int)-np.asarray(pieces).astype(int)).max(),1)
+        pixels=np.asarray(whole).astype(int)
+        self.assertGreater(pixels[:,:800].mean(),190)
+        uncolored=sheet.ivory_leader_field(whole.size,0,1,**dict(args,strength=0))
+        changed=np.abs(pixels-np.asarray(uncolored).astype(int)).max(axis=2)
+        self.assertEqual(changed[:,:800].max(),0)
+        self.assertGreater(changed[:,1000:].max(),40)
+        self.assertNotEqual(whole.tobytes(),sheet.ivory_leader_field(whole.size,0,1,**dict(args,seed=18)).tobytes())
+        high=sheet.ivory_leader_field((4800,800),0,1,**args).resize(whole.size,Image.Resampling.LANCZOS)
+        self.assertLess(np.abs(pixels-np.asarray(high).astype(int)).mean(),2)
+
+    def test_slant_cut_is_full_height_and_shared_by_shadow_geometry(self):
+        for width in (1200,4800):
+            cfg=sheet.normalize_config(dict(self.config,width=width,columns=2,strip={
+                "leader":True,"leaderMode":"manual","leaderCount":1,"leaderShape":"slant",
+                "leaderStyle":"ivory","sprockets":False,"separation":"shadow"}))
+            layout=sheet.sheet_layout(1,cfg)
+            row=sheet._film_layer(layout,cfg,2,True)
+            sheet._clip_leader(row,layout.cell_width,"slant")
+            alpha=row.getchannel("A")
+            self.assertEqual(alpha.getpixel((0,0)),0)
+            self.assertEqual(alpha.getpixel((round(layout.cell_width*.2),1)),255)
+            # Lower tip remains full-height, unlike the curved film tongue.
+            self.assertEqual(alpha.getpixel((round(layout.cell_width*.04),row.height-2)),255)
+            self.assertEqual(alpha.getpixel((round(layout.cell_width*.04),2)),0)
+            plain=sheet.render_sheet([self.landscape],dict(cfg,strip=dict(cfg["strip"],separation="none")))
+            dark=sheet.render_sheet([self.landscape],cfg)
+            light=sheet.render_sheet([self.landscape],dict(cfg,strip=dict(cfg["strip"],shadowTone="white")))
+            self.assertEqual(dark.getchannel("A").tobytes(),light.getchannel("A").tobytes())
+            self.assertGreater(ImageChops.subtract(dark.getchannel("A"),plain.getchannel("A")).getextrema()[1],0)
+
+    def test_ivory_ignores_photo_extension_and_disabled_leader(self):
+        cfg=dict(self.config,columns=2,strip={"leader":True,"leaderMode":"manual","leaderCount":3,
+                  "leaderShape":"slant","leaderStyle":"ivory","leakPhotoCount":12})
+        out=sheet.render_sheet([self.landscape],cfg)
+        no_extension=sheet.render_sheet([self.landscape],dict(cfg,strip=dict(cfg["strip"],leakPhotoCount=0)))
+        self.assertEqual(out.tobytes(),no_extension.tobytes())
+        layout=sheet.sheet_layout(1,cfg)
+        point=(layout.margin+round(layout.cell_width*1.5),layout.row_y(1)+layout.band+layout.aperture_height//2)
+        self.assertEqual(out.getpixel(point)[:3],(217,83,41))
+        cfg["strip"]["leader"]=False
+        disabled=sheet.render_sheet([self.landscape],cfg)
+        plain=sheet.render_sheet([self.landscape],dict(cfg,strip=dict(cfg["strip"],leaderStyle="dark")))
+        self.assertEqual(disabled.tobytes(),plain.tobytes())
 
     def test_continuous_leader_has_no_frame_gaps_and_fades_towards_photos(self):
         import numpy as np

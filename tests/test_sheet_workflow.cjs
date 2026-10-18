@@ -385,3 +385,24 @@ test('custom color entry commits only complete colors and undo restores the prev
   await h.el('undo').click();
   assert.equal(h.context.payload().config.background.color,original);
 });
+
+test('ivory leader keeps photo extension dormant, preserves it when switching back, and can undo a new texture',async()=>{
+  const h=harness();await h.load();
+  vm.runInContext("transaction(()=>Object.assign(state.config.strip,{leaderStyle:'ivory',leaderShape:'slant',leakPhotoCount:2}))",h.context);
+  assert.equal(h.el('leak-settings').hidden,false);
+  assert.equal(h.el('leak-photo-field').hidden,true);
+  assert.equal(h.el('leader-strength-label').textContent,'彩边强度');
+  assert.match(h.el('leak-summary').textContent,/只作用于片头/);
+  const seed=h.context.payload().config.strip.leakSeed;
+  await h.el('reroll-leak').click();
+  assert.notEqual(h.context.payload().config.strip.leakSeed,seed);
+  assert.equal(JSON.parse(h.localStorage.getItem('nm.sheet.draft')).config.strip.leaderShape,'slant');
+  await h.el('undo').click();
+  assert.equal(h.context.payload().config.strip.leakSeed,seed);
+  vm.runInContext("transaction(()=>state.config.strip.leaderStyle='radial')",h.context);
+  assert.equal(h.el('leak-photo-field').hidden,false);
+  assert.equal(h.el('leader-strength-label').textContent,'曝光强度');
+  assert.equal(h.context.payload().config.strip.leakPhotoCount,2);
+  vm.runInContext("transaction(()=>Object.assign(state.config.strip,{leaderStyle:'ivory',leader:false}))",h.context);
+  assert.match(h.el('leak-summary').textContent,/至少 1 格/);
+});

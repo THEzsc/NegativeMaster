@@ -37,11 +37,13 @@ function syncLeader(){
   const blanks=strip.leader?(strip.leaderMode==='auto'?(count?((columns-count%columns)%columns||columns):0):strip.leaderCount):0;
   $('leader-settings').hidden=!strip.leader;
   $('leader-count-field').hidden=strip.leaderMode!=='manual';
-  const hasLeak=!['dark','clear'].includes(strip.leaderStyle);
+  const ivory=strip.leaderStyle==='ivory',hasLeak=!['dark','clear'].includes(strip.leaderStyle);
   $('leader-strength-field').hidden=!hasLeak;
   $('leak-settings').hidden=!hasLeak;
   $('sprocket-settings').hidden=!strip.sprockets;
-  $('leak-summary').textContent=!blanks&&!strip.leakPhotoCount?'当前没有片头，请增加延伸张数，或开启片头空格。':'0 表示仅片头。漏光沿胶片连续展开，左强右弱，不会在画格间断开；只影响排版导出。';
+  $('leak-photo-field').hidden=ivory;
+  $('leader-strength-label').textContent=ivory?'彩边强度':'曝光强度';
+  $('leak-summary').textContent=ivory?(blanks?'浅蜜色片基、细颗粒与末端粉紫／黄色显影边。只作用于片头；可搭配整幅斜切，换纹理会保留当前配色。':'乳白片基只作用于片头，请开启片头空格并设置至少 1 格。'):!blanks&&!strip.leakPhotoCount?'当前没有片头，请增加延伸张数，或开启片头空格。':'0 表示仅片头。漏光沿胶片连续展开，左强右弱，不会在画格间断开；只影响排版导出。';
   const total=count+blanks,last=total%columns||columns;
   $('leader-summary').textContent=count?`${blanks} 格片头 + ${count} 张照片 · ${Math.ceil(total/columns)} 行 · ${last===columns?'末行已满':`末行 ${last} / ${columns} 格`}`:'载入照片后自动计算格数';
 }
