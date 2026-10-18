@@ -51,7 +51,7 @@ cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
-for source in gui.py decast.py sheet_app.py contact_sheet.py film_effects.py film_reference.py; do
+for source in gui.py decast.py sheet_app.py contact_sheet.py film_effects.py film_reference.py platform_support.py archive_app.py film_artwork.py workflow_app.py conversion_advisor.py; do
   cp "$PROJECT_DIR/$source" "$APP_PATH/Contents/Resources/Engine/$source"
 done
 for folder in data static templates presets; do

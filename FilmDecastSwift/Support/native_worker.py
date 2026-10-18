@@ -11,29 +11,22 @@ from html.parser import HTMLParser
 
 ROOT = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(ROOT))
+DATA_ROOT = Path(os.environ.get('NM_DATA_ROOT', ROOT))
+os.environ.setdefault('NEGATIVEMASTER_ARCHIVE_DIR', str(DATA_ROOT / 'archive_data'))
 with contextlib.redirect_stdout(sys.stderr):
     import gui
     import decast
     import numpy as np
 
-DATA_ROOT = Path(os.environ.get('NM_DATA_ROOT', ROOT))
 gui.SETTINGS_DIR = str(DATA_ROOT / 'settings')
 decast.PRESET_DIR = str(DATA_ROOT / 'presets')
 _decode_params = {}
-_decode_key = None
+_shared_load = gui.load_full
 
-def native_load(path, raw_denoise=False):
-    global _decode_key
-    opts = gui.make_opts(dict(_decode_params, raw_denoise=raw_denoise))
-    key = (path, raw_denoise, opts.no_camera_wb, opts.no_autorotate, opts.input_gamma)
-    if key == _decode_key and gui.CACHE['full'] is not None:
-        return
-    lin, _ = decast.load_image(path, opts)
-    step = max(1, int(np.ceil(max(lin.shape[:2]) / gui.PREVIEW_MAXSIDE)))
-    prev = lin[::step, ::step].copy()
-    gui.CACHE.update(path=path,full=lin,prev=prev,lastP=None,base=None,base_key=None,
-                     base_vrect=None,raw_dn=raw_denoise,scale=max(prev.shape[:2])/max(lin.shape[:2]))
-    _decode_key = key
+def native_load(path, raw_denoise=False, decode_params=None):
+    # Share cache invalidation and decode semantics with the web workbench.
+    return _shared_load(path, raw_denoise,
+                        _decode_params if decode_params is None else decode_params)
 
 gui.load_full = native_load
 client = gui.app.test_client()

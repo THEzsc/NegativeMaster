@@ -8,11 +8,13 @@ web
 
 ## Users
 
-The owner photographs film negatives, adjusts individual frames, and exports photographs and full-roll contact sheets locally on macOS.
+The owner photographs film negatives, adjusts individual frames, and exports photographs and full-roll contact sheets locally on Windows, macOS or Linux. The SwiftUI front end remains macOS-only.
 
 ## Product Purpose
 
 Convert camera-scanned negatives into positives, retain per-frame edits, and assemble editable film-strip presentations of a roll.
+
+The film archive workspace adds durable local roll records: dates, places, camera/lens, stock and exposure index, development, tags, physical negative storage, source-linked frames, ratings and notes. SQLite metadata and managed preview assets stay separate from original images and adjustment sidecars. Archive ZIP backups carry metadata and previews, not originals. Covers retain optional attribution/source links; generated stock labels are explicitly not authentic packaging.
 
 ## Operating Context
 
