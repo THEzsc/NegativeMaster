@@ -1494,7 +1494,7 @@ def out_path_for(src, out, batch, ext, suffix):
         return os.path.join(out, base)
     if out:
         # 若 out 是已存在目录或以分隔符结尾，则当目录用
-        if os.path.isdir(out) or out.endswith(os.sep):
+        if os.path.isdir(out) or out.endswith((os.sep, "/")):
             os.makedirs(out, exist_ok=True)
             return os.path.join(out, base)
         return out
