@@ -21,6 +21,7 @@ The repository includes two front ends over the same processing idea:
 - Histogram matching against a reference positive scan.
 - 16-bit TIFF and JPEG export, with batch export in the UI.
 - Per-image parameter memory, reusable presets, and whole-roll parameter application.
+- Local SQLite film archive: roll dates/locations, camera/lens, ISO/EI, development notes, physical storage, tags, frame ratings, sourced covers, and portable metadata/preview backups.
 
 ## Install
 
@@ -102,6 +103,8 @@ another with `--port`. A mistyped source folder is reported rather than replaced
 silently with a default folder.
 
 The UI lets you browse a folder, load a negative, adjust the conversion while previewing, save presets, and export a single frame or a checked batch.
+
+**胶片档案**位于顶部导航（`/archive`）。按卷记录拍摄、冲洗和底片存放信息，关联本地成片，上传胶卷盒或照片封面，并搜索、筛选与备份档案。原始照片不会修改；ZIP 备份包含资料、封面与预览，不含原片。默认数据位于已忽略的 `archive_data/`，可用 `NEGATIVEMASTER_ARCHIVE_DIR` 指定长期存储目录。迁移、封面来源及功能边界见[胶片档案使用说明](data/ARCHIVE_GUIDE.md)。
 
 Use **box white balance** when a neutral area is noisy or grainy: enable the white-balance picker, drag a rectangle over a neutral gray/white region, and the converter will average the selected area instead of trusting one pixel.
 

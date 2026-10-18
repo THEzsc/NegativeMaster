@@ -35,3 +35,6 @@ output/
 
 # Local native build and verification artifacts
 work/
+# Personal local film archive (database, thumbnails, covers)
+archive_data/
+*archive*.zip

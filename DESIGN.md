@@ -239,7 +239,7 @@ Fields use the field ground, foreground text and a one-pixel divider border, wit
 
 ### Navigation
 
-The shell uses two plain text destinations with small SVGs. Active destinations change from supporting to main ink and get a (3px) orange underline; inspector tabs use a (2px) underline. At narrow widths, navigation SVGs and the brand caption disappear while text destinations remain. The day/night button stores the selected theme and describes the mode it will switch to. The photo-list toggle exposes its expanded state; narrow layouts use a dismissible backdrop, contain keyboard focus in the temporary drawer, and restore focus when it closes. Collapsing the desktop rail returns a real two-column grid to the canvas and inspector.
+The shell uses three plain text destinations with small SVGs: 调片, 整卷排版 and 胶片档案. Active destinations change from supporting to main ink and get a (3px) orange underline; inspector tabs use a (2px) underline. At narrow widths, navigation SVGs and the brand caption disappear while text destinations remain. The day/night button stores the selected theme and describes the mode it will switch to. The photo-list toggle exposes its expanded state; narrow layouts use a dismissible backdrop, contain keyboard focus in the temporary drawer, and restore focus when it closes. Collapsing the desktop rail returns a real two-column grid to the canvas and inspector.
 
 **The Node Grammar Rule.** Draw navigation and action icons as inline SVG strokes with simple paths and occasional circular connection nodes.
 
@@ -303,3 +303,11 @@ Show the actual rendered roll artifact, including a checkerboard for transparenc
 - 背景不透明度独立于片条、照片和横幅。透明区域在预览中显示棋盘格，PNG 保留 alpha，JPEG 合成白底。
 - 柔和投影、浅色细边、细边加投影、纸白衬边均为可选的作品效果，不是界面装饰。效果默认沿片条外轮廓和齿孔内缘绘制，齿孔效果可关闭；复用片头裁切轮廓，强度可调。投影提供黑色与白色，位置和柔化程度一致；齿孔描边宽度受开口尺寸约束，避免纸白衬边把孔填满。
 - 色卡、强度和说明沿用昼夜主题的文字与边界 token；窄屏保持四列色卡、两列渐变搭配，不产生横向滚动。
+
+
+### 胶片档案工作区
+
+- 胶卷目录与内容区以细分隔线连接。目录提供搜索、拍摄年份、状态与排序；内容区优先展示封面、拍摄信息和照片，沿用橙色动作、方角和昼夜主题。
+- 默认封面为程序绘制的文字标签，明确标为非原厂包装；用户封面保留署名与来源。图片使用自己的内容色，不用界面配色覆盖照片。
+- 新建/编辑、照片备注、封面上传使用原生 dialog 和有标签的表单；错误显示在当前弹窗及底部状态栏。所有用户文字通过 textContent 展示。
+- 窄屏将目录、详情与照片纵向排列；编辑表单独立滚动、底部保存动作保留，390px 无横向溢出。

@@ -2470,6 +2470,8 @@ applyTransform();
 
 # Shared workbench shell and the independent roll-layout routes.
 from sheet_app import create_sheet_blueprint
+from archive_app import create_archive_blueprint
+app.register_blueprint(create_archive_blueprint())
 app.register_blueprint(create_sheet_blueprint(make_opts, _xml_to_data, settings_file,
                                              lambda: START_DIRS))
 _header = app.jinja_env.get_template("shell_header.html").render(active="tune")
