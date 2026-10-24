@@ -1,97 +1,115 @@
 import AppKit
+import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
-@MainActor final class WorkbenchState: ObservableObject {
+@MainActor @Observable final class WorkbenchState {
   enum Workspace: String, CaseIterable {
     case develop = "调片"
     case sheet = "整卷排版"
+    case archive = "胶卷库"
   }
   let engine = EngineBridge()
-  @Published var workspace: Workspace = .develop {
+  let analysisEngine = EngineBridge()
+  let archive = ArchiveState()
+  var gammaAnalysis: J = .null
+  var analyzing = false
+  var analysisParams: J = .null
+  var analysisPath: String?
+  var analysisPaths: [String] = []
+  var analysisIsRoll = false
+  @ObservationIgnored var analysisTask: Task<Void, Never>?
+  var workspace: Workspace = .develop {
+    willSet { if newValue != workspace { SwitchPerformance.begin(newValue.rawValue) } }
     didSet {
-      selectionTool = ""
-      zoom = 1
+      guard workspace != oldValue else { return }
+      if !selectionTool.isEmpty { selectionTool = "" }
+      if zoom != 1 { zoom = 1 }
     }
   }
-  @Published var ready = false
-  @Published var showHelp = false
-  @Published var showPathSheet = false
-  @Published var pathEntry = ""
-  @Published var resetOnLoad = false
-  @Published var preferSavedBatch = true
-  @Published var busy = false
-  @Published var batchRunning = false
-  @Published var rendering = false
-  @Published var progress = 0.0
-  @Published var status = "正在准备本地图像引擎…"
-  @Published var error: String?
-  @Published var warnings: [String] = []
-  @Published var photos: [Photo] = []
-  @Published var selected: String?
-  @Published var checked: Set<String> = []
-  @Published var search = ""
-  @Published var folder: URL?
-  @Published var params: J = .object([:])
-  @Published var defaults: J = .object([:])
-  @Published var preview: NSImage?
-  @Published var negative: NSImage?
-  @Published var histogram: J = .null
-  @Published var imageSize = CGSize.zero
-  @Published var showNegative = false
-  @Published var zoom = 1.0
-  @Published var selectionTool = ""
-  @Published var cropAspect = "free"
-  @Published var useRollReference = true
-  @Published var presetNames: [String] = []
-  @Published var selectedPreset = ""
-  @Published var nameEntry = ""
-  @Published var showNameSheet = false
-  @Published var namePurpose = "preset"
-  @Published var referenceName = ""
-  @Published var exportFormat = "tif"
-  @Published var exportBits = 16
-  @Published var exportQuality = 92.0
-  @Published var exportResize = 0.0
-  @Published var lastExport: URL?
-  @Published var inspector = true
-  @Published var tunePane = "光线"
-  @Published var sheetPane = "film"
-  @Published var sheetConfig: J = .object([:])
-  @Published var sheetDefaults: J = .object([:])
-  @Published var fields: [ControlField] = []
-  @Published var stocks: [J] = []
-  @Published var stockID = ""
-  @Published var stockSearch = ""
-  @Published var sheetPhotos: [Photo] = []
-  @Published var sheetSelection: Set<Int> = []
-  @Published var activeFrame: Int?
-  @Published var frames: J = .object([:])
-  @Published var sheetImage: NSImage?
-  @Published var sheetFrameImage: NSImage?
-  @Published var frameView = false
-  @Published var frameGrid = true
-  @Published var outputDimensions = ""
-  @Published var sheetFormat = "png"
-  @Published var layoutNames: [String] = []
-  @Published var selectedLayout = ""
-  @Published var canUndo = false
-  @Published var canRedo = false
-  @Published var draftAvailable = false
+  var ready = false
+  var showHelp = false
+  var showPathSheet = false
+  var pathEntry = ""
+  var resetOnLoad = false
+  var preferSavedBatch = true
+  var busy = false
+  var batchRunning = false
+  var rendering = false
+  var progress = 0.0
+  var status = "正在准备本地图像引擎…"
+  var error: String?
+  var warnings: [String] = []
+  var photos: [Photo] = []
+  var selected: String?
+  var checked: Set<String> = []
+  var search = ""
+  var folder: URL?
+  var params: J = .object([:])
+  var defaults: J = .object([:])
+  var preview: NSImage?
+  var negative: NSImage?
+  var histogram: J = .null
+  var imageSize = CGSize.zero
+  var showNegative = false { didSet { if showNegative { queueNegative() } } }
+  @ObservationIgnored private var negativeTask: Task<Void, Never>?
+  private var negativeParams: J = .null
+  private var negativePath = ""
+  var zoom = 1.0
+  var selectionTool = ""
+  var cropAspect = "free"
+  var useRollReference = true
+  var presetNames: [String] = []
+  var selectedPreset = ""
+  var nameEntry = ""
+  var showNameSheet = false
+  var namePurpose = "preset"
+  var referenceName = ""
+  var exportFormat = "tif"
+  var exportBits = 16
+  var exportQuality = 92.0
+  var exportResize = 0.0
+  var lastExport: URL?
+  var inspector = true
+  var tunePane = "光线"
+  var sheetPane = "film"
+  var sheetConfig: J = .object([:])
+  var sheetDefaults: J = .object([:])
+  var fields: [ControlField] = []
+  var stocks: [J] = []
+  var stockID = ""
+  var stockSearch = ""
+  var sheetPhotos: [Photo] = []
+  var sheetSelection: Set<Int> = []
+  var activeFrame: Int?
+  var frames: J = .object([:])
+  var sheetImage: NSImage?
+  var sheetFrameImage: NSImage?
+  var frameView = false
+  var frameGrid = true
+  var outputDimensions = ""
+  var sheetFormat = "png"
+  var layoutNames: [String] = []
+  var selectedLayout = ""
+  var canUndo = false
+  var canRedo = false
+  var draftAvailable = false
   var sheetJob = ""
   var backgroundPath: String?
   var sheetDirectory = ""
-  private var renderTask: Task<Void, Never>?
-  private var sheetTask: Task<Void, Never>?
-  private var saveTask: Task<Void, Never>?
-  private var undoStack: [J] = [], redoStack: [J] = []
+  @ObservationIgnored private var renderTask: Task<Void, Never>?
+  @ObservationIgnored private var sheetTask: Task<Void, Never>?
+  @ObservationIgnored private var draftTask: Task<Void, Never>?
+  @ObservationIgnored var saveTask: Task<Void, Never>?
+  @ObservationIgnored private var undoStack: [J] = []
+  @ObservationIgnored private var redoStack: [J] = []
   private var lastEdit = Date.distantPast
   private var editKey = ""
   private var revision = 0
   private var sheetRevision = 0
   private var selectRevision = 0
-  private var parameterPath: String?
-  private var frameTask: Task<Void, Never>?
+  var parameterPath: String?
+  @ObservationIgnored private var frameTask: Task<Void, Never>?
   private var cancelBatch = false
 
   var filteredPhotos: [Photo] {
@@ -236,7 +254,8 @@ import UniformTypeIdentifiers
     renderTask?.cancel()
     sheetTask?.cancel()
     frameTask?.cancel()
-    saveDraft()
+    saveDraft(immediately: true)
+    await draftTask?.value
     guard let selected, parameterPath == selected else { return }
     do {
       _ = try await engine.call(
@@ -247,6 +266,7 @@ import UniformTypeIdentifiers
     } catch { NSLog("NegativeMaster: final save failed: %@", error.localizedDescription) }
   }
   func chooseFolder() {
+    if workspace == .archive { archive.importFrames(); return }
     let p = NSOpenPanel()
     p.canChooseDirectories = true
     p.canChooseFiles = false
@@ -256,6 +276,7 @@ import UniformTypeIdentifiers
     }
   }
   func chooseFiles() {
+    if workspace == .archive { archive.importFrames(); return }
     let p = NSOpenPanel()
     p.canChooseFiles = true
     p.canChooseDirectories = false
@@ -264,6 +285,7 @@ import UniformTypeIdentifiers
     if p.runModal() == .OK { acceptURLs(p.urls) }
   }
   func acceptURLs(_ urls: [URL]) {
+    if workspace == .archive { archive.acceptURLs(urls); return }
     guard ready, !busy, let first = urls.first else { return }
     if first.pathExtension.lowercased() == "zip" {
       importProject(first)
@@ -380,7 +402,7 @@ import UniformTypeIdentifiers
     ] where old[a] != .null { p[b] = .array(["x0", "y0", "x1", "y1"].map { old[a][$0] }) }
     return p
   }
-  private func persistSoon() {
+  func persistSoon() {
     saveTask?.cancel()
     guard let path = selected, parameterPath == path else { return }
     let p = params
@@ -400,7 +422,7 @@ import UniformTypeIdentifiers
     saveTask?.cancel()
     guard let path = selected, parameterPath == path else { return }
     let p = params
-    Task {
+    saveTask = Task {
       do {
         _ = try await engine.call(
           .object([
@@ -427,11 +449,12 @@ import UniformTypeIdentifiers
         try Task.checkCancellation()
         let r = try await engine.call(
           .object([
-            "action": .string("render"), "body": .object(["path": .string(path), "params": p]),
+            "action": .string("render"), "body": .object(["path": .string(path), "params": p, "include_negative": .bool(false)]),
           ]))
-        guard token == revision, selected == path else { return }
-        preview = decodeImage(r["bytes"])
-        negative = decodeImage(r["negative"])
+        let decoded = await ImagePipeline.preview(r["bytes"])
+        guard !Task.isCancelled, token == revision, selected == path else { return }
+        preview = decoded.map { NSImage(cgImage: $0, size: .zero) }
+        if showNegative { queueNegative() }
         histogram = r["histogram"]
         imageSize = CGSize(width: r["fullWidth"].double, height: r["fullHeight"].double)
         rendering = false
@@ -444,8 +467,21 @@ import UniformTypeIdentifiers
       }
     }
   }
-  func decodeImage(_ value: J) -> NSImage? {
-    Data(base64Encoded: value.string).flatMap { NSImage(data: $0) }
+  func queueNegative() {
+    guard let path = selected, parameterPath == path, showNegative else { return }
+    let p = params
+    guard path != negativePath || p != negativeParams || negative == nil else { return }
+    negativeTask?.cancel()
+    negative = nil
+    negativeTask = Task {
+      do {
+        let r = try await engine.call(.object(["action": .string("negative"), "body": .object(["path": .string(path), "params": p])]))
+        let decoded = await ImagePipeline.preview(r["bytes"])
+        guard !Task.isCancelled, selected == path, params == p else { return }
+        negative = decoded.map { NSImage(cgImage: $0, size: .zero) }
+        negativePath = path; negativeParams = p
+      } catch { failure(error) }
+    }
   }
   func rotate(_ delta: Int) {
     setParam("rotate", .number(Double((Int(params["rotate"].double) + delta + 360) % 360)))
@@ -642,6 +678,7 @@ import UniformTypeIdentifiers
     }
   }
   func exportCurrent() {
+    if workspace == .archive { archive.backup(); return }
     if workspace == .sheet {
       exportSheet()
       return
@@ -849,8 +886,9 @@ import UniformTypeIdentifiers
         try await Task.sleep(for: .milliseconds(220))
         try Task.checkCancellation()
         let r = try await engine.api("/api/sheet/preview", payload)
-        guard token == sheetRevision else { return }
-        sheetImage = decodeImage(r["bytes"])
+        let decoded = await ImagePipeline.preview(r["bytes"])
+        guard !Task.isCancelled, token == sheetRevision else { return }
+        sheetImage = decoded.map { NSImage(cgImage: $0, size: .zero) }
         outputDimensions = "\(r["width"].string) × \(r["height"].string) px"
         rendering = false
         if !busy { status = "\(selectedOrder.count) 张照片 · \(outputDimensions)" }
@@ -880,8 +918,9 @@ import UniformTypeIdentifiers
       do {
         try await Task.sleep(for: .milliseconds(120))
         let r = try await engine.call(.object(["action": .string("frame"), "body": b]))
+        let decoded = await ImagePipeline.preview(r["bytes"])
         guard !Task.isCancelled, activeFrame == id, sheetJob == job else { return }
-        sheetFrameImage = decodeImage(r["bytes"])
+        sheetFrameImage = decoded.map { NSImage(cgImage: $0, size: .zero) }
       } catch { failure(error) }
     }
   }
@@ -1051,22 +1090,37 @@ import UniformTypeIdentifiers
     layoutNames = l.keys.sorted()
     selectedLayout = ""
   }
-  func saveDraft() {
+  func saveDraft(immediately: Bool = false) {
     guard !sheetPhotos.isEmpty else { return }
-    var overrides: [String: J] = [:]
-    for p in sheetPhotos { overrides[p.path] = frames[String(p.sheetID)] }
-    let source = Int(sheetConfig.at("background.sourceIndex").double)
-    let draft = J.object([
-      "config": sheetConfig, "stockId": .string(stockID),
-      "allSources": .array(sheetPhotos.map { .string($0.path) }),
-      "sources": .array(
-        sheetPhotos.filter { sheetSelection.contains($0.sheetID) }.map { .string($0.path) }),
-      "frameOptions": .object(overrides), "backgroundFile": .string(backgroundPath ?? ""),
-      "backgroundSourcePath": .string(sheetPhotos.first { $0.sheetID == source }?.path ?? ""),
-      "positiveOnly": .bool(sheetPhotos.allSatisfy { $0.source == "import" }),
-    ])
-    UserDefaults.standard.set(draft.data, forKey: "native.sheet.draft")
-    draftAvailable = true
+    let photos = sheetPhotos, config = sheetConfig, options = frames
+    let selection = sheetSelection, stock = stockID, background = backgroundPath
+    let previous = draftTask
+    previous?.cancel()
+    draftTask = Task.detached(priority: .utility) { [weak self] in
+      if !immediately { try? await Task.sleep(for: .milliseconds(600)) }
+      // A canceled intermediate task must still drain its predecessor. Otherwise a newer
+      // write could overtake an older write that had already started encoding or saving.
+      await previous?.value
+      guard !Task.isCancelled else { return }
+      var overrides: [String: J] = [:]
+      for p in photos { overrides[p.path] = options[String(p.sheetID)] }
+      let source = Int(config.at("background.sourceIndex").double)
+      let draft = J.object([
+        "config": config, "stockId": .string(stock),
+        "allSources": .array(photos.map { .string($0.path) }),
+        "sources": .array(
+          photos.filter { selection.contains($0.sheetID) }.map { .string($0.path) }),
+        "frameOptions": .object(overrides), "backgroundFile": .string(background ?? ""),
+        "backgroundSourcePath": .string(photos.first { $0.sheetID == source }?.path ?? ""),
+        "positiveOnly": .bool(photos.allSatisfy { $0.source == "import" }),
+      ])
+      let data = draft.data
+      guard !Task.isCancelled else { return }
+      UserDefaults.standard.set(data, forKey: "native.sheet.draft")
+      await MainActor.run { [weak self] in
+        if self?.draftAvailable == false { self?.draftAvailable = true }
+      }
+    }
   }
   func restoreDraft() {
     guard let data = UserDefaults.standard.data(forKey: "native.sheet.draft"),

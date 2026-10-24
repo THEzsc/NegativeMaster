@@ -157,4 +157,65 @@ class NativeBridgeTests(unittest.TestCase):
         self.assertTrue(self.call('bootstrap')['stocks'])
         with self.assertRaises(ValueError):self.api('/api/sheet/preview',dict(job='missing'))
 
+    def test_10_lazy_negative_matches_legacy_render(self):
+        body=dict(path=str(self.photo),params=dict(self.defaults,rotate=90,level_angle=.3))
+        old=self.call('render',body)
+        lean=self.call('render',dict(body,include_negative=False))
+        self.assertNotIn('negative',lean)
+        self.assertEqual(lean['bytes'],old['bytes'])
+        self.assertEqual(self.call('negative',body)['bytes'],old['negative'])
+        self.assertLess(len(json.dumps(lean)),len(json.dumps(old)))
+
+    def test_11_lightweight_thumbnail(self):
+        job=self.api('/api/sheet/prepare',dict(paths=[str(self.positive)],positiveOnly=True))['job']
+        ready=self.ready(job);fid=ready['items'][0]['id']
+        thumb=self.image(self.call('thumbnail',dict(job=job,id=fid)))
+        self.assertEqual(thumb.size,(160,107))
+        with self.assertRaises(ValueError):self.call('thumbnail',dict(job='missing',id=fid))
+        self.assertTrue(self.call('bootstrap')['stocks'])
+
+    def test_12_archive_lifecycle_and_artwork_backup(self):
+        catalog=self.api('/api/archive/catalog',method='GET')
+        self.assertEqual(Path(catalog['storage']),(self.dir/'archive_data').resolve())
+        art=self.api('/api/archive/artwork',method='GET')['artworks'][0]
+        roll=self.api('/api/archive/rolls',dict(title='Native QA',stock_id='kodak-gold-200',status='scanning',tags=['synthetic']))['roll']
+        rid=roll['id']
+        roll=self.api('/api/archive/rolls/'+rid+'/cover',dict(artwork_id=art['id']))['roll']
+        self.assertEqual(roll['cover_artwork'],art['id'])
+        roll=self.api('/api/archive/rolls/'+rid,dict(roll,camera='QA camera'),method='PUT')['roll']
+        self.assertEqual(roll['cover_license'],art['license'])
+        roll=self.api('/api/archive/rolls/'+rid+'/frames',dict(directory=str(self.images),mode='all'))['roll']
+        self.assertGreaterEqual(len(roll['frames']),2)
+        fid=roll['frames'][0]['id']
+        roll=self.api('/api/archive/rolls/'+rid+'/frames/'+fid,dict(rating=4,notes='Keep'),method='PUT')['roll']
+        self.assertEqual(next(f for f in roll['frames'] if f['id']==fid)['rating'],4)
+        backup=self.dir/'archive-backup.zip'
+        self.api('/api/archive/backup',method='GET',output=str(backup))
+        restored=self.api('/api/archive/restore',files=dict(file=str(backup)))
+        self.assertEqual(restored['imported'],1)
+        copied=self.api('/api/archive/rolls/'+restored['ids'][0],method='GET')['roll']
+        self.assertEqual(copied['cover_license'],art['license'])
+        self.assertEqual(copied['cover_credit'],art['credit'])
+        self.api('/api/archive/rolls/'+rid,method='DELETE')
+        self.api('/api/archive/rolls/'+copied['id'],method='DELETE')
+        self.assertEqual(self.api('/api/archive/rolls',method='GET')['stats']['rolls'],0)
+        self.assertTrue(self.photo.exists())
+
+    def test_13_workflow_gamma_only_preserves_edits(self):
+        first=dict(self.defaults,exposure=.6,crop_rect=[.1,.2,.8,.9],rotate=90,temp=18)
+        second=dict(self.defaults,exposure=-.3,crop_rect=[.2,.1,.9,.8],rotate=180,temp=-8)
+        paths=[str(self.photo),str(self.positive)]
+        for path,p in zip(paths,[first,second]):self.call('save',dict(path=path,params=p,sidecar=True))
+        report=self.api('/api/workflow/analyze',dict(paths=paths,current_path=paths[0],current=dict(P=first)))
+        self.assertIn('recommendation',report['report'])
+        result=self.api('/api/workflow/roll-gamma',dict(paths=paths,parameter_key='gamma',gamma=.85,current_path=paths[0],current=dict(P=first,cropN=dict(zip(['x0','y0','x1','y1'],first['crop_rect'])))))
+        self.assertEqual(result['updated'],paths)
+        for path,p in zip(paths,[first,second]):
+            loaded=self.call('adjustments',dict(path=path))['params']
+            self.assertEqual(loaded,dict(p,gamma=.85))
+        self.call('save',dict(path=paths[1],params=dict(second,mode='positive'),sidecar=True))
+        mismatch=self.api('/api/workflow/roll-gamma',dict(paths=[paths[1]],parameter_key='gamma',gamma=1.1))
+        self.assertEqual(mismatch['updated'],[])
+        self.assertEqual(len(mismatch['errors']),1)
+
 if __name__=='__main__':unittest.main()

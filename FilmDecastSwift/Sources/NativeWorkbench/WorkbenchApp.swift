@@ -2,11 +2,11 @@ import SwiftUI
 
 @main struct NativeWorkbenchApp: App {
   @NSApplicationDelegateAdaptor(WorkbenchDelegate.self) private var delegate
-  @StateObject private var state = WorkbenchState()
+  @State private var state = WorkbenchState()
   @AppStorage("native.appearance") private var appearance = "system"
   var body: some Scene {
     Window("NegativeMaster", id: "workbench") {
-      WorkbenchView().environmentObject(state)
+      WorkbenchView().environment(state)
         .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
         .task {
           delegate.state = state
@@ -35,23 +35,23 @@ import SwiftUI
         ).disabled(state.sheetSelection.isEmpty || state.busy)
         Button("导出…", action: state.exportCurrent).keyboardShortcut("e").disabled(
           state.busy
-            || (state.workspace == .develop ? state.preview == nil : state.sheetImage == nil))
+            || (state.workspace == .develop ? state.preview == nil : state.workspace == .sheet ? state.sheetImage == nil : !state.archive.loaded))
       }
       CommandGroup(replacing: .undoRedo) {
         Button("撤销", action: state.undo).keyboardShortcut("z").disabled(
-          !state.canUndo || state.busy)
+          !state.canUndo || state.busy || state.workspace == .archive)
         Button("重做", action: state.redo).keyboardShortcut("z", modifiers: [.command, .shift])
-          .disabled(!state.canRedo || state.busy)
+          .disabled(!state.canRedo || state.busy || state.workspace == .archive)
       }
       CommandGroup(replacing: .help) { Button("NegativeMaster 使用说明") { state.showHelp = true } }
       CommandMenu("照片") {
         Button("顺时针旋转", action: { state.rotate(90) }).keyboardShortcut("r", modifiers: .command)
-          .disabled(state.selected == nil)
-        Button("水平镜像", action: { state.mirror("h") }).disabled(state.selected == nil)
-        Button("自动裁剪与校平", action: state.autoCrop).disabled(state.selected == nil || state.busy)
+          .disabled(state.selected == nil || state.workspace != .develop)
+        Button("水平镜像", action: { state.mirror("h") }).disabled(state.selected == nil || state.workspace != .develop)
+        Button("自动裁剪与校平", action: state.autoCrop).disabled(state.selected == nil || state.busy || state.workspace != .develop)
         Button("查看原始底片", action: { state.showNegative.toggle() }).keyboardShortcut("b").disabled(
           state.selected == nil)
-        Button("重置调整", action: state.resetDevelop).disabled(state.selected == nil)
+        Button("重置调整", action: state.resetDevelop).disabled(state.selected == nil || state.workspace != .develop)
       }
       CommandGroup(after: .toolbar) {
         Button(state.inspector ? "隐藏检查器" : "显示检查器", action: { state.inspector.toggle() })

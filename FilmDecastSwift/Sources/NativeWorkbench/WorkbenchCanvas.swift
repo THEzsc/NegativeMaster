@@ -2,7 +2,8 @@ import FilmDecastCore
 import SwiftUI
 
 struct WorkbenchCanvas: View {
-  @EnvironmentObject var s: WorkbenchState
+  @Environment(WorkbenchState.self) var s
+  private var bindings: Bindable<WorkbenchState> { Bindable(s) }
   @State private var dragStart: CGPoint?
   @State private var dragEnd: CGPoint?
   @State private var magnifyStart = 1.0

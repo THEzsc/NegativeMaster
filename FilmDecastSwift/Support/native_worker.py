@@ -162,8 +162,23 @@ def handle(message):
         result['histogram'] = request('/api/hist',method='GET')
         result['fullWidth'] = int(gui.CACHE['full'].shape[1])
         result['fullHeight'] = int(gui.CACHE['full'].shape[0])
-        result['negative'] = request('/api/render',dict(p,negative_preview=True))['bytes']
+        if body.get('include_negative', True):
+            result['negative'] = request('/api/render',dict(p,negative_preview=True))['bytes']
         return result
+    if action == 'negative':
+        p = body['params']
+        _decode_params = p
+        gui.load_full(body['path'], p.get('raw_denoise', False))
+        return request('/api/render', dict(p, negative_preview=True))
+    if action == 'thumbnail':
+        from PIL import Image
+        with client.get('/api/sheet/thumb/'+body['job']+'/'+str(body['id'])) as response:
+            if response.status_code != 200:
+                raise ValueError('排版缩略图已失效，请重新载入项目。')
+            with Image.open(io.BytesIO(response.get_data())) as image:
+                image.thumbnail((160,160),Image.Resampling.LANCZOS)
+                buf=io.BytesIO();image.convert('RGB').save(buf,'JPEG',quality=85)
+        return dict(bytes=base64.b64encode(buf.getvalue()).decode())
     if action == 'autocrop':
         _decode_params = body
         gui.load_full(body['path'],body.get('raw_denoise',False))
@@ -199,14 +214,15 @@ def handle(message):
         if not path.startswith('/api/'):
             raise ValueError('不支持的处理操作')
         with contextlib.ExitStack() as stack:
+            headers = {'X-NegativeMaster-Archive':'1'} if path.startswith('/api/archive/') else {}
             files = message.get('files')
             if files:
                 data = dict(body)
                 for key,path_on_disk in files.items():
                     data[key] = (stack.enter_context(open(path_on_disk,'rb')),Path(path_on_disk).name)
-                response = client.open(path,method=message.get('method','POST'),data=data)
+                response = client.open(path,method=message.get('method','POST'),data=data,headers=headers)
             else:
-                response = client.open(path,method=message.get('method','POST'),json=body if message.get('method','POST')!='GET' else None)
+                response = client.open(path,method=message.get('method','POST'),json=body if message.get('method','POST')!='GET' else None,headers=headers)
             result = response_data(response,message.get('output'))
             if path.startswith('/api/sheet/job/'):
                 job = gui.app.blueprints['sheet'].sheet_jobs.get(path.rsplit('/',1)[-1],{})
