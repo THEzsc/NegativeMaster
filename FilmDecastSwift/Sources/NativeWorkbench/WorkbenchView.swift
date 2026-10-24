@@ -10,8 +10,8 @@ struct WorkbenchView: View {
         .navigationSplitViewColumnWidth(min: 220, ideal: 265, max: 340)
     } detail: {
       VStack(spacing: 0) {
-        if s.workspace == .archive { ArchiveDetail(a: s.archive) }
-        else { WorkbenchCanvas(); statusBar }
+        WorkspacePane(state: s, mode: s.workspace, kind: .canvas)
+        if s.workspace != .archive { WorkbenchStatusBar() }
       }
       .navigationTitle(
         s.workspace == .develop ? (s.currentPhoto?.name ?? "NegativeMaster") : s.workspace.rawValue
@@ -103,24 +103,21 @@ struct WorkbenchView: View {
         !s.canRedo || s.busy || s.workspace == .archive)
     }
     ToolbarItemGroup(placement: .primaryAction) {
-      if s.workspace == .develop {
-        Button(action: s.autoCrop) { Label("自动裁剪与校平", systemImage: "crop.rotate") }.disabled(
-          s.preview == nil || s.busy)
+      if s.workspace != .archive {
         Button {
-          s.showNegative.toggle()
+          if s.workspace == .develop { s.autoCrop() } else { s.frameView = false }
         } label: {
-          Label(
-            "查看底片",
-            systemImage: s.showNegative ? "circle.lefthalf.filled" : "circle.righthalf.filled")
-        }.disabled(s.preview == nil)
-      } else if s.workspace == .sheet {
+          Label(s.workspace == .develop ? "自动裁剪与校平" : "整卷预览",
+                systemImage: s.workspace == .develop ? "crop.rotate" : "rectangle.split.3x3")
+        }.disabled(s.workspace == .develop && (s.preview == nil || s.busy))
         Button {
-          s.frameView = false
+          if s.workspace == .develop { s.showNegative.toggle() } else { s.saveProject() }
         } label: {
-          Label("整卷预览", systemImage: "rectangle.split.3x3")
-        }
-        Button(action: s.saveProject) { Label("保存项目", systemImage: "square.and.arrow.down") }
-          .disabled(s.sheetSelection.isEmpty || s.busy)
+          Label(s.workspace == .develop ? "查看底片" : "保存项目",
+                systemImage: s.workspace == .develop
+                  ? (s.showNegative ? "circle.lefthalf.filled" : "circle.righthalf.filled")
+                  : "square.and.arrow.down")
+        }.disabled(s.workspace == .develop ? s.preview == nil : s.sheetSelection.isEmpty || s.busy)
       }
     }
     ToolbarItem(placement: .primaryAction) {
@@ -138,7 +135,11 @@ struct WorkbenchView: View {
       }.disabled(s.workspace == .archive)
     }
   }
-  private var statusBar: some View {
+}
+
+private struct WorkbenchStatusBar: View {
+  @Environment(WorkbenchState.self) var s
+  var body: some View {
     HStack(spacing: 10) {
       if s.rendering || s.busy {
         ProgressView().controlSize(.small).scaleEffect(0.7).frame(width: 14, height: 14)

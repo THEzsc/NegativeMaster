@@ -1,12 +1,12 @@
 # NegativeMaster · SwiftUI 工作台
 
-当前构建版本为 **2.1（build 4）**。这是原生 SwiftUI 前端：NavigationSplitView 缩略图侧栏、独立检查器、系统工具栏、菜单、文件面板与浅深色外观。照片和排版位于内容层，操作位于系统导航层；「调片」「整卷排版」「胶卷库」共用原生工作台。
+当前构建版本为 **2.1（build 5）**。这是原生 SwiftUI 前端：NavigationSplitView 缩略图侧栏、独立检查器、系统工具栏、菜单、文件面板与浅深色外观。照片和排版位于内容层，操作位于系统导航层；「调片」「整卷排版」「胶卷库」共用原生工作台。
 
 前端不嵌入网页。图像处理复用仓库中已验证的 Python 算法，Swift 与独立本地进程通过 JSON 管道通信，不监听网络端口。打包脚本包含 Python、图像库、胶卷资料、字体与全部渲染资源。
 
 ## 使用
 
-双击项目根目录的 `NegativeMaster.app`，也可以拖到「应用程序」。构建时按本机处理器架构打包；当前交付包是 Apple Silicon 版，已在 macOS 27.0.1 验证启动。包声明最低 macOS 14，其他系统版本尚未做本轮验收。
+双击构建生成的 `NegativeMaster.app`，也可以拖到「应用程序」。构建时按本机处理器架构打包；本轮 Apple Silicon 构建已在 macOS 27.0.1 验证启动。包声明最低 macOS 14，其他系统版本尚未做本轮验收。
 
 - **调片**：打开文件夹或导入照片，左侧选择，右侧切换光线、色彩、曲线、细节、裁剪、导出。
 - **整卷排版**：导入成片或打开胶卷文件夹。文件夹优先使用已导出成片，其次读取各照片保存的参数；未调整的 RAW 会提示跳过。
@@ -46,11 +46,20 @@
 
 ## 切换与保存的实现
 
-`WorkbenchState` 使用 Observation 按属性追踪界面依赖。调片与整卷排版的侧栏、检查器保留各自的 `NSHostingView`，固定视口并关闭其固有尺寸协商，切换只改变可见宿主，避免隐藏的 Form／List 参与当前页面尺寸计算。外观变化仍传入所有宿主，切换前会结束离开面板内的文本编辑。
+`WorkbenchState` 使用 Observation 按属性追踪界面依赖。调片与整卷排版的侧栏、检查器和画布保留各自的 `NSHostingView`，固定视口并关闭其固有尺寸协商，切换只改变可见宿主，避免隐藏的 Form／List 参与当前页面尺寸计算。每个画布固定所属工作区，胶卷库的侧栏与内容宿主在首次进入时建立。外观变化仍传入所有宿主，切换前会结束离开面板内的文本编辑。
+
+build 5 将透明棋盘格限制在整卷画布，并把灰格合并为一次路径填充；不透明的调片预览省去棋盘格绘制。作品投影由矩形背板承担，避免对整棵图像与覆盖层计算投影。调片／整卷的两个主要工具栏按钮保持稳定身份，随工作区更新标签和操作。双指缩放从每次手势开始时的当前倍率取基线，结束或取消时清空基线；物理触控板手势尚未实测。
 
 本地引擎通信在串行后台队列执行；预览的 Base64／图像解码和缩略图解码放到后台。共享解码缓存上限为 48 MiB，相同的进行中缩略图请求会合并；底片预览按需获取。整卷草稿保存延迟 600 ms 合并连续编辑，后台编码与写入按顺序完成。正常退出时等待最终草稿和当前照片参数写入，取消的旧任务不会覆盖最后快照。
 
-2026-10-24 在同一台 Apple Silicon Mac、相同 1440 × 920 点窗口、同一组 24 张合成 JPEG、两个已加载工作区之间测量了 10 次交替切换：状态变更到主运行循环空闲的中位数由 **750.42 ms 降至 60.67 ms**，最大值由 **5614.58 ms 降至 245.48 ms**。空整卷首次进入另行记录，未混入这 10 次数据。此指标覆盖状态变更后的布局／提交处理，**不等于完整输入到屏幕绘制的延迟**，也不证明大型真实 RAW 胶卷的性能。原始记录与方法见 [验证记录](../work/native-parity/validation.md)、[基线](../work/native-parity/switch-baseline.jsonl)和[最终测量](../work/native-parity/switch-final.jsonl)。
+2026-10-24 在同一台 Apple Silicon Mac、macOS 27.0.1、相同 1440 × 920 点深色窗口、同一组 24 张合成 JPEG 上，使用固定坐标指针点击，在两个已加载工作区之间分别测量 12 次交替切换。build 5 使用最终打包的可执行文件复测：
+
+| 构建 | 切换次数 | `state_to_idle_ms` 中位数 | 最大值 |
+| --- | ---: | ---: | ---: |
+| 2.1 build 4 | 12 | 76.26 ms | 106.20 ms |
+| 2.1 build 5（最终打包可执行文件） | 12 | 40.43 ms | 44.77 ms |
+
+同条件下中位数降低约 **47%**。指标从工作区状态变更计到主运行循环下一次 `beforeWaiting`，覆盖该区间的布局／提交处理，**不是点击到屏幕呈现的延迟**，也不证明大型真实 RAW 胶卷的性能。此前约 61 ms 的测量夹杂辅助功能树查询，查询会干扰主线程工作，与本次指针坐标测量不能直接比较。历史证据保留在[验证记录](../work/native-parity/validation.md)；本轮原始记录为 [build 4](../work/native-parity/switch-build4-pointer.jsonl) 和 [build 5 发布产物](../work/native-parity/switch-build5-shipping-pointer.jsonl)，位于本地忽略目录，以上摘要可独立阅读。
 
 ### 可选切换诊断
 
@@ -60,7 +69,7 @@
 defaults write local.NegativeMaster native.profileSwitches -bool true
 ```
 
-启用后，每个进程在本机临时目录写入 `NegativeMaster-switches-<PID>.jsonl`，仅记录 `pid`、工作区 `mode` 和 `state_to_idle_ms`，不记录照片、路径或编辑内容，也不会上传。计时从工作区状态开始改变到主运行循环下一次 `beforeWaiting`，不是点击起点或显示器呈现时间。关闭后重启应用即可停止记录：
+启用后，每个进程在本机临时目录写入 `NegativeMaster-switches-<PID>.jsonl`，仅记录 `pid`、工作区 `mode`、经过时间 `state_to_idle_ms` 和同一区间的主线程 CPU 时间 `main_thread_cpu_to_idle_ms`，不记录照片、路径或编辑内容，也不会上传。两项计时都从工作区状态开始改变到主运行循环下一次 `beforeWaiting`；CPU 时间用于区分主线程实际工作与经过时间，不代表 GPU 工作或屏幕呈现。关闭后重启应用即可停止记录：
 
 ```bash
 defaults delete local.NegativeMaster native.profileSwitches
@@ -89,21 +98,21 @@ open ../NegativeMaster.app
 以下命令从 `FilmDecastSwift` 目录执行：
 
 ```bash
-swift test
+swift test -c release
 ../.venv/bin/python -m unittest discover -s ../tests -p test_native_bridge.py -v
 ../.venv/bin/python -m unittest discover -s ../tests -v
 swift run -c release SmokeTest
 ```
 
-2026-10-24 的 [Swift 测试日志](../work/native-parity/swift-tests-final.log)记录 **9 项通过**，包括通信取消／顺序、缩略图请求合并与暖缓存、Gamma 建议边界、整卷分析范围及单张分析限制、影调参数保留、Observation 更新隔离和草稿最终写入顺序。[打包引擎桥接日志](../work/native-parity/bundle-tests.log)记录 **13 项通过**。
+2026-10-24 build 5 的 [Release Swift 测试日志](../work/native-parity/swift-tests-build5.log)记录 **9 项通过，0 项失败**，包括通信取消／顺序、缩略图请求合并与暖缓存、Gamma 建议边界、整卷分析范围及单张分析限制、影调参数保留、Observation 更新隔离和草稿最终写入顺序。
 
 `tests/test_native_bridge.py` 覆盖原生传输、完整调色参数、解码选项、预设 CRUD、XML 往返、TIFF/JPEG/PNG 导出、原图保护、整卷预览／导出、单帧构图、带背景项目导入导出、档案增删改与照片关联、封面来源和备份恢复、Gamma 单项写入与模式不匹配时保留参数，以及按需底片和轻量缩略图。
 
-更早的完整 Python／Node 结果继续保留在[验证记录](../work/native-parity/validation.md)：Python 共 150 项，148 项可运行测试已验证通过，2 项平台跳过；其中两项本机 HTTP 启动探针清除代理并设置 loopback `NO_PROXY` 后单独重跑通过。Node 46 项通过。这些是已有全套测试记录，本次原生切换修正没有重新运行整套 Python／Node 测试。
+截至 build 4 的 Python／Node 与打包引擎结果继续保留在[验证记录](../work/native-parity/validation.md)：Python 共 150 项，148 项可运行测试已验证通过，2 项平台跳过；其中两项本机 HTTP 启动探针清除代理并设置 loopback `NO_PROXY` 后单独重跑通过。Node 46 项通过，[打包引擎桥接日志](../work/native-parity/bundle-tests.log)记录 13 项通过。本轮改动限于 Swift 界面、诊断与构建版本，未重跑这三组测试。
 
-最新桌面截图位于 [`.impeccable/review/native-parity`](../.impeccable/review/native-parity/)：`sheet-light.png`、`sheet-dark.png`、`develop-dark.png`、`archive-light.png`、`artwork-dark.png` 和 `archive-validation-light.png`。桌面窗口为 1440 × 920 点，验证弹窗为 600 × 700 点；较早的 `archive-dark.png` 不作为当前验收依据。截图和交互验证使用 24 张合成 JPEG 与独立测试档案，未改动用户档案。
+build 5 的六张场景截图位于 [`.impeccable/review/native-parity`](../.impeccable/review/native-parity/)：`build5-sheet-dark.png`、`build5-develop-dark.png`、`build5-develop-light.png`、`build5-sheet-light.png`、`build5-frame-light.png` 和 `build5-archive-light.png`。最终打包可执行文件另有 `build5-shipping-develop-dark.png` 和 `build5-shipping-sheet-dark.png` 两张复测截图。桌面窗口为 1440 × 920 点，使用 24 张合成 JPEG 与独立测试档案。独立完成评审在本轮性能修正与六个桌面场景范围内给出 **SHIP**，未发现需修正的实质问题；发布产物复测后照片数量与 Gamma 0.85 仍保留。较早截图与档案表单验证继续作为对应历史版本的证据。
 
-已验证十次切换后 24 张照片数量和 Gamma 0.85 保留，未完成的曝光输入能恢复上次有效值并离开焦点，昼夜外观正常传播；档案 ISO 0 在表单内报错并保留草稿，改为 ISO 200 后可保存。窄桌面窗口、完整 VoiceOver 遍历和大型真实 RAW 胶卷尚未验收；相机 RAW 支持仍取决于 LibRaw 对机型的支持。
+本轮已验证切换后 24 张照片数量、曝光 0.25 与 Gamma 0.85 保留，随后将测试曝光恢复为 0；单张构图视图保留，昼夜外观正常传播。build 4 已验证未完成的曝光输入恢复上次有效值并离开焦点，以及档案 ISO 0 的表单内报错、草稿保留和改为 ISO 200 后保存。物理触控板双指缩放、窄桌面窗口、完整 VoiceOver 遍历和大型真实 RAW 胶卷尚未验收；相机 RAW 支持仍取决于 LibRaw 对机型的支持。
 
 ## 设计文档边界
 

@@ -4,12 +4,14 @@ import SwiftUI
 struct WorkbenchCanvas: View {
   @Environment(WorkbenchState.self) var s
   private var bindings: Bindable<WorkbenchState> { Bindable(s) }
+  let mode: WorkbenchState.Workspace
   @State private var dragStart: CGPoint?
   @State private var dragEnd: CGPoint?
-  @State private var magnifyStart = 1.0
+  @State private var magnifyStart: Double?
+  @GestureState private var magnifying = false
   @State private var frameStart: CGPoint?
   private var image: NSImage? {
-    s.workspace == .develop
+    mode == .develop
       ? (s.showNegative ? s.negative : s.preview) : (s.frameView ? s.sheetFrameImage : s.sheetImage)
   }
   var body: some View {
@@ -20,11 +22,11 @@ struct WorkbenchCanvas: View {
           let size = fitted(image.size, available: geo.size)
           ScrollView([.horizontal, .vertical]) {
             ZStack {
-              Checkerboard().frame(width: size.width, height: size.height)
+              if mode == .sheet { Checkerboard().frame(width: size.width, height: size.height) }
               Image(nsImage: image).resizable().interpolation(.high).frame(
                 width: size.width, height: size.height)
-              if s.workspace == .develop && !s.showNegative { developOverlay(size: size) }
-              if s.workspace == .sheet && s.frameView {
+              if mode == .develop && !s.showNegative { developOverlay(size: size) }
+              if mode == .sheet && s.frameView {
                 if s.frameGrid {
                   ThirdsGrid().stroke(.white.opacity(0.55), lineWidth: 0.75).allowsHitTesting(false)
                 }
@@ -47,18 +49,26 @@ struct WorkbenchCanvas: View {
               }
             }
             .frame(width: size.width, height: size.height)
-            .shadow(color: .black.opacity(0.16), radius: 12, y: 5)
+            .background {
+              Rectangle().fill(Color(nsColor: .underPageBackgroundColor))
+                .shadow(color: .black.opacity(0.16), radius: 12, y: 5)
+            }
             .padding(32)
             .frame(minWidth: geo.size.width, minHeight: geo.size.height)
           }
           .simultaneousGesture(
-            MagnifyGesture().onChanged { v in
-              s.zoom = min(5, max(0.25, magnifyStart * v.magnification))
-            }.onEnded { _ in magnifyStart = s.zoom }
+            MagnifyGesture().updating($magnifying) { _, active, _ in active = true }
+              .onChanged { v in
+                if magnifyStart == nil { magnifyStart = s.zoom }
+                s.zoom = min(5, max(0.25, (magnifyStart ?? s.zoom) * v.magnification))
+              }.onEnded { _ in magnifyStart = nil }
           )
+          .onChange(of: magnifying) { _, active in
+            if !active { magnifyStart = nil }
+          }
           .overlay(alignment: .bottom) { canvasTools.padding(.bottom, 18) }
           .overlay(alignment: .topLeading) {
-            if !s.selectionTool.isEmpty && s.workspace == .develop {
+            if !s.selectionTool.isEmpty && mode == .develop {
               Label(
                 s.selectionTool == "crop" ? "拖动边框调整裁剪" : "在照片上拖出取样区域",
                 systemImage: s.selectionTool == "crop" ? "crop" : "eyedropper"
@@ -90,13 +100,13 @@ struct WorkbenchCanvas: View {
   }
   private var emptyState: some View {
     VStack(spacing: 18) {
-      Image(systemName: s.workspace == .develop ? "camera.aperture" : "rectangle.split.3x3").font(
+      Image(systemName: mode == .develop ? "camera.aperture" : "rectangle.split.3x3").font(
         .system(size: 48, weight: .ultraLight)
       ).foregroundStyle(.secondary)
-      Text(s.workspace == .develop ? "让底片回到光里" : "把一卷故事放在一起").font(
+      Text(mode == .develop ? "让底片回到光里" : "把一卷故事放在一起").font(
         .system(size: 25, weight: .semibold))
       Text(
-        s.workspace == .develop
+        mode == .develop
           ? "打开胶卷文件夹，或将 RAW、TIFF、JPEG 拖到这里。" : "导入成片，或读取胶卷中已保存的调片参数。\n照片顺序、边字与背景都可以继续编辑。"
       )
       .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).lineSpacing(5)
@@ -104,7 +114,7 @@ struct WorkbenchCanvas: View {
         Button("打开文件夹…", action: s.chooseFolder).buttonStyle(.borderedProminent)
         Button("导入照片…", action: s.chooseFiles).buttonStyle(.bordered)
       }.controlSize(.large).disabled(!s.ready || s.busy)
-      if s.workspace == .sheet {
+      if mode == .sheet {
         HStack {
           Button("打开整卷项目…", action: s.chooseProject)
           if s.draftAvailable { Button("恢复上次草稿", action: s.restoreDraft) }
@@ -114,7 +124,7 @@ struct WorkbenchCanvas: View {
   }
   private var canvasTools: some View {
     HStack(spacing: 12) {
-      if s.workspace == .develop {
+      if mode == .develop {
         Button {
           s.selectionTool = s.selectionTool == "crop" ? "" : "crop"
         } label: {
@@ -230,14 +240,15 @@ struct Checkerboard: View {
   var body: some View {
     Canvas { ctx, size in
       ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white))
+      var squares = Path()
       for y in stride(from: 0.0, to: size.height, by: 16) {
         for x in stride(from: 0.0, to: size.width, by: 16) {
           if (Int(x / 16) + Int(y / 16)) % 2 == 0 {
-            ctx.fill(
-              Path(CGRect(x: x, y: y, width: 16, height: 16)), with: .color(.gray.opacity(0.2)))
+            squares.addRect(CGRect(x: x, y: y, width: 16, height: 16))
           }
         }
       }
+      ctx.fill(squares, with: .color(.gray.opacity(0.2)))
     }
   }
 }

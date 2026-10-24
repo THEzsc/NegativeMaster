@@ -7,10 +7,12 @@ import AppKit
   static func begin(_ mode: String) {
     guard UserDefaults.standard.bool(forKey: "native.profileSwitches") else { return }
     let start = ProcessInfo.processInfo.systemUptime
+    let cpuStart = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
     let pid = ProcessInfo.processInfo.processIdentifier
     let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, false, CFIndex.max) { _, _ in
       let ms = (ProcessInfo.processInfo.systemUptime - start) * 1000
-      let line = "{\"pid\":\(pid),\"mode\":\"\(mode)\",\"state_to_idle_ms\":\(ms)}\n"
+      let cpuMs = Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - cpuStart) / 1_000_000
+      let line = "{\"pid\":\(pid),\"mode\":\"\(mode)\",\"state_to_idle_ms\":\(ms),\"main_thread_cpu_to_idle_ms\":\(cpuMs)}\n"
       writer.async {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("NegativeMaster-switches-\(pid).jsonl")
         if !FileManager.default.fileExists(atPath: url.path) { FileManager.default.createFile(atPath: url.path, contents: nil) }
