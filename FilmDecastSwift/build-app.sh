@@ -43,8 +43,8 @@ cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key><string>NegativeMaster</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>2.0</string>
-    <key>CFBundleVersion</key><string>2</string>
+    <key>CFBundleShortVersionString</key><string>2.1</string>
+    <key>CFBundleVersion</key><string>5</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
@@ -69,6 +69,8 @@ swift "$SOURCE_DIR/Support/make-icon.swift" "$SOURCE_DIR/.build/AppIcon.iconset"
 /usr/bin/iconutil -c icns "$SOURCE_DIR/.build/AppIcon.iconset" -o "$APP_PATH/Contents/Resources/AppIcon.icns"
 /usr/bin/plutil -lint "$APP_PATH/Contents/Info.plist"
 # Finder metadata is not part of the application and prevents code signing.
+# Homebrew libraries can be copied with read-only modes; make the staged bundle writable.
+/bin/chmod -R u+w "$APP_PATH"
 /usr/bin/xattr -cr "$APP_PATH"
 /usr/bin/codesign --force --sign - "$APP_PATH"
 echo "Application ready: $APP_PATH"

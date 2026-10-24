@@ -1,25 +1,27 @@
 import SwiftUI
 
 struct WorkbenchInspector: View {
-  @EnvironmentObject var s: WorkbenchState
+  @Environment(WorkbenchState.self) var s
+  private var bindings: Bindable<WorkbenchState> { Bindable(s) }
+  var mode: WorkbenchState.Workspace = .develop
   @State private var hslBand = "red"
   @State private var curveChannel = "curve"
   var body: some View {
     VStack(spacing: 0) {
       HStack {
-        Text(s.workspace == .develop ? "调整" : "排版设置").font(.headline)
+        Text(mode == .develop ? "调整" : "排版设置").font(.headline)
         Spacer()
-        if s.workspace == .develop {
+        if mode == .develop {
           Button("重置", action: s.resetDevelop).buttonStyle(.borderless).disabled(s.selected == nil)
         }
       }.padding(16)
-      if s.workspace == .develop {
-        Picker("调整面板", selection: $s.tunePane) {
+      if mode == .develop {
+        Picker("调整面板", selection: bindings.tunePane) {
           ForEach(["光线", "色彩", "曲线", "细节", "裁剪", "导出"], id: \.self) { Text($0) }
         }.labelsHidden().padding(.horizontal, 16).padding(.bottom, 8)
         Form { developForm }.formStyle(.grouped).disabled(s.selected == nil || s.busy)
       } else {
-        Picker("排版面板", selection: $s.sheetPane) {
+        Picker("排版面板", selection: bindings.sheetPane) {
           Text("胶卷与边字").tag("film")
           Text("布局与片头").tag("layout")
           Text("单张构图").tag("frame")
@@ -64,7 +66,8 @@ struct WorkbenchInspector: View {
         number("black_pct", "黑点百分位", 0...3, 0.1)
         number("white_pct", "白点百分位", 97...100, 0.1)
       }
-      Section("载入行为") { Toggle("载入即重置为默认参数", isOn: $s.resetOnLoad) }
+      NativeWorkflowControls()
+      Section("载入行为") { Toggle("载入即重置为默认参数", isOn: bindings.resetOnLoad) }
       Section("整卷") {
         Button("应用当前调整到\(s.checked.isEmpty ? "整卷":"已选照片")", action: { s.applyToRoll() })
         Button("仅把白平衡应用到整卷") { s.applyToRoll(whiteBalanceOnly: true) }
@@ -156,7 +159,7 @@ struct WorkbenchInspector: View {
           Button("水平翻转") { s.mirror("h") }
           Button("垂直翻转") { s.mirror("v") }
         }
-        Picker("裁剪比例", selection: $s.cropAspect) {
+        Picker("裁剪比例", selection: bindings.cropAspect) {
           Text("自由").tag("free")
           ForEach(["3:2", "2:3", "4:3", "3:4", "1:1", "6:7", "7:6"], id: \.self) {
             Text($0).tag($0)
@@ -169,28 +172,28 @@ struct WorkbenchInspector: View {
         Button("重置裁剪边距") { s.setParam("crop_rect", .doubles([0.06, 0.06, 0.94, 0.94])) }
         number("level_angle", "校平角度", -15...15, 0.05)
         Button("自动裁剪与校平", action: s.autoCrop)
-        Toggle("参考同卷已调照片", isOn: $s.useRollReference)
+        Toggle("参考同卷已调照片", isOn: bindings.useRollReference)
         Text("自动检测不可靠时保留现有画幅。同卷参考需要至少五张一致的调整记录。").font(.caption).foregroundStyle(.secondary)
       }
     } else {
       Section("导出照片") {
-        Picker("格式", selection: $s.exportFormat) {
+        Picker("格式", selection: bindings.exportFormat) {
           Text("TIFF").tag("tif")
           Text("JPEG").tag("jpg")
           Text("PNG").tag("png")
         }
         if s.exportFormat == "tif" {
-          Picker("位深", selection: $s.exportBits) {
+          Picker("位深", selection: bindings.exportBits) {
             Text("16 位").tag(16)
             Text("8 位").tag(8)
           }
         }
         if s.exportFormat == "jpg" {
-          NumericControl(title: "JPEG 质量", value: $s.exportQuality, range: 1...100, step: 1)
+          NumericControl(title: "JPEG 质量", value: bindings.exportQuality, range: 1...100, step: 1)
         }
-        NumericControl(title: "长边像素 · 0 为原尺寸", value: $s.exportResize, range: 0...12000, step: 100)
+        NumericControl(title: "长边像素 · 0 为原尺寸", value: bindings.exportResize, range: 0...12000, step: 100)
         Button("导出当前照片…", action: s.exportCurrent).buttonStyle(.borderedProminent)
-        Toggle("优先使用每张照片的已存参数", isOn: $s.preferSavedBatch)
+        Toggle("优先使用每张照片的已存参数", isOn: bindings.preferSavedBatch)
         Button("批量导出已选 \(s.checked.count) 张…", action: s.exportBatch).disabled(s.checked.isEmpty)
         Text("批量导出读取每张照片保存的参数；现有同名文件会自动编号，保留原照片。").font(.caption).foregroundStyle(.secondary)
       }
@@ -199,7 +202,7 @@ struct WorkbenchInspector: View {
   @ViewBuilder private var sheetForm: some View {
     if s.sheetPane == "film" {
       Section("胶卷资料库 · \(s.stocks.count) 款") {
-        TextField("搜索品牌、型号或 ISO", text: $s.stockSearch)
+        TextField("搜索品牌、型号或 ISO", text: bindings.stockSearch)
         Picker("型号", selection: Binding(get: { s.stockID }, set: { s.applyStock($0) })) {
           ForEach(
             s.stocks.filter {
@@ -297,7 +300,7 @@ struct WorkbenchInspector: View {
     }
     if s.sheetPane == "export" {
       Section("导出图片") {
-        Picker("格式", selection: $s.sheetFormat) {
+        Picker("格式", selection: bindings.sheetFormat) {
           Text("PNG · 保留透明").tag("png")
           Text("JPEG · 分享").tag("jpg")
         }
@@ -360,7 +363,7 @@ struct WorkbenchInspector: View {
         NumericControl(title: "放大", value: frameBinding("crop.scale", 1), range: 1...8, step: 0.05)
         NumericControl(title: "水平中心", value: frameBinding("crop.x", 0.5), range: 0...1, step: 0.01)
         NumericControl(title: "垂直中心", value: frameBinding("crop.y", 0.5), range: 0...1, step: 0.01)
-        Toggle("三分构图线", isOn: $s.frameGrid)
+        Toggle("三分构图线", isOn: bindings.frameGrid)
         Button("重置构图", action: s.resetFrame)
         Button(s.sheetSelection.contains(p.sheetID) ? "移出排版" : "加入排版") { s.toggleFrame(p.sheetID) }
       }
@@ -439,7 +442,7 @@ struct NumericControl: View {
               value = min(
                 range.upperBound, max(range.lowerBound, $0.isFinite ? $0 : range.lowerBound))
             }), format: .number.precision(.fractionLength(step >= 1 ? 0 : 2))
-        ).multilineTextAlignment(.trailing).textFieldStyle(.plain).font(
+        ).labelsHidden().multilineTextAlignment(.trailing).textFieldStyle(.plain).font(
           .system(.caption, design: .monospaced)
         ).frame(width: 64).accessibilityLabel(title + "数值")
       }
@@ -461,10 +464,7 @@ struct SchemaControl: View {
           .double...max(field.value["min"].double, field.value["max"].double),
         step: field.value["step"].double)
     case "color":
-      ColorPicker(
-        field.title,
-        selection: Binding(get: { Color(hex: value.string) }, set: { value = .string($0.hex) }),
-        supportsOpacity: false)
+      RecommendedColor(field: field, value: $value)
     case "select":
       Picker(
         field.title,

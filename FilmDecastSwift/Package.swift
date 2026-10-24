@@ -20,6 +20,7 @@ let package = Package(
             dependencies: ["FilmDecastCore"],
             path: "Sources/NativeWorkbench"
         ),
+        .testTarget(name: "NativeWorkbenchTests", dependencies: ["FilmDecast"], path: "Tests/NativeWorkbenchTests"),
         // 算法冒烟测试：swift run SmokeTest
         // 用 64x64 合成负片（已知橙色罩 + 灰阶）验证核心反转管线的正确性
         .executableTarget(
