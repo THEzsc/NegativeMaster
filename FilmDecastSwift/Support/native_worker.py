@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import traceback
+import tempfile
 from html.parser import HTMLParser
 
 ROOT = Path(sys.argv[1]).resolve()
@@ -147,6 +148,7 @@ def handle(message):
     body = message.get('body',{})
     if action == 'bootstrap':
         return dict(ok=True, defaults=gui.DEFAULTS, fields=parser.fields,
+                    rawExtensions=sorted(ext.lstrip(".") for ext in decast.RAW_EXTS),
                     sheetDefaults=json.loads((Path(__file__).parent/'sheet-defaults.json').read_text()),
                     presets=decast.list_presets(), stocks=request('/api/sheet/catalog',method='GET')['stocks'])
     if action == 'adjustments':
@@ -205,9 +207,19 @@ def handle(message):
         image,_ = decast.load_image(body['path'],opts)
         opts.stats_rect = None
         result = decast.convert_negative(image,opts)
-        decast.save_image(result,str(out),int(body.get('bits',16)),quality=int(body.get('quality',92)),resize=int(body.get('resize',0)))
-        if out.suffix.lower() in ('.jpg','.jpeg'):
-            decast.copy_exif_best_effort(body['path'],str(out))
+        # A failed encoder must not leave a partial image or overwrite another export.
+        fd, temp_path = tempfile.mkstemp(prefix='.nm-export-', suffix=out.suffix, dir=out.parent)
+        os.close(fd)
+        try:
+            decast.save_image(result,temp_path,int(body.get('bits',16)),quality=int(body.get('quality',92)),resize=int(body.get('resize',0)))
+            if out.suffix.lower() in ('.jpg','.jpeg'):
+                decast.copy_exif_best_effort(body['path'],temp_path)
+            if body.get('overwrite', True):
+                os.replace(temp_path, out)
+            else:
+                os.link(temp_path, out)  # Atomic no-clobber publish, even if the name was taken during encoding.
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
         return dict(ok=True,out=str(out))
     if action == 'api':
         path = message['path']

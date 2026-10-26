@@ -220,4 +220,99 @@ final class NativeWorkbenchTests: XCTestCase {
     state.sheetConfig.put("header.title", .string("Edited roll"))
     XCTAssertEqual(configChanges.count, 1)
   }
+  @MainActor func testRawFilterAndBatchScopeNeverIncludeHiddenCheckedJPEGs() {
+    let state = WorkbenchState()
+    let old = state.rawOnly
+    defer { state.rawOnly = old }
+    state.rawExtensions = ["arw", "dng"]
+    state.photos = [Photo(path: "/roll/01.ARW", name: "01.ARW"), Photo(path: "/roll/01.JPG", name: "01.JPG"), Photo(path: "/roll/02.dNg", name: "02.dNg")]
+    state.checked = Set(state.photos.map(\.path))
+    state.rawOnly = true
+    XCTAssertEqual(state.filteredPhotos.map(\.name), ["01.ARW", "02.dNg"])
+    state.batchScope = "selected"
+    XCTAssertEqual(state.batchExportPhotos.count, 2)
+    state.search = "02"
+    XCTAssertEqual(state.batchExportPhotos.map(\.name), ["02.dNg"])
+    state.search = "missing"
+    XCTAssertTrue(state.batchExportPhotos.isEmpty)
+    state.rawOnly = false
+    state.search = ""
+    XCTAssertEqual(state.batchExportPhotos.count, 3)
+  }
+
+  @MainActor func testBatchExportUsesPerPhotoSettingsContinuesFailuresAndPreservesExistingFiles() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let existing = directory.appendingPathComponent("01_pos.jpg")
+    try Data("existing".utf8).write(to: existing)
+    let state = WorkbenchState()
+    let plan = BatchExportPlan(paths: ["/roll/01.ARW", "/roll/02.ARW", "/roll/03.ARW"], destination: directory,
+      settings: BatchExportSettings(format: "jpg", bits: 16, quality: 96, resize: 0),
+      currentPath: "/roll/01.ARW", currentParams: .object(["gamma": .number(0.85), "rotate": .number(90)]))
+    var readPaths: [String] = []
+    var exported: [J] = []
+    await state.performBatchExport(plan) { message in
+      let body = message["body"], path = body["path"].string
+      if message["action"].string == "adjustments" {
+        readPaths.append(path)
+        return .object(["params": .object(["gamma": .number(path.contains("02") ? 1.4 : 1.9)])])
+      }
+      exported.append(body)
+      if path.contains("02") { throw WorkbenchError(message: "测试损坏照片") }
+      try Data("image".utf8).write(to: URL(fileURLWithPath: body["out"].string))
+      return .object(["ok": .bool(true)])
+    }
+    XCTAssertEqual(readPaths, ["/roll/02.ARW", "/roll/03.ARW"])
+    XCTAssertEqual(exported.map { $0["params"]["gamma"].double }, [0.85, 1.4, 1.9])
+    XCTAssertEqual(exported[0]["params"]["rotate"].double, 90)
+    XCTAssertTrue(exported.allSatisfy { $0["quality"].double == 96 && $0["bits"].double == 8 && !$0["overwrite"].bool })
+    XCTAssertTrue(exported[0]["out"].string.hasSuffix("01_pos-1.jpg"))
+    XCTAssertEqual(try Data(contentsOf: existing), Data("existing".utf8))
+    XCTAssertEqual(state.batchCompleted, 2)
+    XCTAssertEqual(state.batchFailures.count, 1)
+    XCTAssertEqual(state.batchOutputs.count, 2)
+    XCTAssertTrue(state.batchFinished)
+    XCTAssertFalse(state.busy)
+    XCTAssertFalse(state.batchRunning)
+    XCTAssertEqual(state.progress, 1)
+  }
+
+  @MainActor func testBatchCancellationKeepsCompletedImageAndStopsNextFrame() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let state = WorkbenchState()
+    let plan = BatchExportPlan(paths: ["/roll/01.ARW", "/roll/02.ARW"], destination: directory,
+      settings: BatchExportSettings(format: "png", bits: 8, quality: 92, resize: 0),
+      currentPath: nil, currentParams: .null)
+    var requests = 0
+    await state.performBatchExport(plan) { message in
+      requests += 1
+      if message["action"].string == "adjustments" { return .object(["params": .object([:])]) }
+      try Data("completed".utf8).write(to: URL(fileURLWithPath: message["body"]["out"].string))
+      state.cancelOperation()
+      return .object(["ok": .bool(true)])
+    }
+    XCTAssertEqual(requests, 2)
+    XCTAssertEqual(state.batchCompleted, 1)
+    XCTAssertTrue(state.batchCancelled)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("01_pos.png").path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("02_pos.png").path))
+  }
+
+  @MainActor func testInvalidBatchDestinationRemainsRetryableWithoutEngineWork() async throws {
+    let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try Data("file".utf8).write(to: file)
+    defer { try? FileManager.default.removeItem(at: file) }
+    let state = WorkbenchState()
+    let plan = BatchExportPlan(paths: ["/roll/01.ARW"], destination: file,
+      settings: BatchExportSettings(format: "jpg", bits: 8, quality: 92, resize: 0), currentPath: nil, currentParams: .null)
+    await state.performBatchExport(plan) { _ in XCTFail("Invalid destination must fail before engine work"); return .null }
+    XCTAssertNotNil(state.batchError)
+    XCTAssertFalse(state.batchFinished)
+    XCTAssertFalse(state.busy)
+    XCTAssertFalse(state.batchRunning)
+    XCTAssertEqual(try Data(contentsOf: file), Data("file".utf8))
+  }
+
 }

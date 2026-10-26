@@ -55,6 +55,19 @@ class NativeBridgeTests(unittest.TestCase):
             if r['state']=='ready':return r
             time.sleep(.03)
         self.fail('Prepare timed out')
+    def test_export_atomic_no_clobber(self):
+        self.assertIn('arw', self.bootstrap['rawExtensions'])
+        out=self.dir/'collision.jpg'
+        out.write_bytes(b'existing result')
+        body=dict(path=str(self.photo),params=self.defaults,out=str(out),bits=8,overwrite=False)
+        with self.assertRaises(ValueError): self.call('export',body)
+        self.assertEqual(out.read_bytes(),b'existing result')
+        self.assertEqual(list(self.dir.glob('.nm-export-*')),[])
+        out.unlink()
+        self.call('export',body)
+        with Image.open(out) as image: image.verify()
+        self.assertEqual(list(self.dir.glob('.nm-export-*')),[])
+
     def test_01_bootstrap_controls_and_catalog(self):
         b=self.bootstrap
         self.assertEqual(len(b['stocks']),100)

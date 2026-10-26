@@ -59,6 +59,7 @@ struct WorkbenchView: View {
         }
       }.padding(24).frame(width: 500)
     }
+    .sheet(isPresented: bindings.showRollExport) { RollExportSheet().environment(s) }
     .sheet(isPresented: bindings.showHelp) {
       VStack(alignment: .leading, spacing: 18) {
         Text("NegativeMaster").font(.largeTitle.bold())
@@ -122,9 +123,18 @@ struct WorkbenchView: View {
     }
     ToolbarItem(placement: .primaryAction) {
       if s.workspace == .archive { ArchiveBackupButton(a: s.archive) }
-      else {
-        Button(action: s.exportCurrent) { Label("导出", systemImage: "square.and.arrow.up") }.disabled(
-          s.busy || (s.workspace == .develop ? s.preview == nil : s.sheetImage == nil))
+      else if s.workspace == .develop {
+        Menu {
+          Button("导出当前照片…", action: s.exportCurrent).disabled(s.preview == nil)
+          Button("整卷导出…") { s.presentRollExport() }
+            .disabled(s.filteredPhotos.isEmpty)
+          Button("导出勾选照片…", action: s.exportBatch).disabled(s.visibleCheckedPhotos.isEmpty)
+        } label: { Label("导出", systemImage: "square.and.arrow.up") }
+          .accessibilityLabel("导出").help("导出当前照片、整卷或勾选照片")
+          .disabled(s.busy || !s.ready || s.photos.isEmpty)
+      } else {
+        Button(action: s.exportSheet) { Label("导出整卷图片", systemImage: "square.and.arrow.up") }
+          .disabled(s.busy || s.sheetImage == nil)
       }
     }
     ToolbarItem(placement: .primaryAction) {
@@ -175,7 +185,7 @@ struct PhotoSidebar: View {
           Text(mode == .develop ? "胶卷照片" : "排版照片").font(.headline)
           Text(
             mode == .develop
-              ? "\(s.photos.count) 张照片" : "\(s.sheetSelection.count) / \(s.sheetPhotos.count) 张已选"
+              ? "\(s.filteredPhotos.count) / \(s.photos.count) 张照片" : "\(s.sheetSelection.count) / \(s.sheetPhotos.count) 张已选"
           ).font(.caption).foregroundStyle(.secondary)
         }
         Spacer()
@@ -197,6 +207,8 @@ struct PhotoSidebar: View {
       if mode == .develop {
         TextField("搜索照片", text: bindings.search).textFieldStyle(.roundedBorder).padding(.horizontal, 12)
           .padding(.bottom, 8)
+        Toggle("只显示 RAW", isOn: bindings.rawOnly).toggleStyle(.checkbox)
+          .padding(.horizontal, 12).padding(.bottom, 8)
         List(selection: Binding(get: { s.selected }, set: { if let p = $0 { s.select(p) } })) {
           ForEach(s.filteredPhotos) { p in
             HStack(spacing: 10) {
@@ -224,6 +236,12 @@ struct PhotoSidebar: View {
               }
           }
         }.listStyle(.sidebar)
+          .overlay {
+            if s.filteredPhotos.isEmpty && !s.photos.isEmpty {
+              Text(s.rawOnly ? "没有符合筛选条件的 RAW 照片" : "没有匹配的照片")
+                .font(.callout).foregroundStyle(.secondary).padding(20)
+            }
+          }
       } else {
         List {
           ForEach(s.sheetPhotos) { p in
@@ -291,7 +309,7 @@ struct PhotoSidebar: View {
             Image(systemName: "arrow.up.arrow.down")
           }.help("反转照片顺序")
         } else {
-          Text("已选 \(s.checked.count)").font(.caption).foregroundStyle(.secondary)
+          Text("已选 \(s.visibleCheckedPhotos.count)").font(.caption).foregroundStyle(.secondary)
         }
       }.buttonStyle(.borderless).controlSize(.small).padding(12)
     }

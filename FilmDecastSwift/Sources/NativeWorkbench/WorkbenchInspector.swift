@@ -193,8 +193,10 @@ struct WorkbenchInspector: View {
         }
         NumericControl(title: "长边像素 · 0 为原尺寸", value: bindings.exportResize, range: 0...12000, step: 100)
         Button("导出当前照片…", action: s.exportCurrent).buttonStyle(.borderedProminent)
-        Toggle("优先使用每张照片的已存参数", isOn: bindings.preferSavedBatch)
-        Button("批量导出已选 \(s.checked.count) 张…", action: s.exportBatch).disabled(s.checked.isEmpty)
+        Button("整卷导出 \(s.filteredPhotos.count) 张…") { s.presentRollExport() }
+          .disabled(s.filteredPhotos.isEmpty)
+        Button("导出勾选的 \(s.visibleCheckedPhotos.count) 张…", action: s.exportBatch)
+          .disabled(s.visibleCheckedPhotos.isEmpty)
         Text("批量导出读取每张照片保存的参数；现有同名文件会自动编号，保留原照片。").font(.caption).foregroundStyle(.secondary)
       }
     }

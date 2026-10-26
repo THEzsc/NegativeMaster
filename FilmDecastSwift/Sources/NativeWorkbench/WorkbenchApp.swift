@@ -37,6 +37,11 @@ import SwiftUI
           state.busy
             || (state.workspace == .develop ? state.preview == nil : state.workspace == .sheet ? state.sheetImage == nil : !state.archive.loaded))
       }
+      CommandGroup(after: .importExport) {
+        Button("整卷导出…") { state.presentRollExport() }
+          .keyboardShortcut("e", modifiers: [.command, .shift])
+          .disabled(state.workspace != .develop || state.filteredPhotos.isEmpty || state.busy || !state.ready)
+      }
       CommandGroup(replacing: .undoRedo) {
         Button("撤销", action: state.undo).keyboardShortcut("z").disabled(
           !state.canUndo || state.busy || state.workspace == .archive)

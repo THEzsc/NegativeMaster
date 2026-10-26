@@ -32,7 +32,6 @@ import UniformTypeIdentifiers
   var showPathSheet = false
   var pathEntry = ""
   var resetOnLoad = false
-  var preferSavedBatch = true
   var busy = false
   var batchRunning = false
   var rendering = false
@@ -44,6 +43,21 @@ import UniformTypeIdentifiers
   var selected: String?
   var checked: Set<String> = []
   var search = ""
+  var rawOnly = UserDefaults.standard.bool(forKey: "native.rawOnly") {
+    didSet { UserDefaults.standard.set(rawOnly, forKey: "native.rawOnly") }
+  }
+  var rawExtensions: Set<String> = []
+  var showRollExport = false
+  var batchScope = "visible"
+  var batchDestination = ""
+  var batchFinished = false
+  var batchTotal = 0
+  var batchCompleted = 0
+  var batchFailures: [String] = []
+  var batchOutputs: [URL] = []
+  var batchCurrentName = ""
+  var batchError: String?
+  var batchCancelled = false
   var folder: URL?
   var params: J = .object([:])
   var defaults: J = .object([:])
@@ -110,10 +124,13 @@ import UniformTypeIdentifiers
   private var selectRevision = 0
   var parameterPath: String?
   @ObservationIgnored private var frameTask: Task<Void, Never>?
-  private var cancelBatch = false
+  var cancelBatch = false
 
   var filteredPhotos: [Photo] {
-    photos.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
+    photos.filter {
+      (!rawOnly || rawExtensions.contains(URL(fileURLWithPath: $0.path).pathExtension.lowercased()))
+        && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search))
+    }
   }
   var currentPhoto: Photo? { photos.first { $0.path == selected } }
   var activePhoto: Photo? { sheetPhotos.first { $0.sheetID == activeFrame } }
@@ -190,6 +207,7 @@ import UniformTypeIdentifiers
   func bootstrap() async {
     do {
       let r = try await engine.call(.object(["action": .string("bootstrap")]))
+      rawExtensions = Set(r["rawExtensions"].array.map(\.string))
       defaults = r["defaults"]
       params = defaults
       sheetDefaults = r["sheetDefaults"]
@@ -325,7 +343,7 @@ import UniformTypeIdentifiers
         }
         checked.removeAll()
         busy = false
-        if let first = photos.first {
+        if let first = filteredPhotos.first {
           select(first.path)
         } else {
           selected = nil
@@ -715,57 +733,7 @@ import UniformTypeIdentifiers
         ]),
       ]))
   }
-  func exportBatch() {
-    let paths = photos.map(\.path).filter { checked.contains($0) }
-    guard !paths.isEmpty else { return }
-    let panel = NSOpenPanel()
-    panel.canChooseDirectories = true
-    panel.canChooseFiles = false
-    panel.canCreateDirectories = true
-    panel.prompt = "导出到此文件夹"
-    guard panel.runModal() == .OK, let dest = panel.url else { return }
-    persistNow()
-    let current = selected
-    let currentParams = params
-    busy = true
-    cancelBatch = false
-    progress = 0
-    batchRunning = true
-    Task {
-      defer { batchRunning = false }
-      do {
-        var completed = 0
-        for (i, path) in paths.enumerated() {
-          if cancelBatch { break }
-          status = "导出 \(i+1) / \(paths.count) · \(URL(fileURLWithPath:path).lastPathComponent)"
-          let p: J
-          if path == current || !preferSavedBatch {
-            p = currentParams
-          } else {
-            p = try await engine.call(
-              .object(["action": .string("adjustments"), "body": .object(["path": .string(path)])]))[
-                "params"]
-          }
-          let stem = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent + "_pos"
-          var u = dest.appendingPathComponent(stem + "." + exportFormat)
-          var suffix = 1
-          while FileManager.default.fileExists(atPath: u.path) {
-            u = dest.appendingPathComponent(stem + "-\(suffix)." + exportFormat)
-            suffix += 1
-          }
-          _ = try await exportPhoto(path, params: p, to: u)
-          completed += 1
-          progress = Double(completed) / Double(paths.count)
-        }
-        busy = false
-        lastExport = dest
-        status = "已导出 \(completed) / \(paths.count) 张照片" + (cancelBatch ? "，已停止后续任务" : "")
-      } catch {
-        busy = false
-        failure(error)
-      }
-    }
-  }
+  func exportBatch() { presentRollExport(selectedOnly: true) }
   func cancelOperation() {
     cancelBatch = true
     status = "当前照片处理完成后停止"
