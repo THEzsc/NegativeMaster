@@ -30,6 +30,7 @@ struct WorkbenchView: View {
     .onAppear { columnVisibility = s.filmstripBottom && s.workspace == .develop ? .detailOnly : .all }
     .onChange(of: s.filmstripBottom) { _, bottom in columnVisibility = bottom && s.workspace == .develop ? .detailOnly : .all }
     .onChange(of: s.workspace) { _, mode in columnVisibility = s.filmstripBottom && mode == .develop ? .detailOnly : .all }
+    .sheet(isPresented: bindings.showRollAutomation) { RollAutomationSheet().environment(s) }
     .sheet(isPresented: bindings.showTransfer) { RollTransferSheet().environment(s) }
     .onDrop(of: ["public.file-url"], isTargeted: nil) { providers in
       Task {

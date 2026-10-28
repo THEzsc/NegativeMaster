@@ -50,6 +50,18 @@ import UniformTypeIdentifiers
   var thumbnailDone = 0
   var thumbnailTotal = 0
   @ObservationIgnored var thumbnailTask: Task<Void, Never>?
+  var showRollAutomation = false
+  var automationKind = "crop"
+  var automationScope = "visible"
+  var automationPhase = "configure"
+  var automationRows: [RollSuggestion] = []
+  var automationRunning = false
+  var automationStop = false
+  var automationStopped = false
+  var automationDone = 0
+  var automationTotal = 0
+  var automationName = ""
+  var automationError: String?
   var showTransfer = false
   var transferDestination = "sheet"
   var transferScope = "all"

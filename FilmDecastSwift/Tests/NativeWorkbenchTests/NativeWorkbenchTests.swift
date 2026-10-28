@@ -20,6 +20,48 @@ private final class ObservationChanges: @unchecked Sendable {
   }
 }
 final class NativeWorkbenchTests: XCTestCase {
+  @MainActor func testRollAutomationDefaultsToVisibleRollEvenWithOneSelected() {
+    let s = WorkbenchState(); s.ready = true; s.rawOnly = false
+    s.photos = (1...4).map { Photo(path: "/tmp/roll-\($0).ARW", name: "roll-\($0).ARW") }
+    s.checked = [s.photos[0].path]
+    s.presentRollAutomation("gamma")
+    XCTAssertEqual(s.automationPhotos.count, 4)
+    s.automationScope = "selected"
+    XCTAssertEqual(s.automationPhotos.count, 1)
+  }
+  func testRollSuggestionsSkipUncertainCropAndUncheckLowConfidenceGamma() {
+    let snap = J.object(["params": .object(["gamma": .number(1.8)]), "token": .string("token")])
+    let bad = RollSuggestion.analyzed(path: "/a", snapshot: snap, result: .object(["status": .string("uncertain")]), kind: "crop")
+    XCTAssertFalse(bad.eligible); XCTAssertFalse(bad.included)
+    let report = J.object(["report": .object(["parameter_key": .string("gamma"), "recommendation": .number(1.2), "confidence": .string("low")])])
+    let low = RollSuggestion.analyzed(path: "/b", snapshot: snap, result: report, kind: "gamma")
+    XCTAssertTrue(low.eligible); XCTAssertFalse(low.included)
+    XCTAssertEqual(low.patch["gamma"], .number(1.2))
+  }
+  @MainActor func testRollAnalysisContinuesAfterFailureAndKeepsIndividualValues() async {
+    let s = WorkbenchState(); s.automationKind = "gamma"
+    await s.runRollAnalysis(paths: ["/a", "/broken", "/b"]) { message in
+      let path = message["body"]["path"].string
+      if path == "/broken" { throw WorkbenchError(message: "bad frame") }
+      if message["action"].string == "batch_snapshot" {
+        return .object(["params": .object(["exposure": .number(path == "/a" ? 0 : 1)]), "token": .string(path)])
+      }
+      let ev = message["body"]["params"]["exposure"].double
+      return .object(["report": .object(["parameter_key": .string("gamma"), "recommendation": .number(ev == 0 ? 1.8 : 1.1), "confidence": .string("medium")])])
+    }
+    XCTAssertEqual(s.automationRows.count, 3); XCTAssertEqual(s.automationChosen, 2)
+    XCTAssertEqual(s.automationRows[0].patch["gamma"], .number(1.8))
+    XCTAssertEqual(s.automationRows[2].patch["gamma"], .number(1.1))
+    var applied = 0
+    await s.applyRollAutomation(undo: false) { message in
+      XCTAssertEqual(message["action"].string, "batch_apply")
+      XCTAssertEqual(message["body"]["token"].string, message["body"]["path"].string)
+      applied += 1
+      if applied == 1 { s.automationStop = true }
+      return .object(["undo_id": .string("receipt"), "params": .object([:])])
+    }
+    XCTAssertEqual(applied, 1); XCTAssertTrue(s.automationStopped); XCTAssertEqual(s.automationUndoCount, 1)
+  }
   @MainActor func testLightroomSelectionRangeToggleAndActivePhoto() {
     let s = WorkbenchState()
     s.rawOnly = false

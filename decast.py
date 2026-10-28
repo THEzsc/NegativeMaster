@@ -618,7 +618,7 @@ def _film_edge_image(lin):
     return np.sqrt(np.clip((a - lo) / np.maximum(hi - lo, 0.02), 0, 1))
 
 
-def _detect_outer_edge(a):
+def _detect_outer_edge(a, soft=False):
     """Find one border, with inward distance on axis 0.
 
     A bounded line search votes across 160 scanlines. Candidates need a long
@@ -630,14 +630,22 @@ def _detect_outer_edge(a):
     ts = np.linspace(w * 0.08, w * 0.92 - 1, min(160, w - 2)).astype(int)
     center = (w - 1) / 2
     tx = ts - center
-    limit = max(4, int(h * 0.36))
+    limit = max(4, int(h * (0.05 if soft else 0.36)))
     # A three-pixel step captures narrow bright film base as well as dark holders.
     smooth = (a[:, np.maximum(ts - 1, 0)] + a[:, ts] +
               a[:, np.minimum(ts + 1, w - 1)]) / 3
+    if soft:
+        # Pool along a physical edge, not through it. Weak narrow borders can be
+        # lost beneath RAW grain and stronger scene edges in the broad search.
+        radius = max(2, round(w * .011))
+        smooth = sum(a[:, np.clip(ts + i, 0, w - 1)] for i in range(-radius, radius + 1)) / (2 * radius + 1)
     grad = np.zeros((h, len(ts)), np.float32)
     grad[1:-1] = np.max(np.abs(smooth[2:] - smooth[:-2]), axis=2) / 2
     noise = np.median(grad[:limit], axis=0)
     threshold = np.maximum(0.003, noise * 2.5)
+    if soft:
+        noise = np.median(grad[1:max(5, int(h * .012))], axis=0)
+        threshold = np.maximum(.0005, noise * 2.0)
     # Search slopes first; all candidates must have support distributed along edge.
     candidates = []
     ds = np.arange(1, limit)
@@ -701,8 +709,14 @@ def _detect_outer_edge(a):
         spread = np.max(np.percentile(exterior, 75, axis=1) -
                         np.percentile(exterior, 25, axis=1), axis=1)
         uniformity = float(np.median(spread))
-        if uniformity > 0.12:
+        if uniformity > (0.04 if soft else 0.12):
             continue
+        if soft:
+            # A median/IQR alone can hide minority leaves, buildings or a horizon
+            # in the outside band. Do not erase that content to chase a weak edge.
+            flat = exterior.reshape(-1, exterior.shape[-1])
+            if np.max(np.percentile(flat, 90, axis=0) - np.percentile(flat, 10, axis=0)) > .08:
+                continue
         # Wide trims require particularly consistent outside regions.
         if offset > h * 0.08:
             # A wide holder is flat through its depth as well as along its edge.
@@ -718,10 +732,23 @@ def _detect_outer_edge(a):
         interior = smooth[inner_y, np.arange(len(ts))]
         inside_spread = np.max(np.percentile(interior, 75, axis=1) -
                                np.percentile(interior, 25, axis=1), axis=1)
+        if soft and np.max(inside_spread) < max(.018, uniformity * 1.25):
+            continue
         if np.max(inside_spread) < 0.018:
             # Textureless dark sky behind bright film base is still a frame.
             # A uniform bright band behind a dark holder is usually more base.
             if offset > h * 0.06 or np.median(interior) >= np.median(exterior) - 0.03:
+                continue
+        if soft:
+            # A film-base transition has a common polarity across the frame.
+            # Texture/noise ridges oscillate in sign and must not become a crop.
+            reach = max(3, round(h * .005))
+            outer = smooth[np.clip(np.rint(boundary - reach).astype(int), 0, h - 1), np.arange(len(ts))].mean(axis=1)
+            inner = smooth[np.clip(np.rint(boundary + reach).astype(int), 0, h - 1), np.arange(len(ts))].mean(axis=1)
+            delta = inner - outer
+            signed = delta * np.sign(np.median(delta))
+            exterior_noise = float(np.median(np.std(exterior, axis=0)))
+            if np.mean(signed > 0) < .75 or abs(float(np.median(delta))) < max(.002, 2.5 * exterior_noise):
                 continue
         residual = float(np.percentile(np.abs(points[good] - boundary[good]), 95))
         confidence = float(good.mean() * max(0, 1 - uniformity / 0.24))
@@ -733,12 +760,13 @@ def _detect_outer_edge(a):
     # Favor the strongest supported boundary; avoid walking deep into the subject
     # when a comparably well-supported exterior boundary already exists.
     best_conf = max(v[0] for v in accepted)
-    viable = [v for v in accepted if v[0] >= max(0.50, best_conf * 0.85)]
+    viable = [v for v in accepted if v[0] >= max(0.45 if soft else 0.50, best_conf * 0.85)]
     if not viable:
         return None
     confidence, offset, slope, residual = min(viable, key=lambda v: v[1])
     return dict(offset=offset, slope=slope, residual=residual,
-                confidence=round(confidence, 3), center=center)
+                confidence=round(min(confidence, .54) if soft else confidence, 3), center=center,
+                method='soft-border' if soft else 'contrast-edge')
 
 
 def detect_film_frame(lin_oriented):
@@ -757,6 +785,20 @@ def detect_film_frame(lin_oriented):
     edges = dict(top=_detect_outer_edge(a), bottom=_detect_outer_edge(a[::-1]),
                  left=_detect_outer_edge(a.transpose(1, 0, 2)),
                  right=_detect_outer_edge(a[:, ::-1].transpose(1, 0, 2)))
+    # Weak-edge recovery requires independent physical-frame evidence. It never
+    # discovers a frame in a borderless scene and never determines leveling.
+    strong_angles = [(1 if name in ('top', 'right') else -1) * np.degrees(np.arctan(edge['slope']))
+                     for name, edge in edges.items() if edge is not None and edge['confidence'] >= .75]
+    if strong_angles:
+        views = dict(top=a, bottom=a[::-1], left=a.transpose(1, 0, 2), right=a[:, ::-1].transpose(1, 0, 2))
+        for name, view in views.items():
+            if edges[name] is not None:
+                continue
+            edge = _detect_outer_edge(view, soft=True)
+            if edge is not None:
+                angle = (1 if name in ('top', 'right') else -1) * np.degrees(np.arctan(edge['slope']))
+                if min(abs(angle - reference) for reference in strong_angles) <= 1.0:
+                    edges[name] = edge
     # Stay inside even tilted borders. The margin is tied to fit uncertainty,
     # not to a fixed percentage of the photograph.
     def inset(edge, span):

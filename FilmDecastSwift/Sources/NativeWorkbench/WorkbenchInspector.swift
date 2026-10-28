@@ -177,6 +177,7 @@ struct WorkbenchInspector: View {
           Button("+0.1°") { s.setParam("level_angle", .number(min(15, s.params["level_angle"].double + 0.1))) }
         }
         Button("自动裁剪与校平", action: s.autoCrop)
+        Button("整卷自动裁剪…") { s.presentRollAutomation("crop") }
         Toggle("参考同卷已调照片", isOn: bindings.useRollReference)
       }
     } else {

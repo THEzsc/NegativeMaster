@@ -44,7 +44,7 @@ cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>2.1</string>
-    <key>CFBundleVersion</key><string>8</string>
+    <key>CFBundleVersion</key><string>9</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
@@ -57,7 +57,7 @@ done
 for folder in data static templates presets; do
   /usr/bin/ditto "$PROJECT_DIR/$folder" "$APP_PATH/Contents/Resources/Engine/$folder"
 done
-cp "$SOURCE_DIR/Support/native_worker.py" "$SOURCE_DIR/Support/native_preview.py" "$SOURCE_DIR/Support/sheet-defaults.json" "$APP_PATH/Contents/Resources/Engine/FilmDecastSwift/Support/"
+cp "$SOURCE_DIR/Support/native_worker.py" "$SOURCE_DIR/Support/native_preview.py" "$SOURCE_DIR/Support/native_batch.py" "$SOURCE_DIR/Support/sheet-defaults.json" "$APP_PATH/Contents/Resources/Engine/FilmDecastSwift/Support/"
 "$PYTHON" "$SOURCE_DIR/Support/package_runtime.py" "$APP_PATH/Contents/Resources/Runtime"
 "$PYTHON" - "$PROJECT_DIR" "$APP_PATH/Contents/Resources/Runtime.json" <<'PYCODE'
 import json,sys

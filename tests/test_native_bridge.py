@@ -55,6 +55,57 @@ class NativeBridgeTests(unittest.TestCase):
             if r['state']=='ready':return r
             time.sleep(.03)
         self.fail('Prepare timed out')
+    def test_batch_patch_is_selective_conflict_checked_and_reversible(self):
+        photo=self.images/'batch-edit.png';photo.write_bytes(self.photo.read_bytes())
+        p=dict(self.defaults,mode='bw',gamma=1.3,exposure=.4,rotate=90,flip='h',crop_rect=[.1,.2,.9,.8],level_angle=.25)
+        self.call('save',dict(path=str(photo),params=p,sidecar=True))
+        sidecar=Path(str(photo)+'.decast.xml');before=sidecar.read_bytes();original=photo.read_bytes()
+        snapshot=self.call('batch_snapshot',dict(path=str(photo)))
+        r=self.call('batch_apply',dict(path=str(photo),token=snapshot['token'],patch={'gamma':1.65}))
+        expected=dict(p,gamma=1.65)
+        actual=self.call('adjustments',dict(path=str(photo)))['params']
+        self.assertEqual(actual,expected)
+        with self.assertRaises(ValueError):self.call('batch_apply',dict(path=str(photo),token=snapshot['token'],patch={'gamma':1.8}))
+        self.call('batch_restore',dict(undo_id=r['undo_id']))
+        self.assertEqual(sidecar.read_bytes(),before)
+        self.assertEqual(photo.read_bytes(),original)
+        with self.assertRaises(ValueError):self.call('batch_apply',dict(path=str(photo),token=snapshot['token'],patch={'exposure':2}))
+        crop={'crop_rect':[.2,.1,.8,.9],'level_angle':-.4,'geometry_source':'auto'}
+        r=self.call('batch_apply',dict(path=str(photo),token=snapshot['token'],patch=crop))
+        changed=self.call('adjustments',dict(path=str(photo)))['params']
+        self.assertEqual(changed,dict(p,**crop))
+        self.call('save',dict(path=str(photo),params=dict(changed,exposure=.9),sidecar=True))
+        later=sidecar.read_bytes()
+        with self.assertRaises(ValueError):self.call('batch_restore',dict(undo_id=r['undo_id']))
+        self.assertEqual(sidecar.read_bytes(),later)
+
+    def test_batch_new_sidecar_undo_and_corrupt_metadata(self):
+        photo=self.images/'batch-new.png';photo.write_bytes(self.photo.read_bytes())
+        snap=self.call('batch_snapshot',dict(path=str(photo)))
+        r=self.call('batch_apply',dict(path=str(photo),token=snap['token'],patch={'gamma':1.6}))
+        sidecar=Path(str(photo)+'.decast.xml');self.assertTrue(sidecar.is_file())
+        self.call('batch_restore',dict(undo_id=r['undo_id']))
+        self.assertFalse(sidecar.exists())
+        sidecar.write_text('<broken')
+        with self.assertRaises(ValueError):self.call('batch_snapshot',dict(path=str(photo)))
+        self.assertEqual(sidecar.read_text(),'<broken')
+
+    def test_fast_gamma_analysis_keeps_sources_and_has_per_frame_values(self):
+        photo=self.images/'batch-gamma.png'
+        scene=np.linspace(0,1,240*160).reshape(160,240)**1.6
+        image=np.repeat(np.power(10.,-(.2+1.4*scene))[...,None],3,axis=-1)
+        Image.fromarray((image*255).astype('uint8')).save(photo)
+        p=dict(self.defaults,mode='bw',wb='none',input_gamma='linear',black_pct=0,white_pct=100,contrast=0)
+        before=photo.read_bytes()
+        a=self.call('analyze_gamma',dict(path=str(photo),params=dict(p,exposure=0)))['report']
+        b=self.call('analyze_gamma',dict(path=str(photo),params=dict(p,exposure=.5)))['report']
+        self.assertEqual(a['method'],'per-frame-finished-midtones-v1')
+        self.assertGreater(a['recommendation'],b['recommendation'])
+        self.assertEqual(photo.read_bytes(),before)
+        self.assertFalse(Path(str(photo)+'.decast.xml').exists())
+        rejected=self.call('analyze_gamma',dict(path=str(photo),params=dict(p,mode='positive')))['report']
+        self.assertIsNone(rejected['recommendation'])
+
     def test_preview_resolutions_and_geometry_provenance(self):
         photo=self.images/'large-preview.jpg'
         Image.new('RGB',(3000,2000),(120,100,60)).save(photo)

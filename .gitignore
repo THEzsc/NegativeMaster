@@ -38,3 +38,6 @@ work/
 # Personal local film archive (database, thumbnails, covers)
 archive_data/
 *archive*.zip
+
+# Local batch undo receipts contain original adjustment metadata and paths.
+batch_history/

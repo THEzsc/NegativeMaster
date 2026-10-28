@@ -170,7 +170,7 @@ def handle(message):
     global _decode_params, _preview_mode, _preview_side
     action = message.get('action','api')
     body = message.get('body',{})
-    _preview_mode = action in ('render', 'negative', 'autocrop', 'wbtemp')
+    _preview_mode = action in ('render', 'negative', 'autocrop', 'wbtemp', 'analyze_gamma')
     _preview_side = 720 if body.get('interactive') and action == 'render' else 1500
     if action == 'bootstrap':
         return dict(ok=True, defaults=gui.DEFAULTS, fields=parser.fields,
@@ -181,6 +181,31 @@ def handle(message):
         return adjustments(body['path'])
     if action == 'save':
         return save_adjustments(body['path'],body['params'],body.get('sidecar',False))
+    if action == 'batch_snapshot':
+        from native_batch import snapshot
+        token = snapshot(gui, body['path'])[2]
+        result = adjustments(body['path'])
+        if snapshot(gui, body['path'])[2] != token:
+            raise ValueError('读取时照片参数已改变，请重试')
+        result['token'] = token
+        return result
+    if action == 'batch_apply':
+        from native_batch import apply
+        return apply(gui, DATA_ROOT, body['path'], body['patch'], body['token'], adjustments)
+    if action == 'batch_restore':
+        from native_batch import restore
+        return restore(gui, DATA_ROOT, body['undo_id'], adjustments)
+    if action == 'analyze_gamma':
+        import conversion_advisor
+        p = body['params']
+        _decode_params = p
+        gui.load_full(body['path'], p.get('raw_denoise', False))
+        # Use the same decode and film-base coordinates as the displayed preview.
+        opts = dict(vars(gui.make_opts(p)))
+        if opts.get('base_rect'):
+            opts['base_rect'] = [v * gui.CACHE['scale'] for v in opts['base_rect']]
+        report = conversion_advisor.analyze_frame(gui.CACHE['prev'], opts, respect_finishing=True)
+        return dict(ok=True, report=report)
     if action == 'render':
         p = body['params']
         _decode_params = p

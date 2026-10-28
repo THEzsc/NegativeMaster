@@ -58,16 +58,18 @@ extension WorkbenchState {
     status = "已应用\(look.name)"
   }
   func analyzeGamma(roll: Bool) {
+    if roll { presentRollAutomation("gamma"); return }
     guard let path = selected, parameterPath == path, !busy else { return }
     analysisTask?.cancel()
-    let p = params, settings = workflowSettings, paths = roll ? workflowPaths : [path]
+    let p = params, paths = [path]
     analyzing = true
     gammaAnalysis = .null
     analysisTask = Task {
       do {
-        let r = try await analysisEngine.api("/api/workflow/analyze", .object([
-          "paths": .array(paths.map(J.string)), "current_path": .string(path), "current": settings
-        ]))
+        let result = try await analysisEngine.call(.object(["action": .string("analyze_gamma"), "body": .object([
+          "path": .string(path), "params": p
+        ])]))
+        let r = J.object(["report": result["report"], "sampled": .number(1), "total": .number(1), "errors": .array([])])
         guard !Task.isCancelled else { return }
         analysisParams = p; analysisPath = path; analysisPaths = paths; analysisIsRoll = roll; gammaAnalysis = r
         analyzing = false
@@ -122,7 +124,7 @@ struct NativeWorkflowControls: View {
     Section("Gamma 分析") {
       HStack {
         Button("分析这一张") { s.analyzeGamma(roll: false) }
-        Button("分析同卷") { s.analyzeGamma(roll: true) }
+        Button("整卷逐张分析…") { s.analyzeGamma(roll: true) }
       }.disabled(s.analyzing)
       if s.analyzing { ProgressView("正在分析明暗分布…").controlSize(.small) }
       if s.gammaAnalysis != .null {

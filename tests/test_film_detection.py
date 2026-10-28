@@ -25,9 +25,54 @@ def frame(border=.95, tilt=0., color=None, double=False):
     return a
 
 
+def soft_frame(h=600, w=900, seed=47, border=True, holder=True):
+    """Fine grain, busy center and a diffuse low-contrast peripheral film band."""
+    y,x=np.mgrid[:h,:w];rng=np.random.default_rng(seed)
+    a=.87+.025*x/w+.028*np.sin(x/17)*np.cos(y/9)
+    a[(np.sin(x/13)*np.cos(y/17)>.5)&(y<h*.85)]=.1
+    if border:
+        blend=np.clip((y-(h-h*.025-4))/8,0,1)
+        a=a*(1-blend)+(.915+.025*x/w)*blend
+    a+=rng.normal(0,.008,(h,w))
+    if holder: a[:,-max(3,int(w*.02)):]=.015
+    return np.repeat(a[...,None],3,axis=2).astype('float32')
+
+
 class FilmFrameTests(unittest.TestCase):
     def assertRectNear(self, actual, expected, tolerance=.014):
         np.testing.assert_allclose(actual, expected, atol=tolerance, rtol=0)
+
+    def test_soft_border_recovers_without_excessive_scene_trim(self):
+        for h,w,seed in ((600,900,47),(600,900,53),(935,1400,47),(935,1400,53)):
+            for exposure in (.25,1.):
+                with self.subTest(size=(h,w),seed=seed,exposure=exposure):
+                    a=soft_frame(h,w,seed)*exposure
+                    result=decast.detect_film_frame(a)
+                    self.assertIsNotNone(result['edges']['bottom'])
+                    self.assertEqual(result['edges']['bottom']['method'],'soft-border')
+                    self.assertGreater(result['rect'][3],.955)
+                    self.assertLess(result['rect'][3],.975)
+                    self.assertEqual(result['rect'][:2],[0.,0.])
+                    # Weak-edge evidence may crop but cannot supply a rotation.
+                    self.assertLess(result['edges']['bottom']['confidence'],.55)
+
+    def test_soft_border_is_repeatable_and_tracks_orientation(self):
+        a = soft_frame()
+        original = decast.detect_film_frame(a)
+        self.assertEqual(original, decast.detect_film_frame(a))
+        r = original['rect']
+        transformed = decast.detect_film_frame(np.rot90(a)[:, ::-1])
+        np.testing.assert_allclose(transformed['rect'],
+                                   [1-r[3], 1-r[2], 1-r[1], 1-r[0]], atol=.006, rtol=0)
+        self.assertEqual(transformed['edges']['left']['method'], 'soft-border')
+
+    def test_weak_texture_and_missing_physical_frame_do_not_create_crop(self):
+        for h,w in ((600,900),(935,1400)):
+            with self.subTest(size=(h,w)):
+                result=decast.detect_film_frame(soft_frame(h,w,border=False))
+                self.assertEqual(result['rect'][0:2],[0.,0.])
+                self.assertEqual(result['rect'][3],1.)
+                self.assertEqual(decast.detect_film_rect(soft_frame(h,w,holder=False)),[0.,0.,1.,1.])
 
     def test_black_and_white_borders(self):
         for value in (.01,.95):

@@ -54,6 +54,8 @@ import SwiftUI
           .disabled(state.selected == nil || state.workspace != .develop)
         Button("水平镜像", action: { state.mirror("h") }).disabled(state.selected == nil || state.workspace != .develop)
         Button("自动裁剪与校平", action: state.autoCrop).disabled(state.selected == nil || state.busy || state.workspace != .develop)
+        Button("整卷自动裁剪…") { state.presentRollAutomation("crop") }.disabled(state.photos.isEmpty || state.busy || state.workspace != .develop)
+        Button("整卷逐张 Gamma 分析…") { state.presentRollAutomation("gamma") }.disabled(state.photos.isEmpty || state.busy || state.workspace != .develop)
         Button("裁剪与微量旋转", action: state.beginCrop).keyboardShortcut("c", modifiers: [.command, .option])
           .disabled(state.selected == nil || state.workspace != .develop)
         Button("生成缩略图", action: state.generateThumbnails).disabled(state.photos.isEmpty)
