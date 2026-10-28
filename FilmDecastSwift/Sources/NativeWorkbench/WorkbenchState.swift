@@ -115,7 +115,21 @@ import UniformTypeIdentifiers
   var exportResize = 0.0
   var lastExport: URL?
   var inspector = true
-  var tunePane = "光线"
+  var expandedDevelopPanels = Set(UserDefaults.standard.stringArray(forKey: "native.expandedDevelopPanels") ?? ["film", "histogram", "light"])
+  var requestedDevelopPanel = "light"
+  var developPanelJump = 0
+
+  func setDevelopPanel(_ id: String, expanded: Bool) {
+    if expanded { expandedDevelopPanels.insert(id) } else { expandedDevelopPanels.remove(id) }
+    UserDefaults.standard.set(expandedDevelopPanels.sorted(), forKey: "native.expandedDevelopPanels")
+  }
+
+  func revealDevelopPanel(_ id: String) {
+    setDevelopPanel(id, expanded: true)
+    requestedDevelopPanel = id
+    developPanelJump += 1
+    inspector = true
+  }
   var sheetPane = "film"
   var sheetConfig: J = .object([:])
   var sheetDefaults: J = .object([:])
@@ -597,7 +611,7 @@ import UniformTypeIdentifiers
             params["geometry_source"] = .string("auto")
             warnings = r["warnings"].array.map(\.string)
             selectionTool = "crop"
-            tunePane = "裁剪"
+            revealDevelopPanel("crop")
             queueRender()
             persistSoon()
           }

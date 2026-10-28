@@ -114,9 +114,6 @@ struct RollTransferSheet: View {
         if s.transferArchiveID == "new" {
           TextField("胶卷名称", text: bindings.transferTitle).textFieldStyle(.roundedBorder)
         }
-        Text("已有成片直接关联；RAW 仅生成轻量预览。").font(.callout).foregroundStyle(.secondary)
-      } else {
-        Text("优先使用已导出成片，其余读取保存的调整。").font(.callout).foregroundStyle(.secondary)
       }
       HStack {
         Spacer()

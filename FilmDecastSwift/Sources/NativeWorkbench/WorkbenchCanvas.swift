@@ -141,7 +141,7 @@ struct WorkbenchCanvas: View {
           Image(systemName: "rotate.right")
         }.help("向右旋转")
         Button {
-          s.tunePane = "裁剪"; s.inspector = true; s.selectionTool = "crop"
+          s.revealDevelopPanel("crop"); s.selectionTool = "crop"
         } label: {
           Label(String(format: "%.2f°", s.params["level_angle"].double), systemImage: "angle")
             .font(.caption.monospacedDigit())

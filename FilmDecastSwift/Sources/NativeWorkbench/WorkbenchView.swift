@@ -57,7 +57,6 @@ struct WorkbenchView: View {
     .sheet(isPresented: bindings.showPathSheet) {
       VStack(alignment: .leading, spacing: 20) {
         Text("打开路径").font(.title2.bold())
-        Text("输入照片、胶卷文件夹或整卷项目的本地路径。").foregroundStyle(.secondary)
         TextField("/Users/…", text: bindings.pathEntry).textFieldStyle(.roundedBorder).onSubmit {
           s.openEnteredPath()
         }
@@ -77,8 +76,8 @@ struct WorkbenchView: View {
         Label("右侧分组调整影调、色彩、曲线与画幅。", systemImage: "slider.horizontal.3")
         Label("按 ⌘B 比较原片；⌘Z 撤销，⌘E 导出。", systemImage: "keyboard")
         Label("拖动排版照片排序，选择单张后拖动画面调整构图。", systemImage: "rectangle.split.3x3")
+        Label("调整自动保存，原片保持不变。", systemImage: "checkmark.circle")
         Label("保存整卷项目会包含照片、背景和排版设置。", systemImage: "square.and.arrow.down")
-        Text("调片参数会自动保存为 XML。所有图像处理都在本机完成。").font(.callout).foregroundStyle(.secondary)
         HStack {
           Spacer()
           Button("开始使用") { s.showHelp = false }.keyboardShortcut(.defaultAction)

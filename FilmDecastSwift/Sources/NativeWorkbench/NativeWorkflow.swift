@@ -83,7 +83,7 @@ extension WorkbenchState {
     let report = gammaAnalysis["report"]
     setParam(report["parameter_key"].string, report["recommendation"])
     analysisParams = params
-    status = "已应用 Gamma 建议，可继续手动微调"
+    status = "已应用 Gamma 建议"
   }
   func lockRollGamma() {
     guard canLockRoll, !busy, let path = selected, parameterPath == path else { return }
@@ -116,12 +116,12 @@ struct NativeWorkflowControls: View {
   @Environment(WorkbenchState.self) var s
   private var bindings: Bindable<WorkbenchState> { Bindable(s) }
   var body: some View {
-    Section("影调风格") {
+    DevelopPanel("影调风格", id: "looks") {
       Menu("应用风格") {
         ForEach(ToneLook.all) { look in Button(look.name) { s.applyLook(look) } }
       }
     }
-    Section("Gamma 分析") {
+    DevelopPanel("Gamma 分析", id: "gamma") {
       HStack {
         Button("分析这一张") { s.analyzeGamma(roll: false) }
         Button("整卷逐张分析…") { s.analyzeGamma(roll: true) }
@@ -133,9 +133,9 @@ struct NativeWorkflowControls: View {
           LabeledContent(report["parameter_key"].string == "nd_gamma" ? "建议纸张反差" : "建议 Gamma", value: String(format: "%.3f", value))
         } else { Text("当前画面没有可靠的 Gamma 建议") }
         let confidence = ["high":"高", "medium":"中", "low":"低", "none":"不足"][report["confidence"].string] ?? "不足"
-        Text("可信度：\(confidence) · 抽样 \(Int(s.gammaAnalysis["sampled"].double)) / \(Int(s.gammaAnalysis["total"].double)) 张").font(.caption).foregroundStyle(.secondary)
+        Text("可信度：\(confidence)").font(.caption).foregroundStyle(.secondary)
         ForEach(Array(report["warnings"].array.enumerated()), id: \.offset) { _, warning in Text(warning.string).font(.caption).foregroundStyle(.secondary) }
-        if !s.gammaFresh { Text("当前照片、参数或所选照片已改变，请重新分析。").font(.caption).foregroundStyle(.orange) }
+        if !s.gammaFresh { Text("调整已改变，请重新分析").font(.caption).foregroundStyle(.orange) }
         HStack {
           Button("应用到这张", action: s.applyGamma)
           if s.analysisIsRoll {

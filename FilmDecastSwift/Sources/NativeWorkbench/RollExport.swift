@@ -150,7 +150,7 @@ struct RollExportSheet: View {
         if s.batchRunning {
           ProgressView(value: s.progress)
           Text(s.status).lineLimit(2)
-          Text("已完成 \(s.batchCompleted) 张；停止后会先完成当前照片。").font(.callout).foregroundStyle(.secondary)
+          Text("停止后将完成当前照片").font(.callout).foregroundStyle(.secondary)
         } else {
           Label("成功 \(s.batchCompleted) / \(s.batchTotal) 张", systemImage: s.batchFailures.isEmpty ? "checkmark.circle" : "exclamationmark.triangle")
             .font(.headline)
@@ -167,9 +167,7 @@ struct RollExportSheet: View {
           Picker("导出范围", selection: bindings.batchScope) {
             Text("当前列表 · \(s.filteredPhotos.count) 张").tag("visible")
             Text("列表中已勾选 · \(s.visibleCheckedPhotos.count) 张").tag("selected")
-          }
-          Text(s.rawOnly ? "已启用“只显示 RAW”；范围同时跟随左侧搜索条件。" : "范围跟随左侧列表；RAW + JPG 同名照片会分别输出。")
-            .font(.caption).foregroundStyle(.secondary)
+          }.help("范围跟随照片列表的筛选；同名 RAW 和 JPEG 分别导出")
           Picker("格式", selection: bindings.exportFormat) {
             Text("TIFF").tag("tif"); Text("JPEG").tag("jpg"); Text("PNG").tag("png")
           }
@@ -188,7 +186,7 @@ struct RollExportSheet: View {
             }
           }
         }.formStyle(.grouped).frame(height: 340)
-        Text("每张照片使用各自保存的调片参数，当前照片使用当前调整。没有记录的照片使用默认参数。同名文件自动编号，不覆盖原片或已有成片。")
+        Text("同名文件自动编号，不覆盖已有文件。")
           .font(.callout).foregroundStyle(.secondary)
       }
       if let error = s.batchError { Text(error).foregroundStyle(.red).font(.callout).textSelection(.enabled) }

@@ -48,8 +48,7 @@ extension WorkbenchState {
     }
   }
   func beginCrop() {
-    tunePane = "裁剪"
-    inspector = true
+    revealDevelopPanel("crop")
     selectionTool = selectionTool == "crop" ? "" : "crop"
   }
 }

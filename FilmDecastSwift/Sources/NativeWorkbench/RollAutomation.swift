@@ -164,9 +164,7 @@ struct RollAutomationSheet: View {
         }
         if s.automationKind == "crop" {
           Toggle("参考同卷已调照片", isOn: bindings.useRollReference)
-          Text("逐张裁剪并校平，保留横竖方向。无法可靠识别的照片会跳过。").foregroundStyle(.secondary)
-        } else {
-          Text("每张独立计算建议值；分析后选择应用。").foregroundStyle(.secondary)
+          Text("无法识别片框的照片将跳过").foregroundStyle(.secondary)
         }
       } else {
         if s.automationRunning {
@@ -176,10 +174,7 @@ struct RollAutomationSheet: View {
         } else {
           Text(s.automationPhase == "review" ? "已分析 \(s.automationRows.count) 张 · 可应用 \(s.automationChosen) 张" : "已应用 \(s.automationUndoCount) 张")
             .font(.headline)
-          if s.automationStopped { Text("已停止，已完成的结果保留。").foregroundStyle(.secondary) }
-        }
-        if s.automationKind == "gamma", s.automationPhase == "review" {
-          Text("逐张建议保留各自曝光和其他调整；低可信度默认不应用。").font(.callout).foregroundStyle(.secondary)
+          if s.automationStopped { Text("已停止").foregroundStyle(.secondary) }
         }
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 12) {

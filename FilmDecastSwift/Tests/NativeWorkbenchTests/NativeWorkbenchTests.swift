@@ -404,4 +404,31 @@ final class NativeWorkbenchTests: XCTestCase {
     XCTAssertEqual(try Data(contentsOf: file), Data("file".utf8))
   }
 
+  @MainActor func testInspectorPanelsExpandIndependentlyAndRevealCropRepeatedly() {
+    let key = "native.expandedDevelopPanels"
+    let saved = UserDefaults.standard.object(forKey: key)
+    defer {
+      if let saved { UserDefaults.standard.set(saved, forKey: key) }
+      else { UserDefaults.standard.removeObject(forKey: key) }
+    }
+    let state = WorkbenchState()
+    state.expandedDevelopPanels = ["light"]
+    state.params = .object(["gamma": .number(1.2), "level_angle": .number(0.3)])
+    let before = state.params
+    state.inspector = false
+    state.revealDevelopPanel("crop")
+    XCTAssertTrue(state.inspector)
+    XCTAssertEqual(state.expandedDevelopPanels, ["light", "crop"])
+    let firstJump = state.developPanelJump
+    state.revealDevelopPanel("crop")
+    XCTAssertGreaterThan(state.developPanelJump, firstJump)
+    XCTAssertEqual(state.requestedDevelopPanel, "crop")
+    state.setDevelopPanel("crop", expanded: false)
+    XCTAssertEqual(state.expandedDevelopPanels, ["light"])
+    XCTAssertEqual(WorkbenchState().expandedDevelopPanels, ["light"])
+    state.setDevelopPanel("light", expanded: false)
+    XCTAssertTrue(WorkbenchState().expandedDevelopPanels.isEmpty)
+    XCTAssertEqual(state.params, before)
+  }
+
 }

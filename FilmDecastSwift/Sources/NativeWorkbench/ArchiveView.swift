@@ -51,7 +51,7 @@ struct ArchiveDetail: View {
       else {
         ContentUnavailableView {
           Label("每一卷，都有来处", systemImage: "archivebox")
-        } description: { Text("记录胶片、相机与冲洗信息，把成片和暗盒封面放在一起。") }
+        } description: { Text("添加你的第一卷胶片") }
         actions: { Button("新建胶卷", action:a.newRoll).disabled(!a.loaded); Button("暗盒图库") { a.showArtwork = true }.disabled(!a.loaded) }
       }
       Divider()
@@ -80,7 +80,7 @@ struct ArchiveDetail: View {
           }.disabled(a.busy)
         }
         if a.detail["frames"].array.isEmpty {
-          ContentUnavailableView("关联这卷的照片", systemImage:"photo.on.rectangle", description:Text("选择胶卷文件夹，直接索引成片或生成 RAW 轻量预览。"))
+          ContentUnavailableView("关联这卷的照片", systemImage:"photo.on.rectangle", description:Text("选择照片文件夹"))
         }
         LazyVGrid(columns:[GridItem(.adaptive(minimum:190),spacing:16)],alignment:.leading,spacing:20) {
           ForEach(a.detail["frames"].array) { frame in ArchiveFrameCard(a:a,frame:frame) }
@@ -181,7 +181,6 @@ struct ArchiveEditor: View {
         }
         Section("封面来源") {
           field("来源链接","cover_source"); field("作者署名","cover_credit")
-          if !a.draft["cover_artwork"].string.isEmpty { Text("内置图案的许可和署名随封面保存。").font(.caption).foregroundStyle(.secondary) }
         }
       }.formStyle(.grouped)
       if let error = a.error { Text(error).font(.callout).foregroundStyle(.red).padding(.horizontal,20).textSelection(.enabled) }
@@ -237,7 +236,6 @@ struct ArtworkLibrary: View {
           if a.filteredArt.count > a.artLimit { Button("显示更多图案") { a.artLimit += 24 } }
           DisclosureGroup("包装扫描参考 · \(a.filteredReferences.count)") {
             LazyVStack(alignment:.leading,spacing:14) {
-              Text("外部参考以链接打开；不随应用下载。 ").font(.caption).foregroundStyle(.secondary)
               ForEach(Array(a.filteredReferences.prefix(a.artLimit))) { item in SourceLink(title:item["brand"].string+" "+item["name"].string,path:item["source_url"].string) }
               if a.filteredReferences.count > a.artLimit { Button("显示更多参考") { a.artLimit += 24 } }
             }.padding(.top,12)
