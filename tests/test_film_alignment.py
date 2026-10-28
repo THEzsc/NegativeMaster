@@ -10,6 +10,36 @@ import film_reference
 
 
 class AlignmentTests(unittest.TestCase):
+    def test_tiny_rotation_and_precise_safe_inset(self):
+        a=scene(800,1200)
+        self.assertFalse(np.array_equal(a,decast._deskew_lin(a,.05)))
+        for angle in (.05,.2,.55,3.,-1.2):
+            rect=decast._safe_inset_rect(a.shape,angle)
+            self.assertGreater(rect[0],0)
+            self.assertLess(rect[0],.05)
+            rotated=decast._deskew_lin(np.ones_like(a),angle)
+            h,w=a.shape[:2]
+            crop=rotated[int(np.ceil(rect[1]*h)):int(np.floor(rect[3]*h)),int(np.ceil(rect[0]*w)):int(np.floor(rect[2]*w))]
+            self.assertGreater(float(crop.min()),.999)
+
+    def test_adjacent_edges_do_not_override_manual_angle(self):
+        from unittest.mock import patch
+        f=decast.detect_film_frame(frame())
+        f['edges']['top']=None
+        f['edges']['right']=None
+        f['detected_edges']=2
+        with patch.object(decast,'detect_film_frame',return_value=f):
+            result=decast.detect_film_alignment(frame(),current_angle=.55)
+        self.assertEqual(result['angle'],.55)
+        self.assertEqual(result['angle_status'],'preserved')
+
+    def test_different_framing_rejects_reference(self):
+        a=scene(); a[:,:90]=.01
+        reference=dict(rect=[.02,.03,.98,.97],angle=.6,samples=7)
+        result=decast.detect_film_alignment(a,reference=reference)
+        self.assertFalse(result.get('reference_edges'))
+        self.assertEqual(result['angle'],0)
+
     def test_small_angles_and_idempotence(self):
         for angle in (-.45, .12, .6):
             with self.subTest(angle=angle):

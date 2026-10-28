@@ -29,7 +29,7 @@ class NativeBridgeTests(unittest.TestCase):
         image=np.stack([x/179*150+30,y/119*130+25,(x+y)/298*90+20],axis=-1).astype(np.uint8)
         cls.photo=cls.images/'negative.png';Image.fromarray(image).save(cls.photo)
         cls.positive=cls.images/'positive.png';Image.fromarray(255-image).save(cls.positive)
-        env=dict(os.environ,NM_DATA_ROOT=str(cls.dir))
+        env=dict(os.environ,NM_DATA_ROOT=str(cls.dir),NM_PREVIEW_CACHE=str(cls.dir/'preview-cache'))
         cls.stderr=open(cls.dir/'worker.log','w')
         cls.p=subprocess.Popen([sys.executable,str(ROOT/'FilmDecastSwift/Support/native_worker.py'),str(ROOT)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=cls.stderr,text=True,env=env)
         cls.bootstrap=cls.call('bootstrap')
@@ -55,6 +55,87 @@ class NativeBridgeTests(unittest.TestCase):
             if r['state']=='ready':return r
             time.sleep(.03)
         self.fail('Prepare timed out')
+    def test_batch_patch_is_selective_conflict_checked_and_reversible(self):
+        photo=self.images/'batch-edit.png';photo.write_bytes(self.photo.read_bytes())
+        p=dict(self.defaults,mode='bw',gamma=1.3,exposure=.4,rotate=90,flip='h',crop_rect=[.1,.2,.9,.8],level_angle=.25)
+        self.call('save',dict(path=str(photo),params=p,sidecar=True))
+        sidecar=Path(str(photo)+'.decast.xml');before=sidecar.read_bytes();original=photo.read_bytes()
+        snapshot=self.call('batch_snapshot',dict(path=str(photo)))
+        r=self.call('batch_apply',dict(path=str(photo),token=snapshot['token'],patch={'gamma':1.65}))
+        expected=dict(p,gamma=1.65)
+        actual=self.call('adjustments',dict(path=str(photo)))['params']
+        self.assertEqual(actual,expected)
+        with self.assertRaises(ValueError):self.call('batch_apply',dict(path=str(photo),token=snapshot['token'],patch={'gamma':1.8}))
+        self.call('batch_restore',dict(undo_id=r['undo_id']))
+        self.assertEqual(sidecar.read_bytes(),before)
+        self.assertEqual(photo.read_bytes(),original)
+        with self.assertRaises(ValueError):self.call('batch_apply',dict(path=str(photo),token=snapshot['token'],patch={'exposure':2}))
+        crop={'crop_rect':[.2,.1,.8,.9],'level_angle':-.4,'geometry_source':'auto'}
+        r=self.call('batch_apply',dict(path=str(photo),token=snapshot['token'],patch=crop))
+        changed=self.call('adjustments',dict(path=str(photo)))['params']
+        self.assertEqual(changed,dict(p,**crop))
+        self.call('save',dict(path=str(photo),params=dict(changed,exposure=.9),sidecar=True))
+        later=sidecar.read_bytes()
+        with self.assertRaises(ValueError):self.call('batch_restore',dict(undo_id=r['undo_id']))
+        self.assertEqual(sidecar.read_bytes(),later)
+
+    def test_batch_new_sidecar_undo_and_corrupt_metadata(self):
+        photo=self.images/'batch-new.png';photo.write_bytes(self.photo.read_bytes())
+        snap=self.call('batch_snapshot',dict(path=str(photo)))
+        r=self.call('batch_apply',dict(path=str(photo),token=snap['token'],patch={'gamma':1.6}))
+        sidecar=Path(str(photo)+'.decast.xml');self.assertTrue(sidecar.is_file())
+        self.call('batch_restore',dict(undo_id=r['undo_id']))
+        self.assertFalse(sidecar.exists())
+        sidecar.write_text('<broken')
+        with self.assertRaises(ValueError):self.call('batch_snapshot',dict(path=str(photo)))
+        self.assertEqual(sidecar.read_text(),'<broken')
+
+    def test_fast_gamma_analysis_keeps_sources_and_has_per_frame_values(self):
+        photo=self.images/'batch-gamma.png'
+        scene=np.linspace(0,1,240*160).reshape(160,240)**1.6
+        image=np.repeat(np.power(10.,-(.2+1.4*scene))[...,None],3,axis=-1)
+        Image.fromarray((image*255).astype('uint8')).save(photo)
+        p=dict(self.defaults,mode='bw',wb='none',input_gamma='linear',black_pct=0,white_pct=100,contrast=0)
+        before=photo.read_bytes()
+        a=self.call('analyze_gamma',dict(path=str(photo),params=dict(p,exposure=0)))['report']
+        b=self.call('analyze_gamma',dict(path=str(photo),params=dict(p,exposure=.5)))['report']
+        self.assertEqual(a['method'],'per-frame-finished-midtones-v1')
+        self.assertGreater(a['recommendation'],b['recommendation'])
+        self.assertEqual(photo.read_bytes(),before)
+        self.assertFalse(Path(str(photo)+'.decast.xml').exists())
+        rejected=self.call('analyze_gamma',dict(path=str(photo),params=dict(p,mode='positive')))['report']
+        self.assertIsNone(rejected['recommendation'])
+
+    def test_preview_resolutions_and_geometry_provenance(self):
+        photo=self.images/'large-preview.jpg'
+        Image.new('RGB',(3000,2000),(120,100,60)).save(photo)
+        quick=self.call('render',dict(path=str(photo),params=self.defaults,interactive=True,include_negative=False))
+        detail=self.call('render',dict(path=str(photo),params=self.defaults,include_negative=False))
+        self.assertLessEqual(max(self.image(quick).size),720)
+        self.assertEqual(max(self.image(detail).size),1500)
+        self.assertEqual((detail['fullWidth'],detail['fullHeight']),(3000,2000))
+        out=self.dir/'preview-then-export.jpg'
+        self.call('export',dict(path=str(photo),params=self.defaults,out=str(out),bits=8,resize=0))
+        with Image.open(out) as exported:
+            self.assertEqual(exported.size,(3000,2000))
+        p=dict(self.defaults,geometry_source='auto')
+        self.call('save',dict(path=str(photo),params=p,sidecar=True))
+        self.assertEqual(self.call('adjustments',dict(path=str(photo)))['params']['geometry_source'],'auto')
+        self.assertIn('geometry_source="auto"',Path(str(photo)+'.decast.xml').read_text())
+
+    def test_export_atomic_no_clobber(self):
+        self.assertIn('arw', self.bootstrap['rawExtensions'])
+        out=self.dir/'collision.jpg'
+        out.write_bytes(b'existing result')
+        body=dict(path=str(self.photo),params=self.defaults,out=str(out),bits=8,overwrite=False)
+        with self.assertRaises(ValueError): self.call('export',body)
+        self.assertEqual(out.read_bytes(),b'existing result')
+        self.assertEqual(list(self.dir.glob('.nm-export-*')),[])
+        out.unlink()
+        self.call('export',body)
+        with Image.open(out) as image: image.verify()
+        self.assertEqual(list(self.dir.glob('.nm-export-*')),[])
+
     def test_01_bootstrap_controls_and_catalog(self):
         b=self.bootstrap
         self.assertEqual(len(b['stocks']),100)
@@ -156,5 +237,66 @@ class NativeBridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.call('render',dict(path=str(self.dir/'missing.png'),params=self.defaults))
         self.assertTrue(self.call('bootstrap')['stocks'])
         with self.assertRaises(ValueError):self.api('/api/sheet/preview',dict(job='missing'))
+
+    def test_10_lazy_negative_matches_legacy_render(self):
+        body=dict(path=str(self.photo),params=dict(self.defaults,rotate=90,level_angle=.3))
+        old=self.call('render',body)
+        lean=self.call('render',dict(body,include_negative=False))
+        self.assertNotIn('negative',lean)
+        self.assertEqual(lean['bytes'],old['bytes'])
+        self.assertEqual(self.call('negative',body)['bytes'],old['negative'])
+        self.assertLess(len(json.dumps(lean)),len(json.dumps(old)))
+
+    def test_11_lightweight_thumbnail(self):
+        job=self.api('/api/sheet/prepare',dict(paths=[str(self.positive)],positiveOnly=True))['job']
+        ready=self.ready(job);fid=ready['items'][0]['id']
+        thumb=self.image(self.call('thumbnail',dict(job=job,id=fid)))
+        self.assertEqual(thumb.size,(160,107))
+        with self.assertRaises(ValueError):self.call('thumbnail',dict(job='missing',id=fid))
+        self.assertTrue(self.call('bootstrap')['stocks'])
+
+    def test_12_archive_lifecycle_and_artwork_backup(self):
+        catalog=self.api('/api/archive/catalog',method='GET')
+        self.assertEqual(Path(catalog['storage']),(self.dir/'archive_data').resolve())
+        art=self.api('/api/archive/artwork',method='GET')['artworks'][0]
+        roll=self.api('/api/archive/rolls',dict(title='Native QA',stock_id='kodak-gold-200',status='scanning',tags=['synthetic']))['roll']
+        rid=roll['id']
+        roll=self.api('/api/archive/rolls/'+rid+'/cover',dict(artwork_id=art['id']))['roll']
+        self.assertEqual(roll['cover_artwork'],art['id'])
+        roll=self.api('/api/archive/rolls/'+rid,dict(roll,camera='QA camera'),method='PUT')['roll']
+        self.assertEqual(roll['cover_license'],art['license'])
+        roll=self.api('/api/archive/rolls/'+rid+'/frames',dict(directory=str(self.images),mode='all'))['roll']
+        self.assertGreaterEqual(len(roll['frames']),2)
+        fid=roll['frames'][0]['id']
+        roll=self.api('/api/archive/rolls/'+rid+'/frames/'+fid,dict(rating=4,notes='Keep'),method='PUT')['roll']
+        self.assertEqual(next(f for f in roll['frames'] if f['id']==fid)['rating'],4)
+        backup=self.dir/'archive-backup.zip'
+        self.api('/api/archive/backup',method='GET',output=str(backup))
+        restored=self.api('/api/archive/restore',files=dict(file=str(backup)))
+        self.assertEqual(restored['imported'],1)
+        copied=self.api('/api/archive/rolls/'+restored['ids'][0],method='GET')['roll']
+        self.assertEqual(copied['cover_license'],art['license'])
+        self.assertEqual(copied['cover_credit'],art['credit'])
+        self.api('/api/archive/rolls/'+rid,method='DELETE')
+        self.api('/api/archive/rolls/'+copied['id'],method='DELETE')
+        self.assertEqual(self.api('/api/archive/rolls',method='GET')['stats']['rolls'],0)
+        self.assertTrue(self.photo.exists())
+
+    def test_13_workflow_gamma_only_preserves_edits(self):
+        first=dict(self.defaults,exposure=.6,crop_rect=[.1,.2,.8,.9],rotate=90,temp=18)
+        second=dict(self.defaults,exposure=-.3,crop_rect=[.2,.1,.9,.8],rotate=180,temp=-8)
+        paths=[str(self.photo),str(self.positive)]
+        for path,p in zip(paths,[first,second]):self.call('save',dict(path=path,params=p,sidecar=True))
+        report=self.api('/api/workflow/analyze',dict(paths=paths,current_path=paths[0],current=dict(P=first)))
+        self.assertIn('recommendation',report['report'])
+        result=self.api('/api/workflow/roll-gamma',dict(paths=paths,parameter_key='gamma',gamma=.85,current_path=paths[0],current=dict(P=first,cropN=dict(zip(['x0','y0','x1','y1'],first['crop_rect'])))))
+        self.assertEqual(result['updated'],paths)
+        for path,p in zip(paths,[first,second]):
+            loaded=self.call('adjustments',dict(path=path))['params']
+            self.assertEqual(loaded,dict(p,gamma=.85))
+        self.call('save',dict(path=paths[1],params=dict(second,mode='positive'),sidecar=True))
+        mismatch=self.api('/api/workflow/roll-gamma',dict(paths=[paths[1]],parameter_key='gamma',gamma=1.1))
+        self.assertEqual(mismatch['updated'],[])
+        self.assertEqual(len(mismatch['errors']),1)
 
 if __name__=='__main__':unittest.main()

@@ -75,7 +75,8 @@ def reference_for(path, rotate=0, flip='none'):
     angles = np.asarray([r['angle'] for r in refs])
     angle = float(np.median(angles))
     angle_stable = np.median(np.abs(angles - angle)) <= .20
-    if not stable.all():
+    if stable.sum() < 3:
         return None
     return dict(rect=rect.tolist(), angle=angle if angle_stable else None,
+                stable_edges=[name for name, good in zip(('left','top','right','bottom'), stable) if good],
                 samples=len(refs), files=[r['file'] for r in refs])

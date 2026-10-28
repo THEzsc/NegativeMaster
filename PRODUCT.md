@@ -38,3 +38,7 @@ Current gui.py and decast.py, two locally edited rolls, XML sidecars and *_pos.j
 - Controls describe real actions and show processing progress and recoverable errors.
 - Real saved edits and exported images drive previews and final exports.
 - Crop and lettering choices remain adjustable; approximations do not masquerade as historical evidence.
+
+## Interface writing
+
+UI copy serves the person editing photos, rather than reporting implementation work to the requester. Do not copy prompts, acceptance criteria, engineering guarantees or release notes into the interface. Labels name actions and objects. Show scope, destructive consequences, failures and the next recovery action when they matter; say each fact once. Move optional gestures and advanced explanations into contextual help. Keep routine completion messages brief. Preserve photographic terms when they help users choose a result.

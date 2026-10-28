@@ -2531,7 +2531,7 @@ applyTransform();
 # Shared workbench shell and the independent roll-layout routes.
 from sheet_app import create_sheet_blueprint
 from archive_app import create_archive_blueprint
-app.register_blueprint(create_archive_blueprint())
+app.register_blueprint(create_archive_blueprint(make_opts=make_opts, read_xml=_xml_to_data, settings_file=settings_file))
 from workflow_app import create_workflow_blueprint, atomic_text
 app.register_blueprint(create_workflow_blueprint(make_opts, DEFAULTS, settings_file,
     sidecar_path, _xml_to_data, _data_to_xml, CACHE))

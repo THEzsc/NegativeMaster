@@ -1,101 +1,181 @@
 import AppKit
+import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
-@MainActor final class WorkbenchState: ObservableObject {
+@MainActor @Observable final class WorkbenchState {
   enum Workspace: String, CaseIterable {
     case develop = "调片"
     case sheet = "整卷排版"
+    case archive = "胶卷库"
   }
   let engine = EngineBridge()
-  @Published var workspace: Workspace = .develop {
+  let analysisEngine = EngineBridge()
+  let previewEngine = EngineBridge()
+  let archive = ArchiveState()
+  var gammaAnalysis: J = .null
+  var analyzing = false
+  var analysisParams: J = .null
+  var analysisPath: String?
+  var analysisPaths: [String] = []
+  var analysisIsRoll = false
+  @ObservationIgnored var analysisTask: Task<Void, Never>?
+  var workspace: Workspace = .develop {
+    willSet { if newValue != workspace { SwitchPerformance.begin(newValue.rawValue) } }
     didSet {
-      selectionTool = ""
-      zoom = 1
+      guard workspace != oldValue else { return }
+      if !selectionTool.isEmpty { selectionTool = "" }
+      if zoom != 1 { zoom = 1 }
     }
   }
-  @Published var ready = false
-  @Published var showHelp = false
-  @Published var showPathSheet = false
-  @Published var pathEntry = ""
-  @Published var resetOnLoad = false
-  @Published var preferSavedBatch = true
-  @Published var busy = false
-  @Published var batchRunning = false
-  @Published var rendering = false
-  @Published var progress = 0.0
-  @Published var status = "正在准备本地图像引擎…"
-  @Published var error: String?
-  @Published var warnings: [String] = []
-  @Published var photos: [Photo] = []
-  @Published var selected: String?
-  @Published var checked: Set<String> = []
-  @Published var search = ""
-  @Published var folder: URL?
-  @Published var params: J = .object([:])
-  @Published var defaults: J = .object([:])
-  @Published var preview: NSImage?
-  @Published var negative: NSImage?
-  @Published var histogram: J = .null
-  @Published var imageSize = CGSize.zero
-  @Published var showNegative = false
-  @Published var zoom = 1.0
-  @Published var selectionTool = ""
-  @Published var cropAspect = "free"
-  @Published var useRollReference = true
-  @Published var presetNames: [String] = []
-  @Published var selectedPreset = ""
-  @Published var nameEntry = ""
-  @Published var showNameSheet = false
-  @Published var namePurpose = "preset"
-  @Published var referenceName = ""
-  @Published var exportFormat = "tif"
-  @Published var exportBits = 16
-  @Published var exportQuality = 92.0
-  @Published var exportResize = 0.0
-  @Published var lastExport: URL?
-  @Published var inspector = true
-  @Published var tunePane = "光线"
-  @Published var sheetPane = "film"
-  @Published var sheetConfig: J = .object([:])
-  @Published var sheetDefaults: J = .object([:])
-  @Published var fields: [ControlField] = []
-  @Published var stocks: [J] = []
-  @Published var stockID = ""
-  @Published var stockSearch = ""
-  @Published var sheetPhotos: [Photo] = []
-  @Published var sheetSelection: Set<Int> = []
-  @Published var activeFrame: Int?
-  @Published var frames: J = .object([:])
-  @Published var sheetImage: NSImage?
-  @Published var sheetFrameImage: NSImage?
-  @Published var frameView = false
-  @Published var frameGrid = true
-  @Published var outputDimensions = ""
-  @Published var sheetFormat = "png"
-  @Published var layoutNames: [String] = []
-  @Published var selectedLayout = ""
-  @Published var canUndo = false
-  @Published var canRedo = false
-  @Published var draftAvailable = false
+  var ready = false
+  var showHelp = false
+  var showPathSheet = false
+  var pathEntry = ""
+  var resetOnLoad = false
+  var busy = false
+  var batchRunning = false
+  var rendering = false
+  var progress = 0.0
+  var status = "正在准备本地图像引擎…"
+  var error: String?
+  var warnings: [String] = []
+  var photos: [Photo] = []
+  var selected: String?
+  var checked: Set<String> = []
+  var selectionAnchor: String?
+  var filmstripBottom = UserDefaults.standard.bool(forKey: "native.filmstripBottom") {
+    didSet { UserDefaults.standard.set(filmstripBottom, forKey: "native.filmstripBottom") }
+  }
+  var thumbnailDone = 0
+  var thumbnailTotal = 0
+  @ObservationIgnored var thumbnailTask: Task<Void, Never>?
+  var showRollAutomation = false
+  var automationKind = "crop"
+  var automationScope = "visible"
+  var automationPhase = "configure"
+  var automationRows: [RollSuggestion] = []
+  var automationRunning = false
+  var automationStop = false
+  var automationStopped = false
+  var automationDone = 0
+  var automationTotal = 0
+  var automationName = ""
+  var automationError: String?
+  var showTransfer = false
+  var transferDestination = "sheet"
+  var transferScope = "all"
+  var transferArchiveID = "new"
+  var transferTitle = ""
+  var indexingArchive = false
+  var indexDone = 0
+  var indexTotal = 0
+  var indexName = ""
+  var stopIndex = false
+  var search = ""
+  var rawOnly = UserDefaults.standard.bool(forKey: "native.rawOnly") {
+    didSet { UserDefaults.standard.set(rawOnly, forKey: "native.rawOnly") }
+  }
+  var rawExtensions: Set<String> = []
+  var showRollExport = false
+  var batchScope = "visible"
+  var batchDestination = ""
+  var batchFinished = false
+  var batchTotal = 0
+  var batchCompleted = 0
+  var batchFailures: [String] = []
+  var batchOutputs: [URL] = []
+  var batchCurrentName = ""
+  var batchError: String?
+  var batchCancelled = false
+  var folder: URL?
+  var params: J = .object([:])
+  var defaults: J = .object([:])
+  var preview: NSImage?
+  var negative: NSImage?
+  var histogram: J = .null
+  var imageSize = CGSize.zero
+  var showNegative = false { didSet { if showNegative { queueNegative() } } }
+  @ObservationIgnored private var negativeTask: Task<Void, Never>?
+  private var negativeParams: J = .null
+  private var negativePath = ""
+  var zoom = 1.0
+  var selectionTool = ""
+  var cropAspect = "free"
+  var useRollReference = true
+  var presetNames: [String] = []
+  var selectedPreset = ""
+  var nameEntry = ""
+  var showNameSheet = false
+  var namePurpose = "preset"
+  var referenceName = ""
+  var exportFormat = "tif"
+  var exportBits = 16
+  var exportQuality = 92.0
+  var exportResize = 0.0
+  var lastExport: URL?
+  var inspector = true
+  var expandedDevelopPanels = Set(UserDefaults.standard.stringArray(forKey: "native.expandedDevelopPanels") ?? ["film", "histogram", "light"])
+  var requestedDevelopPanel = "light"
+  var developPanelJump = 0
+
+  func setDevelopPanel(_ id: String, expanded: Bool) {
+    if expanded { expandedDevelopPanels.insert(id) } else { expandedDevelopPanels.remove(id) }
+    UserDefaults.standard.set(expandedDevelopPanels.sorted(), forKey: "native.expandedDevelopPanels")
+  }
+
+  func revealDevelopPanel(_ id: String) {
+    setDevelopPanel(id, expanded: true)
+    requestedDevelopPanel = id
+    developPanelJump += 1
+    inspector = true
+  }
+  var sheetPane = "film"
+  var sheetConfig: J = .object([:])
+  var sheetDefaults: J = .object([:])
+  var fields: [ControlField] = []
+  var stocks: [J] = []
+  var stockID = ""
+  var stockSearch = ""
+  var sheetPhotos: [Photo] = []
+  var sheetSelection: Set<Int> = []
+  var activeFrame: Int?
+  var frames: J = .object([:])
+  var sheetImage: NSImage?
+  var sheetFrameImage: NSImage?
+  var frameView = false
+  var frameGrid = true
+  var outputDimensions = ""
+  var sheetFormat = "png"
+  var layoutNames: [String] = []
+  var selectedLayout = ""
+  var canUndo = false
+  var canRedo = false
+  var draftAvailable = false
   var sheetJob = ""
   var backgroundPath: String?
   var sheetDirectory = ""
-  private var renderTask: Task<Void, Never>?
-  private var sheetTask: Task<Void, Never>?
-  private var saveTask: Task<Void, Never>?
-  private var undoStack: [J] = [], redoStack: [J] = []
+  @ObservationIgnored private var renderTask: Task<Void, Never>?
+  @ObservationIgnored private var sheetTask: Task<Void, Never>?
+  @ObservationIgnored private var draftTask: Task<Void, Never>?
+  @ObservationIgnored var saveTask: Task<Void, Never>?
+  @ObservationIgnored private var undoStack: [J] = []
+  @ObservationIgnored private var redoStack: [J] = []
   private var lastEdit = Date.distantPast
   private var editKey = ""
   private var revision = 0
+  private var renderEpoch = 0
   private var sheetRevision = 0
   private var selectRevision = 0
-  private var parameterPath: String?
-  private var frameTask: Task<Void, Never>?
-  private var cancelBatch = false
+  var parameterPath: String?
+  @ObservationIgnored private var frameTask: Task<Void, Never>?
+  var cancelBatch = false
 
   var filteredPhotos: [Photo] {
-    photos.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
+    photos.filter {
+      (!rawOnly || rawExtensions.contains(URL(fileURLWithPath: $0.path).pathExtension.lowercased()))
+        && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search))
+    }
   }
   var currentPhoto: Photo? { photos.first { $0.path == selected } }
   var activePhoto: Photo? { sheetPhotos.first { $0.sheetID == activeFrame } }
@@ -172,6 +252,7 @@ import UniformTypeIdentifiers
   func bootstrap() async {
     do {
       let r = try await engine.call(.object(["action": .string("bootstrap")]))
+      rawExtensions = Set(r["rawExtensions"].array.map(\.string))
       defaults = r["defaults"]
       params = defaults
       sheetDefaults = r["sheetDefaults"]
@@ -189,6 +270,7 @@ import UniformTypeIdentifiers
   func setParam(_ key: String, _ value: J) {
     remember("p." + key)
     params.put(key, value)
+    if ["crop_rect", "level_angle"].contains(key) { params["geometry_source"] = .string("manual") }
     queueRender()
     persistSoon()
   }
@@ -236,7 +318,9 @@ import UniformTypeIdentifiers
     renderTask?.cancel()
     sheetTask?.cancel()
     frameTask?.cancel()
-    saveDraft()
+    thumbnailTask?.cancel()
+    saveDraft(immediately: true)
+    await draftTask?.value
     guard let selected, parameterPath == selected else { return }
     do {
       _ = try await engine.call(
@@ -247,6 +331,7 @@ import UniformTypeIdentifiers
     } catch { NSLog("NegativeMaster: final save failed: %@", error.localizedDescription) }
   }
   func chooseFolder() {
+    if workspace == .archive { archive.importFrames(); return }
     let p = NSOpenPanel()
     p.canChooseDirectories = true
     p.canChooseFiles = false
@@ -256,6 +341,7 @@ import UniformTypeIdentifiers
     }
   }
   func chooseFiles() {
+    if workspace == .archive { archive.importFrames(); return }
     let p = NSOpenPanel()
     p.canChooseFiles = true
     p.canChooseDirectories = false
@@ -264,6 +350,7 @@ import UniformTypeIdentifiers
     if p.runModal() == .OK { acceptURLs(p.urls) }
   }
   func acceptURLs(_ urls: [URL]) {
+    if workspace == .archive { archive.acceptURLs(urls); return }
     guard ready, !busy, let first = urls.first else { return }
     if first.pathExtension.lowercased() == "zip" {
       importProject(first)
@@ -278,7 +365,8 @@ import UniformTypeIdentifiers
     } else {
       photos = urls.map { Photo(path: $0.path, name: $0.lastPathComponent) }
       folder = first.deletingLastPathComponent()
-      select(first.path)
+      selectPhoto(first.path)
+      generateThumbnails()
     }
   }
   func openFolder(_ u: URL) {
@@ -302,9 +390,11 @@ import UniformTypeIdentifiers
             edited: edits.contains($0.string))
         }
         checked.removeAll()
+        selectionAnchor = nil
+        generateThumbnails()
         busy = false
-        if let first = photos.first {
-          select(first.path)
+        if let first = filteredPhotos.first {
+          selectPhoto(first.path)
         } else {
           selected = nil
           preview = nil
@@ -331,8 +421,12 @@ import UniformTypeIdentifiers
     redoStack = []
     historyFlags()
     renderTask?.cancel()
+    renderTask = nil
+    renderEpoch += 1
+    negativeTask?.cancel()
     revision += 1
     status = "正在载入 \(URL(fileURLWithPath:path).lastPathComponent)…"
+    guard ready else { return }
     Task {
       do {
         let r = try await engine.call(
@@ -380,7 +474,7 @@ import UniformTypeIdentifiers
     ] where old[a] != .null { p[b] = .array(["x0", "y0", "x1", "y1"].map { old[a][$0] }) }
     return p
   }
-  private func persistSoon() {
+  func persistSoon() {
     saveTask?.cancel()
     guard let path = selected, parameterPath == path else { return }
     let p = params
@@ -400,7 +494,7 @@ import UniformTypeIdentifiers
     saveTask?.cancel()
     guard let path = selected, parameterPath == path else { return }
     let p = params
-    Task {
+    saveTask = Task {
       do {
         _ = try await engine.call(
           .object([
@@ -414,38 +508,71 @@ import UniformTypeIdentifiers
       } catch { failure(error) }
     }
   }
+  /// One in-flight preview plus the latest parameters; dragging never queues a backlog.
   func queueRender() {
-    renderTask?.cancel()
     revision += 1
-    let token = revision
-    guard let path = selected, ready else { return }
-    let p = params
+    guard selected != nil, parameterPath == selected, ready else { return }
     rendering = true
+    guard renderTask == nil else { return }
+    renderEpoch += 1
+    let epoch = renderEpoch
     renderTask = Task {
-      do {
-        try await Task.sleep(for: .milliseconds(180))
-        try Task.checkCancellation()
-        let r = try await engine.call(
-          .object([
-            "action": .string("render"), "body": .object(["path": .string(path), "params": p]),
-          ]))
-        guard token == revision, selected == path else { return }
-        preview = decodeImage(r["bytes"])
-        negative = decodeImage(r["negative"])
-        histogram = r["histogram"]
-        imageSize = CGSize(width: r["fullWidth"].double, height: r["fullHeight"].double)
-        rendering = false
-        status =
-          "\(URL(fileURLWithPath:path).lastPathComponent) · \(Int(imageSize.width)) × \(Int(imageSize.height))"
-      } catch {
-        guard token == revision else { return }
-        rendering = false
-        failure(error)
+      defer {
+        if epoch == renderEpoch { renderTask = nil; rendering = false }
       }
+      do {
+        while !Task.isCancelled {
+          guard let path = selected, parameterPath == path else { return }
+          let token = revision, p = params
+          try await renderPreview(path, params: p, interactive: true, token: token)
+          try Task.checkCancellation()
+          if token != revision { continue }
+          for _ in 0..<6 {
+            try await Task.sleep(for: .milliseconds(20))
+            if token != revision { break }
+          }
+          if token != revision { continue }
+          try await renderPreview(path, params: p, interactive: false, token: token)
+          if token == revision {
+            queueNegative(warm: true)
+            return
+          }
+        }
+      } catch { if epoch == renderEpoch { failure(error) } }
     }
   }
-  func decodeImage(_ value: J) -> NSImage? {
-    Data(base64Encoded: value.string).flatMap { NSImage(data: $0) }
+  private func renderPreview(_ path: String, params p: J, interactive: Bool, token: Int) async throws {
+    let r = try await previewEngine.call(.object([
+      "action": .string("render"), "body": .object([
+        "path": .string(path), "params": p, "interactive": .bool(interactive),
+        "include_negative": .bool(false)
+      ])
+    ]))
+    let decoded = await ImagePipeline.preview(r["bytes"])
+    guard !Task.isCancelled, selected == path, parameterPath == path else { return }
+    // Show intermediate tone feedback during a drag, but never stale geometry.
+    guard ["rotate", "flip", "crop_rect", "level_angle"].allSatisfy({ p[$0] == params[$0] }) else { return }
+    if !interactive && token != revision { return }
+    preview = decoded.map { NSImage(cgImage: $0, size: .zero) }
+    histogram = r["histogram"]
+    imageSize = CGSize(width: r["fullWidth"].double, height: r["fullHeight"].double)
+    status = "\(URL(fileURLWithPath: path).lastPathComponent) · \(Int(imageSize.width)) × \(Int(imageSize.height))"
+  }
+  func queueNegative(warm: Bool = false) {
+    guard let path = selected, parameterPath == path, (warm || showNegative) else { return }
+    let p = params
+    guard path != negativePath || p != negativeParams || negative == nil else { return }
+    negativeTask?.cancel()
+    negative = nil
+    negativeTask = Task {
+      do {
+        let r = try await previewEngine.call(.object(["action": .string("negative"), "body": .object(["path": .string(path), "params": p])]))
+        let decoded = await ImagePipeline.preview(r["bytes"])
+        guard !Task.isCancelled, selected == path, params == p else { return }
+        negative = decoded.map { NSImage(cgImage: $0, size: .zero) }
+        negativePath = path; negativeParams = p
+      } catch { failure(error) }
+    }
   }
   func rotate(_ delta: Int) {
     setParam("rotate", .number(Double((Int(params["rotate"].double) + delta + 360) % 360)))
@@ -475,12 +602,16 @@ import UniformTypeIdentifiers
     b["use_reference"] = .bool(useRollReference)
     Task {
       do {
-        let r = try await engine.call(.object(["action": .string("autocrop"), "body": b]))
+        let r = try await previewEngine.call(.object(["action": .string("autocrop"), "body": b]))
         if selected == path {
           remember()
           if r["status"].string != "uncertain", r["rect"] != .null {
             params["crop_rect"] = r["rect"]
             params["level_angle"] = r["angle"]
+            params["geometry_source"] = .string("auto")
+            warnings = r["warnings"].array.map(\.string)
+            selectionTool = "crop"
+            revealDevelopPanel("crop")
             queueRender()
             persistSoon()
           }
@@ -605,7 +736,7 @@ import UniformTypeIdentifiers
   func applyToRoll(whiteBalanceOnly: Bool = false) {
     let targets =
       checked.isEmpty
-      ? filteredPhotos.map(\.path) : photos.map(\.path).filter { checked.contains($0) }
+      ? filteredPhotos.map(\.path) : visibleCheckedPhotos.map(\.path)
     guard !targets.isEmpty else { return }
     let p = params
     busy = true
@@ -642,6 +773,7 @@ import UniformTypeIdentifiers
     }
   }
   func exportCurrent() {
+    if workspace == .archive { archive.backup(); return }
     if workspace == .sheet {
       exportSheet()
       return
@@ -678,57 +810,7 @@ import UniformTypeIdentifiers
         ]),
       ]))
   }
-  func exportBatch() {
-    let paths = photos.map(\.path).filter { checked.contains($0) }
-    guard !paths.isEmpty else { return }
-    let panel = NSOpenPanel()
-    panel.canChooseDirectories = true
-    panel.canChooseFiles = false
-    panel.canCreateDirectories = true
-    panel.prompt = "导出到此文件夹"
-    guard panel.runModal() == .OK, let dest = panel.url else { return }
-    persistNow()
-    let current = selected
-    let currentParams = params
-    busy = true
-    cancelBatch = false
-    progress = 0
-    batchRunning = true
-    Task {
-      defer { batchRunning = false }
-      do {
-        var completed = 0
-        for (i, path) in paths.enumerated() {
-          if cancelBatch { break }
-          status = "导出 \(i+1) / \(paths.count) · \(URL(fileURLWithPath:path).lastPathComponent)"
-          let p: J
-          if path == current || !preferSavedBatch {
-            p = currentParams
-          } else {
-            p = try await engine.call(
-              .object(["action": .string("adjustments"), "body": .object(["path": .string(path)])]))[
-                "params"]
-          }
-          let stem = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent + "_pos"
-          var u = dest.appendingPathComponent(stem + "." + exportFormat)
-          var suffix = 1
-          while FileManager.default.fileExists(atPath: u.path) {
-            u = dest.appendingPathComponent(stem + "-\(suffix)." + exportFormat)
-            suffix += 1
-          }
-          _ = try await exportPhoto(path, params: p, to: u)
-          completed += 1
-          progress = Double(completed) / Double(paths.count)
-        }
-        busy = false
-        lastExport = dest
-        status = "已导出 \(completed) / \(paths.count) 张照片" + (cancelBatch ? "，已停止后续任务" : "")
-      } catch {
-        busy = false
-        failure(error)
-      }
-    }
-  }
+  func exportBatch() { presentRollExport(selectedOnly: true) }
   func cancelOperation() {
     cancelBatch = true
     status = "当前照片处理完成后停止"
@@ -849,8 +931,9 @@ import UniformTypeIdentifiers
         try await Task.sleep(for: .milliseconds(220))
         try Task.checkCancellation()
         let r = try await engine.api("/api/sheet/preview", payload)
-        guard token == sheetRevision else { return }
-        sheetImage = decodeImage(r["bytes"])
+        let decoded = await ImagePipeline.preview(r["bytes"])
+        guard !Task.isCancelled, token == sheetRevision else { return }
+        sheetImage = decoded.map { NSImage(cgImage: $0, size: .zero) }
         outputDimensions = "\(r["width"].string) × \(r["height"].string) px"
         rendering = false
         if !busy { status = "\(selectedOrder.count) 张照片 · \(outputDimensions)" }
@@ -880,8 +963,9 @@ import UniformTypeIdentifiers
       do {
         try await Task.sleep(for: .milliseconds(120))
         let r = try await engine.call(.object(["action": .string("frame"), "body": b]))
+        let decoded = await ImagePipeline.preview(r["bytes"])
         guard !Task.isCancelled, activeFrame == id, sheetJob == job else { return }
-        sheetFrameImage = decodeImage(r["bytes"])
+        sheetFrameImage = decoded.map { NSImage(cgImage: $0, size: .zero) }
       } catch { failure(error) }
     }
   }
@@ -1051,22 +1135,37 @@ import UniformTypeIdentifiers
     layoutNames = l.keys.sorted()
     selectedLayout = ""
   }
-  func saveDraft() {
+  func saveDraft(immediately: Bool = false) {
     guard !sheetPhotos.isEmpty else { return }
-    var overrides: [String: J] = [:]
-    for p in sheetPhotos { overrides[p.path] = frames[String(p.sheetID)] }
-    let source = Int(sheetConfig.at("background.sourceIndex").double)
-    let draft = J.object([
-      "config": sheetConfig, "stockId": .string(stockID),
-      "allSources": .array(sheetPhotos.map { .string($0.path) }),
-      "sources": .array(
-        sheetPhotos.filter { sheetSelection.contains($0.sheetID) }.map { .string($0.path) }),
-      "frameOptions": .object(overrides), "backgroundFile": .string(backgroundPath ?? ""),
-      "backgroundSourcePath": .string(sheetPhotos.first { $0.sheetID == source }?.path ?? ""),
-      "positiveOnly": .bool(sheetPhotos.allSatisfy { $0.source == "import" }),
-    ])
-    UserDefaults.standard.set(draft.data, forKey: "native.sheet.draft")
-    draftAvailable = true
+    let photos = sheetPhotos, config = sheetConfig, options = frames
+    let selection = sheetSelection, stock = stockID, background = backgroundPath
+    let previous = draftTask
+    previous?.cancel()
+    draftTask = Task.detached(priority: .utility) { [weak self] in
+      if !immediately { try? await Task.sleep(for: .milliseconds(600)) }
+      // A canceled intermediate task must still drain its predecessor. Otherwise a newer
+      // write could overtake an older write that had already started encoding or saving.
+      await previous?.value
+      guard !Task.isCancelled else { return }
+      var overrides: [String: J] = [:]
+      for p in photos { overrides[p.path] = options[String(p.sheetID)] }
+      let source = Int(config.at("background.sourceIndex").double)
+      let draft = J.object([
+        "config": config, "stockId": .string(stock),
+        "allSources": .array(photos.map { .string($0.path) }),
+        "sources": .array(
+          photos.filter { selection.contains($0.sheetID) }.map { .string($0.path) }),
+        "frameOptions": .object(overrides), "backgroundFile": .string(background ?? ""),
+        "backgroundSourcePath": .string(photos.first { $0.sheetID == source }?.path ?? ""),
+        "positiveOnly": .bool(photos.allSatisfy { $0.source == "import" }),
+      ])
+      let data = draft.data
+      guard !Task.isCancelled else { return }
+      UserDefaults.standard.set(data, forKey: "native.sheet.draft")
+      await MainActor.run { [weak self] in
+        if self?.draftAvailable == false { self?.draftAvailable = true }
+      }
+    }
   }
   func restoreDraft() {
     guard let data = UserDefaults.standard.data(forKey: "native.sheet.draft"),

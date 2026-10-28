@@ -10,6 +10,7 @@
 
 import FilmDecastCore
 import SwiftUI
+import AppKit
 
 struct CropOverlayView: View {
   /// 当前裁切矩形（未拖动时显示；坐标是方向后的 0~1 归一化）
@@ -27,13 +28,13 @@ struct CropOverlayView: View {
   @State private var dragMode: DragMode = .idle
 
   private enum DragMode {
-    case idle, move, nw, ne, sw, se
+    case idle, move, nw, ne, sw, se, n, s, w, e
   }
 
   /// 裁切框最小边长（归一化）
   private let minSide = 0.03
   /// 手柄命中半径（点）
-  private let hitRadius: CGFloat = 14
+  private let hitRadius: CGFloat = 22
 
   var body: some View {
     GeometryReader { geo in
@@ -92,7 +93,20 @@ struct CropOverlayView: View {
           )
           .allowsHitTesting(false)
       }
-      .contentShape(Rectangle())
+      .contentShape(Rectangle().inset(by: -10))
+      .onContinuousHover { phase in
+        switch phase {
+        case .active(let location):
+          switch hitMode(at: location, vr: vr) {
+          case .n, .s: NSCursor.resizeUpDown.set()
+          case .w, .e: NSCursor.resizeLeftRight.set()
+          case .move: NSCursor.openHand.set()
+          case .idle: NSCursor.arrow.set()
+          default: NSCursor.crosshair.set()
+          }
+        case .ended: NSCursor.arrow.set()
+        }
+      }
       .gesture(dragGesture(in: size))
     }
   }
@@ -124,6 +138,10 @@ struct CropOverlayView: View {
       HandleSpec(id: "ne", point: CGPoint(x: vr.maxX, y: vr.minY)),
       HandleSpec(id: "sw", point: CGPoint(x: vr.minX, y: vr.maxY)),
       HandleSpec(id: "se", point: CGPoint(x: vr.maxX, y: vr.maxY)),
+      HandleSpec(id: "n", point: CGPoint(x: vr.midX, y: vr.minY)),
+      HandleSpec(id: "s", point: CGPoint(x: vr.midX, y: vr.maxY)),
+      HandleSpec(id: "w", point: CGPoint(x: vr.minX, y: vr.midY)),
+      HandleSpec(id: "e", point: CGPoint(x: vr.maxX, y: vr.midY)),
     ]
   }
 
@@ -138,6 +156,14 @@ struct CropOverlayView: View {
     for (m, c) in corners
     where abs(p.x - c.x) <= hitRadius && abs(p.y - c.y) <= hitRadius {
       return m
+    }
+    if p.x >= vr.minX - hitRadius && p.x <= vr.maxX + hitRadius {
+      if abs(p.y - vr.minY) <= hitRadius { return .n }
+      if abs(p.y - vr.maxY) <= hitRadius { return .s }
+    }
+    if p.y >= vr.minY - hitRadius && p.y <= vr.maxY + hitRadius {
+      if abs(p.x - vr.minX) <= hitRadius { return .w }
+      if abs(p.x - vr.maxX) <= hitRadius { return .e }
     }
     return vr.insetBy(dx: -2, dy: -2).contains(p) ? .move : .idle
   }
@@ -193,7 +219,30 @@ struct CropOverlayView: View {
         n.y1 = clamp(s.y1 + dy, s.y0 + minSide, 1)
       }
       if let r = normalizedAspect {
+        // Use the dominant motion so vertical corner drags resize as naturally as horizontal ones.
+        if abs(dy) > abs(dx / r) {
+          let width = (n.y1 - n.y0) * r
+          if west { n.x0 = max(0, n.x1 - width) } else { n.x1 = min(1, n.x0 + width) }
+        }
         lockAspect(&n, north: north, west: west, ratio: r)
+      }
+    case .n, .s:
+      if dragMode == .n { n.y0 = clamp(s.y0 + dy, 0, s.y1 - minSide) }
+      else { n.y1 = clamp(s.y1 + dy, s.y0 + minSide, 1) }
+      if let ratio = normalizedAspect {
+        let cx = (s.x0 + s.x1) / 2
+        let height = min(n.y1 - n.y0, 2 * min(cx, 1 - cx) / ratio)
+        if dragMode == .n { n.y0 = n.y1 - height } else { n.y1 = n.y0 + height }
+        n.x0 = cx - height * ratio / 2; n.x1 = cx + height * ratio / 2
+      }
+    case .w, .e:
+      if dragMode == .w { n.x0 = clamp(s.x0 + dx, 0, s.x1 - minSide) }
+      else { n.x1 = clamp(s.x1 + dx, s.x0 + minSide, 1) }
+      if let ratio = normalizedAspect {
+        let cy = (s.y0 + s.y1) / 2
+        let width = min(n.x1 - n.x0, 2 * min(cy, 1 - cy) * ratio)
+        if dragMode == .w { n.x0 = n.x1 - width } else { n.x1 = n.x0 + width }
+        n.y0 = cy - width / ratio / 2; n.y1 = cy + width / ratio / 2
       }
     case .idle:
       break

@@ -65,19 +65,25 @@ def _midpoint(rgb):
     return float(q @ np.array([.25, .5, .25]))
 
 
-def analyze_frame(lin, params):
+def analyze_frame(lin, params, respect_finishing=False):
     """Return a JSON-safe suggestion without mutating the image or parameters.
 
     ``lin`` is decoded linear RGB transmittance, H×W×3. ``params`` is a mapping
     or argparse namespace accepted by decast.convert_base. Crop/sample geometry
     is honored. Finishing edits, current gamma and contrast do not influence the
-    estimate; film-base, inversion and white-balance settings do.
+    estimate by default; film-base, inversion and white-balance settings do.
+    With respect_finishing=True, evaluate saved finishing edits as part of the
+    candidate output, without changing them. This is the native per-frame mode.
 
     The result's ``parameter_key`` identifies gamma vs negadoctor paper gamma.
     A null ``recommendation`` means the evidence is insufficient; do not apply.
     """
     params = _config(params)
     report = _report(params)
+    if respect_finishing:
+        report["method"] = "per-frame-finished-midtones-v1"
+        if params.get("mode") == "positive":
+            return _reject(report, "已是正片，跳过负片 Gamma 分析。")
     if params.get("use_match") or params.get("_ref_cdfs") is not None:
         return _reject(report, "正在使用参照图匹配，gamma 不参与当前输出；请先关闭匹配再分析。")
     lin = np.asarray(lin)
@@ -116,6 +122,12 @@ def analyze_frame(lin, params):
         return _reject(report, "超过一半像素存在输入通道截断，无法给出可靠 gamma；请先检查翻拍曝光和裁切。")
 
     namespace = SimpleNamespace(**opts)
+    def midpoint(rgb):
+        if respect_finishing:
+            finish = SimpleNamespace(**dict(params, sharpen=0, denoise=0))
+            rgb = decast._tone_curve(rgb, 1, params.get('contrast', 0)) if not is_nd else rgb
+            rgb = decast.apply_finishing(rgb, finish)
+        return _midpoint(rgb)
     is_nd = report["engine"] == "negadoctor"
     if is_nd:
         namespace.nd_gamma = 1.0
@@ -131,7 +143,8 @@ def analyze_frame(lin, params):
         return _reject(report, "反转后有效中间调不足；请先检查片基、黑白点、裁切或曝光设置。")
 
     low, high = (1.0, 6.0) if is_nd else (.8, 2.8)
-    if is_nd:
+    if is_nd or respect_finishing:
+        # Saved curves can be non-monotonic, so evaluate a bounded grid.
         # Paper gamma acts in the opposite direction from the density engine's
         # display gamma, and precedes highlight compression / white balance.
         # Evaluate the real pipeline; do not pretend a gamma power commutes with
@@ -140,16 +153,22 @@ def analyze_frame(lin, params):
         errors = []
         for value in candidates:
             namespace.nd_gamma = float(value)
-            rendered, _ = decast.convert_base(sample, namespace)
-            errors.append(abs(_midpoint(rendered) - .5))
+            if is_nd:
+                rendered, _ = decast.convert_base(sample, namespace)
+            else:
+                rendered = np.power(neutral, 1 / float(value))
+            errors.append(abs(midpoint(rendered) - .5))
         index = int(np.argmin(errors))
         candidate = float(candidates[index])
         residual = errors[index]
         refine = np.linspace(candidates[max(0, index-1)], candidates[min(20, index+1)], 9)
         for value in refine:
             namespace.nd_gamma = float(value)
-            rendered, _ = decast.convert_base(sample, namespace)
-            error = abs(_midpoint(rendered) - .5)
+            if is_nd:
+                rendered, _ = decast.convert_base(sample, namespace)
+            else:
+                rendered = np.power(neutral, 1 / float(value))
+            error = abs(midpoint(rendered) - .5)
             if error < residual:
                 candidate, residual = float(value), error
     else:
@@ -158,12 +177,12 @@ def analyze_frame(lin, params):
         left, right = low, high
         for _ in range(16):
             mid = (left + right) / 2
-            if _midpoint(np.power(neutral, 1 / mid)) < .5:
+            if midpoint(np.power(neutral, 1 / mid)) < .5:
                 left = mid
             else:
                 right = mid
         candidate = (left + right) / 2
-        residual = abs(_midpoint(np.power(neutral, 1 / candidate)) - .5)
+        residual = abs(midpoint(np.power(neutral, 1 / candidate)) - .5)
 
     confidence = .7  # One frame cannot establish the intended scene brightness.
     if max(clipped_dark, clipped_bright) > .01:

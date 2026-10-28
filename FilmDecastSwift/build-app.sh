@@ -43,21 +43,21 @@ cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key><string>NegativeMaster</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>2.0</string>
-    <key>CFBundleVersion</key><string>2</string>
+    <key>CFBundleShortVersionString</key><string>2.1</string>
+    <key>CFBundleVersion</key><string>10</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict>
 </plist>
 PLIST
-for source in gui.py decast.py sheet_app.py contact_sheet.py film_effects.py film_reference.py platform_support.py archive_app.py film_artwork.py workflow_app.py conversion_advisor.py; do
+for source in gui.py decast.py sheet_app.py contact_sheet.py film_effects.py film_reference.py platform_support.py archive_app.py archive_index.py film_artwork.py workflow_app.py conversion_advisor.py; do
   cp "$PROJECT_DIR/$source" "$APP_PATH/Contents/Resources/Engine/$source"
 done
 for folder in data static templates presets; do
   /usr/bin/ditto "$PROJECT_DIR/$folder" "$APP_PATH/Contents/Resources/Engine/$folder"
 done
-cp "$SOURCE_DIR/Support/native_worker.py" "$SOURCE_DIR/Support/sheet-defaults.json" "$APP_PATH/Contents/Resources/Engine/FilmDecastSwift/Support/"
+cp "$SOURCE_DIR/Support/native_worker.py" "$SOURCE_DIR/Support/native_preview.py" "$SOURCE_DIR/Support/native_batch.py" "$SOURCE_DIR/Support/sheet-defaults.json" "$APP_PATH/Contents/Resources/Engine/FilmDecastSwift/Support/"
 "$PYTHON" "$SOURCE_DIR/Support/package_runtime.py" "$APP_PATH/Contents/Resources/Runtime"
 "$PYTHON" - "$PROJECT_DIR" "$APP_PATH/Contents/Resources/Runtime.json" <<'PYCODE'
 import json,sys
@@ -69,6 +69,8 @@ swift "$SOURCE_DIR/Support/make-icon.swift" "$SOURCE_DIR/.build/AppIcon.iconset"
 /usr/bin/iconutil -c icns "$SOURCE_DIR/.build/AppIcon.iconset" -o "$APP_PATH/Contents/Resources/AppIcon.icns"
 /usr/bin/plutil -lint "$APP_PATH/Contents/Info.plist"
 # Finder metadata is not part of the application and prevents code signing.
+# Homebrew libraries can be copied with read-only modes; make the staged bundle writable.
+/bin/chmod -R u+w "$APP_PATH"
 /usr/bin/xattr -cr "$APP_PATH"
 /usr/bin/codesign --force --sign - "$APP_PATH"
 echo "Application ready: $APP_PATH"

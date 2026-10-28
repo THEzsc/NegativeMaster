@@ -22,6 +22,7 @@ import zipfile
 from flask import Blueprint, jsonify, render_template, request, send_file
 from PIL import Image, ImageOps, UnidentifiedImageError
 import film_artwork
+import archive_index
 
 BASE_DIR = Path(__file__).resolve().parent
 STATUSES = {"planned": "待拍摄", "shooting": "拍摄中", "developing": "冲洗中", "scanning": "待扫描", "archived": "已归档"}
@@ -157,20 +158,20 @@ class ArchiveStore:
             raise ArchiveError("无效的档案图片编号。")
         return self.assets / name
 
-    def save_image(self, source):
-        with Image.open(source) as original:
+    def save_image(self, source, max_side=1200, quality=86):
+        with (source.copy() if isinstance(source, Image.Image) else Image.open(source)) as original:
             if original.width * original.height > MAX_PIXELS:
                 raise ArchiveError("图片超过 1 亿像素，请先缩小。")
-            original.draft("RGB", (1200, 1200))
+            original.draft("RGB", (max_side, max_side))
             image = ImageOps.exif_transpose(original)
-            image.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+            image.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
             if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
                 rgba = image.convert("RGBA")
                 rgb = Image.new("RGB", rgba.size, "white")
                 rgb.paste(rgba, mask=rgba.getchannel("A"))
                 image = rgb
             stream = io.BytesIO()
-            image.convert("RGB").save(stream, "JPEG", quality=86)
+            image.convert("RGB").save(stream, "JPEG", quality=quality, optimize=True)
         data = stream.getvalue()
         name = hashlib.sha256(data).hexdigest() + ".jpg"
         self.initialize()
@@ -186,7 +187,7 @@ class ArchiveStore:
         return name
 
 
-def create_archive_blueprint(data_dir=None):
+def create_archive_blueprint(data_dir=None, make_opts=None, read_xml=None, settings_file=None):
     store = ArchiveStore(data_dir or os.environ.get("NEGATIVEMASTER_ARCHIVE_DIR") or BASE_DIR / "archive_data")
     bp = Blueprint("archive", __name__, template_folder="templates")
     bp.archive_store = store
@@ -292,9 +293,81 @@ def create_archive_blueprint(data_dir=None):
                 current = store.roll(db, identifier, frames=True)
         return jsonify(ok=True, roll=current)
 
+    def index_plan(data):
+        paths = data.get("paths")
+        if paths is None:
+            directory = text_value(data.get("directory", ""), 4096, "文件夹路径")
+            folder = Path(directory).expanduser()
+            if not directory or not folder.is_dir():
+                raise ArchiveError("请选择现有的照片文件夹。")
+            paths = [str(p) for d in archive_index.export_directories(folder) for p in d.iterdir()
+                     if p.is_file() and p.suffix.lower() in IMAGE_EXTS | RAW_EXTS]
+        if not isinstance(paths, list) or not paths or len(paths) > MAX_FRAMES * 4:
+            raise ArchiveError("请选择具体胶卷，单次最多索引 240 张照片。")
+        paths = [Path(text_value(p, 4096, "照片路径")).expanduser() for p in paths]
+        paths.sort(key=lambda p: tuple((1, int(t)) if t.isdigit() else (0, t.casefold()) for t in re.split(r"(\d+)", str(p))))
+        try:
+            items = archive_index.resolve_sources(paths, IMAGE_EXTS, RAW_EXTS)
+        except ValueError as exc:
+            raise ArchiveError(str(exc)) from None
+        if len(items) > MAX_FRAMES:
+            raise ArchiveError("一卷最多索引 240 张照片。")
+        return items
+
+    @bp.post("/api/archive/index-plan")
+    def plan_index():
+        return jsonify(ok=True, items=index_plan(body()))
+
+    def index_frames(identifier, data):
+        items = index_plan(data)
+        with store.connection() as db:
+            store.roll(db, identifier)  # Validate the destination before decoding.
+        added = updated = raw_count = jpeg_count = cache_bytes = 0
+        warnings = []
+        for item in items:
+            path, source = item['path'], item['source']
+            thumb = ''
+            try:
+                if item['raw']:
+                    image = archive_index.raw_preview(path, make_opts, read_xml, settings_file)
+                    thumb = store.save_image(image, max_side=960, quality=72)
+                    image.close()
+                else:
+                    thumb = store.save_image(path, max_side=480, quality=70)
+            except Exception:
+                # One unreadable RAW must not prevent indexing the rest of a roll.
+                warnings.append(f"{Path(path).name}：已保留路径，预览未生成；请检查文件后重新索引。")
+            if thumb:
+                cache_bytes += store.asset(thumb).stat().st_size
+            with store.connection() as db:
+                db.execute("BEGIN IMMEDIATE")
+                roll = store.roll(db, identifier)
+                existing = db.execute("SELECT * FROM frames WHERE roll_id=? AND path IN (?,?) ORDER BY path=? DESC LIMIT 1",
+                                      (identifier, path, source, path)).fetchone()
+                if existing:
+                    db.execute("UPDATE frames SET path=?,name=?,thumb=? WHERE id=?", (path, Path(path).name, thumb or existing['thumb'], existing['id']))
+                    if thumb and roll['cover'] and roll['cover'] == existing['thumb']:
+                        db.execute("UPDATE rolls SET cover=? WHERE id=?", (thumb, identifier))
+                    updated += 1
+                else:
+                    if roll['frame_count'] >= MAX_FRAMES:
+                        raise ArchiveError("一卷最多索引 240 张照片；已完成的索引会保留。")
+                    position = db.execute("SELECT COALESCE(MAX(position),0)+1 FROM frames WHERE roll_id=?", (identifier,)).fetchone()[0]
+                    db.execute("INSERT INTO frames(id,roll_id,path,name,position,thumb) VALUES (?,?,?,?,?,?)",
+                               (uuid.uuid4().hex, identifier, path, Path(path).name, position, thumb))
+                    added += 1
+                db.execute("UPDATE rolls SET updated_at=? WHERE id=?", (now(), identifier))
+            raw_count += int(item['raw']); jpeg_count += int(not item['raw'])
+        with store.connection() as db:
+            result = store.roll(db, identifier, frames=True)
+        return jsonify(ok=True, roll=result, added=added, updated=updated,
+                       raw=raw_count, images=jpeg_count, cache_bytes=cache_bytes, warnings=warnings)
+
     @bp.post("/api/archive/rolls/<identifier>/frames")
     def add_frames(identifier):
         data = body()
+        if data.get('mode') == 'index':
+            return index_frames(identifier, data)
         folder = Path(text_value(data.get("directory", ""), 4096, "文件夹路径")).expanduser()
         if not data.get("directory") or not folder.is_dir():
             raise ArchiveError("请填写现有的本地照片文件夹路径。")
@@ -321,11 +394,15 @@ def create_archive_blueprint(data_dir=None):
             thumb = ""
             if path.suffix.lower() in IMAGE_EXTS:
                 try:
-                    thumb = store.save_image(path)
+                    thumb = store.save_image(path, max_side=480, quality=70)
                 except (OSError, ValueError, Image.DecompressionBombError) as exc:
                     warnings.append(f"{path.name}：未生成预览，请检查图片是否有效或过大。")
             else:
-                warnings.append(f"{path.name}：RAW 保留文件关联，请在调片区导出成片后关联预览。")
+                try:
+                    image = archive_index.raw_preview(path, make_opts, read_xml, settings_file)
+                    thumb = store.save_image(image, max_side=960, quality=72)
+                except Exception:
+                    warnings.append(f"{path.name}：已保留路径，预览未生成；请检查文件后重新索引。")
             prepared.append((uuid.uuid4().hex, str(path), path.name, thumb))
         with store.connection() as db:
             db.execute("BEGIN IMMEDIATE")

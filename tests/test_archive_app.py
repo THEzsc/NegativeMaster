@@ -164,6 +164,62 @@ class ArchiveTests(unittest.TestCase):
         self.write("delete", f"/api/archive/rolls/{roll['id']}")
         self.assertEqual({p.name: p.read_bytes() for p in self.photos.iterdir()}, self.originals)
 
+    def test_index_prefers_exports_and_deduplicates_camera_jpeg(self):
+        raw = self.photos / 'frame2.ARW'
+        raw.write_bytes(b'raw source')
+        roll = self.create()
+        with patch('archive_index.raw_preview', side_effect=AssertionError('RAW should not decode')):
+            result = self.write('post', f"/api/archive/rolls/{roll['id']}/frames",
+                                dict(mode='index', directory=str(self.photos))).get_json()
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(result['added'], 2)
+        self.assertEqual(result['raw'], 0)
+        self.assertEqual({f['name'] for f in result['roll']['frames']}, {'frame2_pos.jpg', 'frame10_pos.jpg'})
+        self.assertLess(result['cache_bytes'], 50_000)
+        self.assertEqual(raw.read_bytes(), b'raw source')
+
+    def test_index_raw_light_cache_then_upgrade_to_jpeg_keeps_annotations(self):
+        raw = self.photos / 'frame3.ARW'; raw.write_bytes(b'raw source')
+        camera = self.photos / 'frame3.jpg'; Image.new('RGB', (20, 20), 'brown').save(camera)
+        roll = self.create(); endpoint = f"/api/archive/rolls/{roll['id']}/frames"
+        with patch('archive_index.raw_preview', return_value=Image.new('RGB', (2000, 3000), 'gray')) as decode:
+            r = self.write('post', endpoint, dict(mode='index', paths=[str(camera), str(raw)])).get_json()
+            self.assertEqual(decode.call_count, 1)
+        frame = r['roll']['frames'][0]
+        self.assertEqual(frame['path'], str(raw.resolve()))
+        with Image.open(self.bp.archive_store.asset(frame['thumb'])) as im:
+            self.assertEqual(max(im.size), 960)
+        self.write('put', endpoint+'/'+frame['id'], dict(rating=4, notes='keep'))
+        out = self.photos / '导出'; out.mkdir()
+        jpeg = out / 'frame3_pos.jpeg'; Image.new('RGB', (300, 200), 'orange').save(jpeg)
+        with patch('archive_index.raw_preview', side_effect=AssertionError('RAW should not decode')):
+            r = self.write('post', endpoint, dict(mode='index', paths=[str(raw)])).get_json()
+        self.assertEqual((r['added'], r['updated']), (0, 1))
+        upgraded = r['roll']['frames'][0]
+        self.assertEqual(upgraded['path'], str(jpeg.resolve())); self.assertEqual(upgraded['id'], frame['id'])
+        self.assertEqual((upgraded['rating'], upgraded['notes']), (4, 'keep'))
+        self.assertEqual(raw.read_bytes(), b'raw source')
+
+    def test_index_multiple_export_versions_and_invalid_input(self):
+        raw = self.photos / 'frame4.ARW'; raw.write_bytes(b'raw')
+        for name in ['old', 'new']:
+            out = self.photos / '胶卷库成片' / name; out.mkdir(parents=True)
+            Image.new('RGB', (40, 30), name == 'new' and 'red' or 'blue').save(out / 'frame4_pos.jpg')
+        r = self.write('post', '/api/archive/index-plan', dict(directory=str(self.photos))).get_json()
+        frames = [i for i in r['items'] if 'frame4' in i['path']]
+        self.assertEqual(len(frames), 1)
+        self.assertEqual(frames[0]['source'], str(raw.resolve()))
+        self.assertIn('/new/', frames[0]['path'])
+        self.assertEqual(self.write('post', '/api/archive/index-plan', dict(paths='bad')).status_code, 400)
+
+    def test_index_failed_preview_keeps_path(self):
+        raw = self.photos / 'frame5.ARW'; raw.write_bytes(b'broken')
+        roll = self.create(); endpoint = f"/api/archive/rolls/{roll['id']}/frames"
+        r = self.write('post', endpoint, dict(mode='index', paths=[str(raw)])).get_json()
+        self.assertEqual(r['added'], 1); self.assertEqual(len(r['warnings']), 1)
+        self.assertEqual(r['roll']['frames'][0]['path'], str(raw.resolve()))
+        self.assertEqual(r['roll']['frames'][0]['thumb'], '')
+
     def test_raw_and_invalid_image_keep_reference_without_fake_preview(self):
         (self.photos / "frame3.dng").write_bytes(b"raw placeholder")
         (self.photos / "broken.jpg").write_bytes(b"invalid")

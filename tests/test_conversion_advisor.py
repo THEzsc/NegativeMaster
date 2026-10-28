@@ -43,6 +43,17 @@ class AdvisorTests(unittest.TestCase):
         np.testing.assert_array_equal(lin, before)
         self.assertEqual(p, saved)
 
+    def test_per_frame_advice_accounts_for_finishing_without_changing_it(self):
+        lin=negative(1.7)
+        p=dict(mode='bw',wb='none',black_pct=0,white_pct=100,exposure=.5,contrast=.12)
+        saved=copy.deepcopy(p)
+        a=advisor.analyze_frame(lin,dict(p,exposure=0),respect_finishing=True)
+        b=advisor.analyze_frame(lin,p,respect_finishing=True)
+        self.assertGreater(a['recommendation'],b['recommendation'])
+        rendered=decast.convert_negative(lin,SimpleNamespace(**dict(p,gamma=b['recommendation'])))
+        self.assertAlmostEqual(advisor._midpoint(rendered),.5,delta=.012)
+        self.assertEqual(p,saved)
+
     def test_flat_invalid_and_tiny_frames_do_not_invent_gamma(self):
         for image in (np.full((32, 32, 3), .4), np.zeros((32, 32, 3)),
                       np.ones((32, 32, 3)), np.full((32, 32, 3), np.nan),

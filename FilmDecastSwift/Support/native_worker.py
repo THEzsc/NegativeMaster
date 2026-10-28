@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 import sys
 import traceback
+import tempfile
+import argparse
 from html.parser import HTMLParser
 
 ROOT = Path(sys.argv[1]).resolve()
@@ -20,13 +22,34 @@ with contextlib.redirect_stdout(sys.stderr):
 
 gui.SETTINGS_DIR = str(DATA_ROOT / 'settings')
 decast.PRESET_DIR = str(DATA_ROOT / 'presets')
+from native_preview import PreviewCache
+_preview_cache = PreviewCache()
+_preview_mode = False
+_preview_side = 1500
+_preview_key = None
+_full_shape = None
 _decode_params = {}
 _shared_load = gui.load_full
 
 def native_load(path, raw_denoise=False, decode_params=None):
-    # Share cache invalidation and decode semantics with the web workbench.
-    return _shared_load(path, raw_denoise,
-                        _decode_params if decode_params is None else decode_params)
+    global _preview_key, _full_shape
+    params = _decode_params if decode_params is None else decode_params
+    if not _preview_mode:
+        _preview_key = None
+        return _shared_load(path, raw_denoise, params)
+    opts = argparse.Namespace(**dict(gui.DEFAULTS, **params))
+    opts.raw_denoise = raw_denoise
+    key = (_preview_cache.key(path, opts), _preview_side)
+    if key == _preview_key and gui.CACHE['path'] == path:
+        return
+    image, shape = _preview_cache.load(path, opts)
+    step = max(1, int(np.ceil(max(image.shape[:2]) / _preview_side)))
+    prev = image[::step, ::step].copy()
+    gui.CACHE.update(path=path, full=image, prev=prev, lastP=None,
+                     base=None, base_key=None, base_vrect=None,
+                     raw_dn=raw_denoise, decode=None, scale=max(prev.shape[:2])/max(shape))
+    _full_shape = shape
+    _preview_key = key
 
 gui.load_full = native_load
 client = gui.app.test_client()
@@ -111,6 +134,8 @@ def adjustments(path):
             data = gui._xml_to_data(text) if xml else json.loads(text)
             p = dict(gui.DEFAULTS)
             p.update(data.get('P',{}))
+            if data.get('geometrySource') == 'auto':
+                p['geometry_source'] = 'auto'
             if data.get('cropN'):
                 p['crop_rect'] = [data['cropN'][k] for k in ('x0','y0','x1','y1')]
             return dict(params=p, data=data)
@@ -119,7 +144,7 @@ def adjustments(path):
 
 def save_adjustments(path, p, sidecar=False):
     cr = p.get('crop_rect')
-    data = dict(P=p, cropN=dict(zip(('x0','y0','x1','y1'),cr)) if cr else {},curFmt='free',orient='land')
+    data = dict(P=p, geometrySource=p.get('geometry_source', 'manual'), cropN=dict(zip(('x0','y0','x1','y1'),cr)) if cr else {},curFmt='free',orient='land')
     target = Path(gui.settings_file(path))
     target.parent.mkdir(parents=True,exist_ok=True)
     tmp = target.with_suffix('.tmp')
@@ -142,17 +167,45 @@ def restore_reference(params):
 
 
 def handle(message):
-    global _decode_params
+    global _decode_params, _preview_mode, _preview_side
     action = message.get('action','api')
     body = message.get('body',{})
+    _preview_mode = action in ('render', 'negative', 'autocrop', 'wbtemp', 'analyze_gamma')
+    _preview_side = 720 if body.get('interactive') and action == 'render' else 1500
     if action == 'bootstrap':
         return dict(ok=True, defaults=gui.DEFAULTS, fields=parser.fields,
+                    rawExtensions=sorted(ext.lstrip(".") for ext in decast.RAW_EXTS),
                     sheetDefaults=json.loads((Path(__file__).parent/'sheet-defaults.json').read_text()),
                     presets=decast.list_presets(), stocks=request('/api/sheet/catalog',method='GET')['stocks'])
     if action == 'adjustments':
         return adjustments(body['path'])
     if action == 'save':
         return save_adjustments(body['path'],body['params'],body.get('sidecar',False))
+    if action == 'batch_snapshot':
+        from native_batch import snapshot
+        token = snapshot(gui, body['path'])[2]
+        result = adjustments(body['path'])
+        if snapshot(gui, body['path'])[2] != token:
+            raise ValueError('读取时照片参数已改变，请重试')
+        result['token'] = token
+        return result
+    if action == 'batch_apply':
+        from native_batch import apply
+        return apply(gui, DATA_ROOT, body['path'], body['patch'], body['token'], adjustments)
+    if action == 'batch_restore':
+        from native_batch import restore
+        return restore(gui, DATA_ROOT, body['undo_id'], adjustments)
+    if action == 'analyze_gamma':
+        import conversion_advisor
+        p = body['params']
+        _decode_params = p
+        gui.load_full(body['path'], p.get('raw_denoise', False))
+        # Use the same decode and film-base coordinates as the displayed preview.
+        opts = dict(vars(gui.make_opts(p)))
+        if opts.get('base_rect'):
+            opts['base_rect'] = [v * gui.CACHE['scale'] for v in opts['base_rect']]
+        report = conversion_advisor.analyze_frame(gui.CACHE['prev'], opts, respect_finishing=True)
+        return dict(ok=True, report=report)
     if action == 'render':
         p = body['params']
         _decode_params = p
@@ -160,10 +213,25 @@ def handle(message):
         gui.load_full(body['path'],p.get('raw_denoise',False))
         result = request('/api/render',p)
         result['histogram'] = request('/api/hist',method='GET')
-        result['fullWidth'] = int(gui.CACHE['full'].shape[1])
-        result['fullHeight'] = int(gui.CACHE['full'].shape[0])
-        result['negative'] = request('/api/render',dict(p,negative_preview=True))['bytes']
+        result['fullWidth'] = int(_full_shape[1])
+        result['fullHeight'] = int(_full_shape[0])
+        if body.get('include_negative', True):
+            result['negative'] = request('/api/render',dict(p,negative_preview=True))['bytes']
         return result
+    if action == 'negative':
+        p = body['params']
+        _decode_params = p
+        gui.load_full(body['path'], p.get('raw_denoise', False))
+        return request('/api/render', dict(p, negative_preview=True))
+    if action == 'thumbnail':
+        from PIL import Image
+        with client.get('/api/sheet/thumb/'+body['job']+'/'+str(body['id'])) as response:
+            if response.status_code != 200:
+                raise ValueError('排版缩略图已失效，请重新载入项目。')
+            with Image.open(io.BytesIO(response.get_data())) as image:
+                image.thumbnail((160,160),Image.Resampling.LANCZOS)
+                buf=io.BytesIO();image.convert('RGB').save(buf,'JPEG',quality=85)
+        return dict(bytes=base64.b64encode(buf.getvalue()).decode())
     if action == 'autocrop':
         _decode_params = body
         gui.load_full(body['path'],body.get('raw_denoise',False))
@@ -190,23 +258,34 @@ def handle(message):
         image,_ = decast.load_image(body['path'],opts)
         opts.stats_rect = None
         result = decast.convert_negative(image,opts)
-        decast.save_image(result,str(out),int(body.get('bits',16)),quality=int(body.get('quality',92)),resize=int(body.get('resize',0)))
-        if out.suffix.lower() in ('.jpg','.jpeg'):
-            decast.copy_exif_best_effort(body['path'],str(out))
+        # A failed encoder must not leave a partial image or overwrite another export.
+        fd, temp_path = tempfile.mkstemp(prefix='.nm-export-', suffix=out.suffix, dir=out.parent)
+        os.close(fd)
+        try:
+            decast.save_image(result,temp_path,int(body.get('bits',16)),quality=int(body.get('quality',92)),resize=int(body.get('resize',0)))
+            if out.suffix.lower() in ('.jpg','.jpeg'):
+                decast.copy_exif_best_effort(body['path'],temp_path)
+            if body.get('overwrite', True):
+                os.replace(temp_path, out)
+            else:
+                os.link(temp_path, out)  # Atomic no-clobber publish, even if the name was taken during encoding.
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
         return dict(ok=True,out=str(out))
     if action == 'api':
         path = message['path']
         if not path.startswith('/api/'):
             raise ValueError('不支持的处理操作')
         with contextlib.ExitStack() as stack:
+            headers = {'X-NegativeMaster-Archive':'1'} if path.startswith('/api/archive/') else {}
             files = message.get('files')
             if files:
                 data = dict(body)
                 for key,path_on_disk in files.items():
                     data[key] = (stack.enter_context(open(path_on_disk,'rb')),Path(path_on_disk).name)
-                response = client.open(path,method=message.get('method','POST'),data=data)
+                response = client.open(path,method=message.get('method','POST'),data=data,headers=headers)
             else:
-                response = client.open(path,method=message.get('method','POST'),json=body if message.get('method','POST')!='GET' else None)
+                response = client.open(path,method=message.get('method','POST'),json=body if message.get('method','POST')!='GET' else None,headers=headers)
             result = response_data(response,message.get('output'))
             if path.startswith('/api/sheet/job/'):
                 job = gui.app.blueprints['sheet'].sheet_jobs.get(path.rsplit('/',1)[-1],{})

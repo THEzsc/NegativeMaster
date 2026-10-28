@@ -6,7 +6,7 @@ struct WorkbenchError: LocalizedError {
 }
 
 /// A serial, persistent local worker. Images never leave the machine; no HTTP listener.
-actor EngineBridge {
+private final class WorkerConnection {
   private var process: Process?
   private var input: FileHandle?
   private var output: FileHandle?
@@ -50,7 +50,9 @@ actor EngineBridge {
     if python == bundledPython { env["PYTHONHOME"] = bundledRuntime?.path }
     // Keep saved adjustments and presets beside the original project across app updates.
     let original = runtime?["source"].string ?? root.path
-    if FileManager.default.fileExists(atPath: original + "/presets") {
+    if let configured = env["NM_DATA_ROOT"], !configured.isEmpty {
+      // Honor an explicit data root, including isolated verification sessions.
+    } else if FileManager.default.fileExists(atPath: original + "/presets") {
       env["NM_DATA_ROOT"] = original
     } else {
       let support = FileManager.default.urls(
@@ -81,7 +83,6 @@ actor EngineBridge {
     buffer = Data()
   }
   func call(_ message: J) throws -> J {
-    try Task.checkCancellation()
     try start()
     guard let input, let output else { throw WorkbenchError(message: "图像引擎未启动") }
     var data = message.data
@@ -103,15 +104,46 @@ actor EngineBridge {
     guard reply["ok"].bool else { throw WorkbenchError(message: reply["error"].string) }
     return reply["result"]
   }
+  deinit { try? input?.close(); if process?.isRunning == true { process?.terminate() } }
+}
+
+private final class RequestCancellation: @unchecked Sendable {
+  private let lock = NSLock()
+  private var cancelled = false
+  func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+  var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+}
+
+/// Blocking pipe IO lives on a dedicated serial queue, never a Swift cooperative executor.
+/// A cancelled request already sent to Python is drained before the next request starts.
+final class EngineBridge: @unchecked Sendable {
+  private let queue = DispatchQueue(label: "NegativeMaster.engine", qos: .userInitiated)
+  private let connection = WorkerConnection()
+  func call(_ message: J) async throws -> J {
+    try Task.checkCancellation()
+    let ticket = RequestCancellation()
+    return try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        queue.async { [self] in
+          guard !ticket.isCancelled else { continuation.resume(throwing: CancellationError()); return }
+          do {
+            let result = try connection.call(message)
+            if ticket.isCancelled { continuation.resume(throwing: CancellationError()) }
+            else { continuation.resume(returning: result) }
+          } catch { continuation.resume(throwing: error) }
+        }
+      }
+    } onCancel: { ticket.cancel() }
+  }
   func api(
     _ path: String, _ body: J = .object([:]), method: String = "POST", files: [String: J] = [:],
     output: String? = nil
-  ) throws -> J {
+  ) async throws -> J {
     var m: [String: J] = [
       "action": .string("api"), "path": .string(path), "body": body, "method": .string(method),
     ]
     if !files.isEmpty { m["files"] = .object(files) }
     if let output { m["output"] = .string(output) }
-    return try call(.object(m))
+    return try await call(.object(m))
   }
 }
