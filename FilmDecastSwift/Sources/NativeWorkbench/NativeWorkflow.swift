@@ -47,7 +47,7 @@ extension WorkbenchState {
   var gammaApplicable: Bool { gammaFresh && GammaRecommendation.canApply(gammaAnalysis["report"]) }
   var canLockRoll: Bool { analysisIsRoll && !analysisPaths.isEmpty && gammaApplicable }
   var workflowPaths: [String] {
-    let paths = checked.isEmpty ? filteredPhotos.map(\.path) : photos.filter { checked.contains($0.path) }.map(\.path)
+    let paths = checked.isEmpty ? filteredPhotos.map(\.path) : visibleCheckedPhotos.map(\.path)
     return paths.isEmpty ? selected.map { [$0] } ?? [] : paths
   }
   func applyLook(_ look: ToneLook) {
@@ -55,7 +55,7 @@ extension WorkbenchState {
     remember()
     params = look.applying(to: params)
     queueRender(); persistSoon()
-    status = "已应用\(look.name)；保留 Gamma、曝光、白平衡与裁剪"
+    status = "已应用\(look.name)"
   }
   func analyzeGamma(roll: Bool) {
     guard let path = selected, parameterPath == path, !busy else { return }
@@ -118,7 +118,6 @@ struct NativeWorkflowControls: View {
       Menu("应用风格") {
         ForEach(ToneLook.all) { look in Button(look.name) { s.applyLook(look) } }
       }
-      Text("只调整影调与饱和度，保留曝光、Gamma、白平衡和裁剪。").font(.caption).foregroundStyle(.secondary)
     }
     Section("Gamma 分析") {
       HStack {
@@ -146,7 +145,7 @@ struct NativeWorkflowControls: View {
             ForEach(Array(s.gammaAnalysis["errors"].array.enumerated()), id: \.offset) { _, item in Text(item["path"].string + "：" + item["error"].string).font(.caption) }
           }
         }
-      } else { Text("读取当前调整；整卷分析最多抽样 12 张。建议值只是起点，以画面为准。").font(.caption).foregroundStyle(.secondary) }
+      }
     }
   }
 }

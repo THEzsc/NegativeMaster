@@ -827,13 +827,14 @@ def _frame_level(frame, max_angle=8.0):
             candidates.append((float(angle), edge['confidence'], name))
     if len(candidates) < 2:
         return None
-    # A pair of opposite edges is more useful than a single strong subject line.
+    # Two adjacent edges can agree accidentally on a bent film edge or subject.
+    # Require an opposite pair or three agreeing borders before replacing a manual angle.
     groups = []
     for angle, _, _ in candidates:
         group = [v for v in candidates if abs(v[0] - angle) <= 0.25]
         names = {v[2] for v in group}
         opposite = {'top', 'bottom'} <= names or {'left', 'right'} <= names
-        if len(group) >= 2:
+        if opposite or len(group) >= 3:
             groups.append((sum(v[1] for v in group) + (0.35 if opposite else 0), group))
     if not groups:
         return None
@@ -935,6 +936,15 @@ def detect_film_alignment(lin_oriented, current_angle=0.0, auto_level=True, refe
         return result
 
     frame = detect_film_frame(lin_oriented)
+    # A moved copy stand / different framing must not borrow an unrelated crop.
+    if reference is not None:
+        measured = _aligned_frame_rect(frame, float(current_angle))
+        conflicts = [i for i, name in enumerate(('left', 'top', 'right', 'bottom'))
+                     if frame['edges'].get(name) is not None
+                     and frame['edges'][name]['confidence'] >= .75
+                     and measured is not None and abs(measured[i] - reference['rect'][i]) > .05]
+        if conflicts:
+            reference = None
     estimated = _frame_level(frame) if auto_level else None
     angle = float(current_angle) if estimated is None else estimated
     borrowed_angle = False
@@ -970,7 +980,7 @@ def detect_film_alignment(lin_oriented, current_angle=0.0, auto_level=True, refe
         reference_edges = []
         if reference is not None:
             for i, name in enumerate(('left', 'top', 'right', 'bottom')):
-                if result['edges'].get(name) is None:
+                if result['edges'].get(name) is None and name in reference.get('stable_edges', ('left', 'top', 'right', 'bottom')):
                     value = reference['rect'][i]
                     rect[i] = max(rect[i], value) if i < 2 else min(rect[i], value)
                     reference_edges.append(name)
@@ -991,7 +1001,7 @@ def estimate_skew(lin, max_angle=8.0):
 def _deskew_lin(lin, angle):
     """按 angle（度，正=逆时针）旋转线性图；每通道用 PIL 'F' 模式保精度，
     expand=False 保持画幅（旋转带入的黑角随后由裁切内缩去掉）。"""
-    if abs(angle) < 0.1:
+    if abs(angle) < 0.0001:
         return lin
     out = [np.asarray(Image.fromarray(np.ascontiguousarray(lin[..., c]), mode="F")
                       .rotate(angle, resample=Image.BILINEAR, expand=False))
@@ -1003,22 +1013,17 @@ def _safe_inset_rect(shape, angle):
     """旋转 angle 后能避开黑角的最大居中矩形，返回 [x0,y0,x1,y1]（0~1）。
     旋转产生的黑区只在四角，所以对称向内收，直到矩形四角都落在有效区即可。"""
     h, w = shape[:2]
-    hs = 240
-    ws = max(2, int(round(hs * w / h)))
-    ones = np.ones((hs, ws), np.float32)
-    r = np.asarray(Image.fromarray(ones, mode="F")
-                   .rotate(angle, resample=Image.NEAREST, expand=False))
-    valid = r > 0.999
-    for f in np.linspace(0.0, 0.45, 91):          # 每步 0.5%，对称内缩
-        x0 = int(f * ws); x1 = int(round((1 - f) * ws)) - 1
-        y0 = int(f * hs); y1 = int(round((1 - f) * hs)) - 1
-        if x1 <= x0 or y1 <= y0:
-            break
-        if (valid[y0, x0] and valid[y0, x1]
-                and valid[y1, x0] and valid[y1, x1]):
-            f = float(round(f, 4))
-            return [f, f, 1 - f, 1 - f]
-    return None
+    if abs(angle) < .0001:
+        return [0., 0., 1., 1.]
+    theta = np.radians(abs(angle))
+    c, s = abs(np.cos(theta)), abs(np.sin(theta))
+    # Analytic same-aspect inscribed rectangle; preserve sub-degree precision.
+    # Leave one source pixel for bilinear interpolation instead of rounding to 0.5% bands.
+    scale = min((w - 2) / (w*c + h*s), (h - 2) / (w*s + h*c))
+    if scale <= 0:
+        return None
+    inset = (1 - min(1, scale)) / 2
+    return [inset, inset, 1-inset, 1-inset]
 
 
 def _rect_intersect(a, b):
@@ -1154,7 +1159,7 @@ def convert_base(lin, args):
     #      用 _safe_inset_rect 算出避开黑角的最大矩形当裁切框。
     _lvl = float(getattr(args, "level_angle", 0.0) or 0.0)
     _safe_rect = None
-    if abs(_lvl) >= 0.1:
+    if abs(_lvl) >= 0.0001:
         lin = _deskew_lin(lin, _lvl)
         # 非「整幅预览」时算安全内缩框；下面裁切框会和它取交集，任意角度都不出黑角
         if not getattr(args, "stats_rect", None):

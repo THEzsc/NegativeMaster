@@ -12,7 +12,7 @@ struct WorkbenchCanvas: View {
   @State private var frameStart: CGPoint?
   private var image: NSImage? {
     mode == .develop
-      ? (s.showNegative ? s.negative : s.preview) : (s.frameView ? s.sheetFrameImage : s.sheetImage)
+      ? (s.showNegative ? (s.negative ?? s.preview) : s.preview) : (s.frameView ? s.sheetFrameImage : s.sheetImage)
   }
   var body: some View {
     GeometryReader { geo in
@@ -95,7 +95,7 @@ struct WorkbenchCanvas: View {
     let scale =
       min(
         max(100, available.width - 64) / max(1, size.width),
-        max(100, available.height - 100) / max(1, size.height)) * s.zoom
+        max(100, available.height - (mode == .develop ? 160 : 100)) / max(1, size.height)) * s.zoom
     return CGSize(width: size.width * scale, height: size.height * scale)
   }
   private var emptyState: some View {
@@ -126,7 +126,7 @@ struct WorkbenchCanvas: View {
     HStack(spacing: 12) {
       if mode == .develop {
         Button {
-          s.selectionTool = s.selectionTool == "crop" ? "" : "crop"
+          s.beginCrop()
         } label: {
           Image(systemName: "crop")
         }.help("裁剪")
@@ -140,6 +140,12 @@ struct WorkbenchCanvas: View {
         } label: {
           Image(systemName: "rotate.right")
         }.help("向右旋转")
+        Button {
+          s.tunePane = "裁剪"; s.inspector = true; s.selectionTool = "crop"
+        } label: {
+          Label(String(format: "%.2f°", s.params["level_angle"].double), systemImage: "angle")
+            .font(.caption.monospacedDigit())
+        }.help("微量旋转与校平")
       } else {
         Button {
           s.frameView = false

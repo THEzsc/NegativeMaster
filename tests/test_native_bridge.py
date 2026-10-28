@@ -29,7 +29,7 @@ class NativeBridgeTests(unittest.TestCase):
         image=np.stack([x/179*150+30,y/119*130+25,(x+y)/298*90+20],axis=-1).astype(np.uint8)
         cls.photo=cls.images/'negative.png';Image.fromarray(image).save(cls.photo)
         cls.positive=cls.images/'positive.png';Image.fromarray(255-image).save(cls.positive)
-        env=dict(os.environ,NM_DATA_ROOT=str(cls.dir))
+        env=dict(os.environ,NM_DATA_ROOT=str(cls.dir),NM_PREVIEW_CACHE=str(cls.dir/'preview-cache'))
         cls.stderr=open(cls.dir/'worker.log','w')
         cls.p=subprocess.Popen([sys.executable,str(ROOT/'FilmDecastSwift/Support/native_worker.py'),str(ROOT)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=cls.stderr,text=True,env=env)
         cls.bootstrap=cls.call('bootstrap')
@@ -55,6 +55,23 @@ class NativeBridgeTests(unittest.TestCase):
             if r['state']=='ready':return r
             time.sleep(.03)
         self.fail('Prepare timed out')
+    def test_preview_resolutions_and_geometry_provenance(self):
+        photo=self.images/'large-preview.jpg'
+        Image.new('RGB',(3000,2000),(120,100,60)).save(photo)
+        quick=self.call('render',dict(path=str(photo),params=self.defaults,interactive=True,include_negative=False))
+        detail=self.call('render',dict(path=str(photo),params=self.defaults,include_negative=False))
+        self.assertLessEqual(max(self.image(quick).size),720)
+        self.assertEqual(max(self.image(detail).size),1500)
+        self.assertEqual((detail['fullWidth'],detail['fullHeight']),(3000,2000))
+        out=self.dir/'preview-then-export.jpg'
+        self.call('export',dict(path=str(photo),params=self.defaults,out=str(out),bits=8,resize=0))
+        with Image.open(out) as exported:
+            self.assertEqual(exported.size,(3000,2000))
+        p=dict(self.defaults,geometry_source='auto')
+        self.call('save',dict(path=str(photo),params=p,sidecar=True))
+        self.assertEqual(self.call('adjustments',dict(path=str(photo)))['params']['geometry_source'],'auto')
+        self.assertIn('geometry_source="auto"',Path(str(photo)+'.decast.xml').read_text())
+
     def test_export_atomic_no_clobber(self):
         self.assertIn('arw', self.bootstrap['rawExtensions'])
         out=self.dir/'collision.jpg'

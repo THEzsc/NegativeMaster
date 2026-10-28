@@ -4,13 +4,17 @@ import SwiftUI
 struct WorkbenchView: View {
   @Environment(WorkbenchState.self) var s
   private var bindings: Bindable<WorkbenchState> { Bindable(s) }
+  @State private var columnVisibility: NavigationSplitViewVisibility = .all
   var body: some View {
-    NavigationSplitView {
+    NavigationSplitView(columnVisibility: $columnVisibility) {
       WorkspacePane(state: s, mode: s.workspace, kind: .sidebar)
         .navigationSplitViewColumnWidth(min: 220, ideal: 265, max: 340)
     } detail: {
       VStack(spacing: 0) {
         WorkspacePane(state: s, mode: s.workspace, kind: .canvas)
+        if s.workspace == .develop && s.filmstripBottom {
+          PhotoBrowser(horizontal: true).frame(height: 150)
+        }
         if s.workspace != .archive { WorkbenchStatusBar() }
       }
       .navigationTitle(
@@ -23,6 +27,10 @@ struct WorkbenchView: View {
       }
     }
     .frame(minWidth: 1000, minHeight: 700)
+    .onAppear { columnVisibility = s.filmstripBottom && s.workspace == .develop ? .detailOnly : .all }
+    .onChange(of: s.filmstripBottom) { _, bottom in columnVisibility = bottom && s.workspace == .develop ? .detailOnly : .all }
+    .onChange(of: s.workspace) { _, mode in columnVisibility = s.filmstripBottom && mode == .develop ? .detailOnly : .all }
+    .sheet(isPresented: bindings.showTransfer) { RollTransferSheet().environment(s) }
     .onDrop(of: ["public.file-url"], isTargeted: nil) { providers in
       Task {
         var urls: [URL] = []
@@ -111,14 +119,12 @@ struct WorkbenchView: View {
           Label(s.workspace == .develop ? "自动裁剪与校平" : "整卷预览",
                 systemImage: s.workspace == .develop ? "crop.rotate" : "rectangle.split.3x3")
         }.disabled(s.workspace == .develop && (s.preview == nil || s.busy))
-        Button {
-          if s.workspace == .develop { s.showNegative.toggle() } else { s.saveProject() }
-        } label: {
-          Label(s.workspace == .develop ? "查看底片" : "保存项目",
-                systemImage: s.workspace == .develop
-                  ? (s.showNegative ? "circle.lefthalf.filled" : "circle.righthalf.filled")
-                  : "square.and.arrow.down")
-        }.disabled(s.workspace == .develop ? s.preview == nil : s.sheetSelection.isEmpty || s.busy)
+        if s.workspace == .develop {
+          NegativeHoldButton(state: s).frame(width: 34, height: 28)
+        } else {
+          Button(action: s.saveProject) { Label("保存项目", systemImage: "square.and.arrow.down") }
+            .disabled(s.sheetSelection.isEmpty || s.busy)
+        }
       }
     }
     ToolbarItem(placement: .primaryAction) {
@@ -128,7 +134,10 @@ struct WorkbenchView: View {
           Button("导出当前照片…", action: s.exportCurrent).disabled(s.preview == nil)
           Button("整卷导出…") { s.presentRollExport() }
             .disabled(s.filteredPhotos.isEmpty)
-          Button("导出勾选照片…", action: s.exportBatch).disabled(s.visibleCheckedPhotos.isEmpty)
+          Button("导出所选照片…", action: s.exportBatch).disabled(s.visibleCheckedPhotos.isEmpty)
+          Divider()
+          Button("发送到整卷排版…") { s.presentTransfer("sheet") }
+          Button("导出到胶卷库…") { s.presentTransfer("archive") }
         } label: { Label("导出", systemImage: "square.and.arrow.up") }
           .accessibilityLabel("导出").help("导出当前照片、整卷或勾选照片")
           .disabled(s.busy || !s.ready || s.photos.isEmpty)
@@ -169,7 +178,9 @@ private struct WorkbenchStatusBar: View {
       if s.lastExport != nil {
         Button("显示导出文件", action: s.revealExport).buttonStyle(.borderless).font(.caption)
       }
-      Text("本地处理").font(.caption2).foregroundStyle(.tertiary)
+      if s.thumbnailDone < s.thumbnailTotal {
+        Text("缩略图 \(s.thumbnailDone) / \(s.thumbnailTotal)").font(.caption2).foregroundStyle(.secondary)
+      }
     }.padding(.horizontal, 16).frame(height: 32).background(.bar)
   }
 }
@@ -196,6 +207,10 @@ struct PhotoSidebar: View {
             s.pathEntry = ""
             s.showPathSheet = true
           }
+          if mode == .develop {
+            Button("照片栏移到底部") { s.filmstripBottom = true }
+            Button("生成缩略图", action: s.generateThumbnails)
+          }
           if let folder = s.folder, mode == .develop {
             Button("刷新文件夹") { s.openFolder(folder) }
           }
@@ -209,37 +224,10 @@ struct PhotoSidebar: View {
           .padding(.bottom, 8)
         Toggle("只显示 RAW", isOn: bindings.rawOnly).toggleStyle(.checkbox)
           .padding(.horizontal, 12).padding(.bottom, 8)
-        List(selection: Binding(get: { s.selected }, set: { if let p = $0 { s.select(p) } })) {
-          ForEach(s.filteredPhotos) { p in
-            HStack(spacing: 10) {
-              Toggle(
-                "选择 \(p.name)",
-                isOn: Binding(
-                  get: { s.checked.contains(p.path) },
-                  set: { if $0 { s.checked.insert(p.path) } else { s.checked.remove(p.path) } })
-              ).labelsHidden().toggleStyle(.checkbox)
-              LocalThumbnail(path: p.path).frame(width: 48, height: 42).clipShape(
-                RoundedRectangle(cornerRadius: 5))
-              VStack(alignment: .leading, spacing: 4) {
-                Text(p.name).lineLimit(1).truncationMode(.middle)
-                HStack(spacing: 5) {
-                  Text(URL(fileURLWithPath: p.path).pathExtension.uppercased())
-                  if p.edited { Image(systemName: "slider.horizontal.3") }
-                }.font(.caption2).foregroundStyle(.secondary)
-              }
-            }.padding(.vertical, 3).tag(p.path)
-              .contextMenu {
-                Button("在 Finder 中显示") {
-                  NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p.path)])
-                }
-                Button("加入批量导出") { s.checked.insert(p.path) }
-              }
-          }
-        }.listStyle(.sidebar)
+        PhotoBrowser()
           .overlay {
             if s.filteredPhotos.isEmpty && !s.photos.isEmpty {
-              Text(s.rawOnly ? "没有符合筛选条件的 RAW 照片" : "没有匹配的照片")
-                .font(.callout).foregroundStyle(.secondary).padding(20)
+              Text("没有符合筛选条件的照片").font(.callout).foregroundStyle(.secondary).padding(20)
             }
           }
       } else {

@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
   }
   let engine = EngineBridge()
   let analysisEngine = EngineBridge()
+  let previewEngine = EngineBridge()
   let archive = ArchiveState()
   var gammaAnalysis: J = .null
   var analyzing = false
@@ -42,6 +43,18 @@ import UniformTypeIdentifiers
   var photos: [Photo] = []
   var selected: String?
   var checked: Set<String> = []
+  var selectionAnchor: String?
+  var filmstripBottom = UserDefaults.standard.bool(forKey: "native.filmstripBottom") {
+    didSet { UserDefaults.standard.set(filmstripBottom, forKey: "native.filmstripBottom") }
+  }
+  var thumbnailDone = 0
+  var thumbnailTotal = 0
+  @ObservationIgnored var thumbnailTask: Task<Void, Never>?
+  var showTransfer = false
+  var transferDestination = "sheet"
+  var transferScope = "all"
+  var transferArchiveID = "new"
+  var transferTitle = ""
   var search = ""
   var rawOnly = UserDefaults.standard.bool(forKey: "native.rawOnly") {
     didSet { UserDefaults.standard.set(rawOnly, forKey: "native.rawOnly") }
@@ -120,6 +133,7 @@ import UniformTypeIdentifiers
   private var lastEdit = Date.distantPast
   private var editKey = ""
   private var revision = 0
+  private var renderEpoch = 0
   private var sheetRevision = 0
   private var selectRevision = 0
   var parameterPath: String?
@@ -225,6 +239,7 @@ import UniformTypeIdentifiers
   func setParam(_ key: String, _ value: J) {
     remember("p." + key)
     params.put(key, value)
+    if ["crop_rect", "level_angle"].contains(key) { params["geometry_source"] = .string("manual") }
     queueRender()
     persistSoon()
   }
@@ -272,6 +287,7 @@ import UniformTypeIdentifiers
     renderTask?.cancel()
     sheetTask?.cancel()
     frameTask?.cancel()
+    thumbnailTask?.cancel()
     saveDraft(immediately: true)
     await draftTask?.value
     guard let selected, parameterPath == selected else { return }
@@ -318,7 +334,8 @@ import UniformTypeIdentifiers
     } else {
       photos = urls.map { Photo(path: $0.path, name: $0.lastPathComponent) }
       folder = first.deletingLastPathComponent()
-      select(first.path)
+      selectPhoto(first.path)
+      generateThumbnails()
     }
   }
   func openFolder(_ u: URL) {
@@ -342,9 +359,11 @@ import UniformTypeIdentifiers
             edited: edits.contains($0.string))
         }
         checked.removeAll()
+        selectionAnchor = nil
+        generateThumbnails()
         busy = false
         if let first = filteredPhotos.first {
-          select(first.path)
+          selectPhoto(first.path)
         } else {
           selected = nil
           preview = nil
@@ -371,8 +390,12 @@ import UniformTypeIdentifiers
     redoStack = []
     historyFlags()
     renderTask?.cancel()
+    renderTask = nil
+    renderEpoch += 1
+    negativeTask?.cancel()
     revision += 1
     status = "正在载入 \(URL(fileURLWithPath:path).lastPathComponent)…"
+    guard ready else { return }
     Task {
       do {
         let r = try await engine.call(
@@ -454,46 +477,65 @@ import UniformTypeIdentifiers
       } catch { failure(error) }
     }
   }
+  /// One in-flight preview plus the latest parameters; dragging never queues a backlog.
   func queueRender() {
-    renderTask?.cancel()
     revision += 1
-    let token = revision
-    guard let path = selected, ready else { return }
-    let p = params
+    guard selected != nil, parameterPath == selected, ready else { return }
     rendering = true
+    guard renderTask == nil else { return }
+    renderEpoch += 1
+    let epoch = renderEpoch
     renderTask = Task {
-      do {
-        try await Task.sleep(for: .milliseconds(180))
-        try Task.checkCancellation()
-        let r = try await engine.call(
-          .object([
-            "action": .string("render"), "body": .object(["path": .string(path), "params": p, "include_negative": .bool(false)]),
-          ]))
-        let decoded = await ImagePipeline.preview(r["bytes"])
-        guard !Task.isCancelled, token == revision, selected == path else { return }
-        preview = decoded.map { NSImage(cgImage: $0, size: .zero) }
-        if showNegative { queueNegative() }
-        histogram = r["histogram"]
-        imageSize = CGSize(width: r["fullWidth"].double, height: r["fullHeight"].double)
-        rendering = false
-        status =
-          "\(URL(fileURLWithPath:path).lastPathComponent) · \(Int(imageSize.width)) × \(Int(imageSize.height))"
-      } catch {
-        guard token == revision else { return }
-        rendering = false
-        failure(error)
+      defer {
+        if epoch == renderEpoch { renderTask = nil; rendering = false }
       }
+      do {
+        while !Task.isCancelled {
+          guard let path = selected, parameterPath == path else { return }
+          let token = revision, p = params
+          try await renderPreview(path, params: p, interactive: true, token: token)
+          try Task.checkCancellation()
+          if token != revision { continue }
+          for _ in 0..<6 {
+            try await Task.sleep(for: .milliseconds(20))
+            if token != revision { break }
+          }
+          if token != revision { continue }
+          try await renderPreview(path, params: p, interactive: false, token: token)
+          if token == revision {
+            queueNegative(warm: true)
+            return
+          }
+        }
+      } catch { if epoch == renderEpoch { failure(error) } }
     }
   }
-  func queueNegative() {
-    guard let path = selected, parameterPath == path, showNegative else { return }
+  private func renderPreview(_ path: String, params p: J, interactive: Bool, token: Int) async throws {
+    let r = try await previewEngine.call(.object([
+      "action": .string("render"), "body": .object([
+        "path": .string(path), "params": p, "interactive": .bool(interactive),
+        "include_negative": .bool(false)
+      ])
+    ]))
+    let decoded = await ImagePipeline.preview(r["bytes"])
+    guard !Task.isCancelled, selected == path, parameterPath == path else { return }
+    // Show intermediate tone feedback during a drag, but never stale geometry.
+    guard ["rotate", "flip", "crop_rect", "level_angle"].allSatisfy({ p[$0] == params[$0] }) else { return }
+    if !interactive && token != revision { return }
+    preview = decoded.map { NSImage(cgImage: $0, size: .zero) }
+    histogram = r["histogram"]
+    imageSize = CGSize(width: r["fullWidth"].double, height: r["fullHeight"].double)
+    status = "\(URL(fileURLWithPath: path).lastPathComponent) · \(Int(imageSize.width)) × \(Int(imageSize.height))"
+  }
+  func queueNegative(warm: Bool = false) {
+    guard let path = selected, parameterPath == path, (warm || showNegative) else { return }
     let p = params
     guard path != negativePath || p != negativeParams || negative == nil else { return }
     negativeTask?.cancel()
     negative = nil
     negativeTask = Task {
       do {
-        let r = try await engine.call(.object(["action": .string("negative"), "body": .object(["path": .string(path), "params": p])]))
+        let r = try await previewEngine.call(.object(["action": .string("negative"), "body": .object(["path": .string(path), "params": p])]))
         let decoded = await ImagePipeline.preview(r["bytes"])
         guard !Task.isCancelled, selected == path, params == p else { return }
         negative = decoded.map { NSImage(cgImage: $0, size: .zero) }
@@ -529,12 +571,16 @@ import UniformTypeIdentifiers
     b["use_reference"] = .bool(useRollReference)
     Task {
       do {
-        let r = try await engine.call(.object(["action": .string("autocrop"), "body": b]))
+        let r = try await previewEngine.call(.object(["action": .string("autocrop"), "body": b]))
         if selected == path {
           remember()
           if r["status"].string != "uncertain", r["rect"] != .null {
             params["crop_rect"] = r["rect"]
             params["level_angle"] = r["angle"]
+            params["geometry_source"] = .string("auto")
+            warnings = r["warnings"].array.map(\.string)
+            selectionTool = "crop"
+            tunePane = "裁剪"
             queueRender()
             persistSoon()
           }
@@ -659,7 +705,7 @@ import UniformTypeIdentifiers
   func applyToRoll(whiteBalanceOnly: Bool = false) {
     let targets =
       checked.isEmpty
-      ? filteredPhotos.map(\.path) : photos.map(\.path).filter { checked.contains($0) }
+      ? filteredPhotos.map(\.path) : visibleCheckedPhotos.map(\.path)
     guard !targets.isEmpty else { return }
     let p = params
     busy = true

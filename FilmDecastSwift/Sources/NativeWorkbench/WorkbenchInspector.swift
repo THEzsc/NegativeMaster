@@ -170,10 +170,14 @@ struct WorkbenchInspector: View {
         }
         Button("清除裁剪") { s.setParam("crop_rect", .null) }
         Button("重置裁剪边距") { s.setParam("crop_rect", .doubles([0.06, 0.06, 0.94, 0.94])) }
-        number("level_angle", "校平角度", -15...15, 0.05)
+        number("level_angle", "微量旋转 · 度", -15...15, 0.05)
+        HStack {
+          Button("−0.1°") { s.setParam("level_angle", .number(max(-15, s.params["level_angle"].double - 0.1))) }
+          Button("归零") { s.setParam("level_angle", .number(0)) }
+          Button("+0.1°") { s.setParam("level_angle", .number(min(15, s.params["level_angle"].double + 0.1))) }
+        }
         Button("自动裁剪与校平", action: s.autoCrop)
         Toggle("参考同卷已调照片", isOn: bindings.useRollReference)
-        Text("自动检测不可靠时保留现有画幅。同卷参考需要至少五张一致的调整记录。").font(.caption).foregroundStyle(.secondary)
       }
     } else {
       Section("导出照片") {
@@ -197,7 +201,8 @@ struct WorkbenchInspector: View {
           .disabled(s.filteredPhotos.isEmpty)
         Button("导出勾选的 \(s.visibleCheckedPhotos.count) 张…", action: s.exportBatch)
           .disabled(s.visibleCheckedPhotos.isEmpty)
-        Text("批量导出读取每张照片保存的参数；现有同名文件会自动编号，保留原照片。").font(.caption).foregroundStyle(.secondary)
+        Button("发送到整卷排版…") { s.presentTransfer("sheet") }
+        Button("导出到胶卷库…") { s.presentTransfer("archive") }
       }
     }
   }

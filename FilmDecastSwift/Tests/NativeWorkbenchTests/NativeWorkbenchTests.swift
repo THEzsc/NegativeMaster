@@ -20,6 +20,53 @@ private final class ObservationChanges: @unchecked Sendable {
   }
 }
 final class NativeWorkbenchTests: XCTestCase {
+  @MainActor func testLightroomSelectionRangeToggleAndActivePhoto() {
+    let s = WorkbenchState()
+    s.rawOnly = false
+    s.photos = (1...6).map { Photo(path: "/tmp/frame-\($0).ARW", name: "frame-\($0).ARW") }
+    s.selectPhoto(s.photos[1].path)
+    XCTAssertEqual(s.checked, [s.photos[1].path])
+    s.selectPhoto(s.photos[4].path, extending: true)
+    XCTAssertEqual(s.checked, Set(s.photos[1...4].map(\.path)))
+    XCTAssertEqual(s.selected, s.photos[4].path)
+    s.selectPhoto(s.photos[2].path, toggling: true)
+    XCTAssertFalse(s.checked.contains(s.photos[2].path))
+    XCTAssertEqual(s.selected, s.photos[4].path)
+    s.selectPhoto(s.photos[0].path, toggling: true)
+    XCTAssertEqual(s.selected, s.photos[0].path)
+    s.selectPhoto(s.photos[5].path)
+    XCTAssertEqual(s.checked, [s.photos[5].path])
+    s.movePhoto(-1, extending: true)
+    XCTAssertEqual(s.checked, Set(s.photos[4...5].map(\.path)))
+    s.search = "frame-1"
+    s.selectPhoto(s.photos[0].path, extending: true)
+    XCTAssertEqual(s.checked, [s.photos[0].path], "Hidden photos never enter a shift range")
+  }
+  func testPersistentThumbnailAndSourceInvalidation() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let path = folder.appendingPathComponent("thumb.jpg")
+    try imageData().write(to: path)
+    let first = try await ImagePipeline().file(path.path, size: 160)
+    XCTAssertEqual(first?.width, 160)
+    // A new pipeline simulates application restart; the persistent JPEG remains usable.
+    let second = try await ImagePipeline().file(path.path, size: 160)
+    XCTAssertEqual(second?.width, 160)
+    try Data("not an image".utf8).write(to: path)
+    do { _ = try await ImagePipeline().file(path.path, size: 160); XCTFail("Must invalidate when the source changes") }
+    catch {}
+  }
+  func testRealRAWThumbnailBenchmarkWhenRequested() async throws {
+    guard let path = ProcessInfo.processInfo.environment["NM_BENCH_RAW"] else { return }
+    let start = Date()
+    let first = try await ImagePipeline().file(path, size: 160)
+    let cold = Date().timeIntervalSince(start)
+    let warm = Date()
+    let second = try await ImagePipeline().file(path, size: 160)
+    XCTAssertNotNil(first); XCTAssertNotNil(second)
+    print("RAW_THUMBNAIL first_ms=\(cold * 1000) disk_ms=\(Date().timeIntervalSince(warm) * 1000)")
+  }
   func imageData() -> Data {
     let bitmap = NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:900,pixelsHigh:600,bitsPerSample:8,samplesPerPixel:3,hasAlpha:false,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0)!
     return bitmap.representation(using:.jpeg,properties:[:])!

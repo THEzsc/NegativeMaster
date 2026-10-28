@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 import ImageIO
+import CryptoKit
+import UniformTypeIdentifiers
 
 /// Decoded images are bounded by memory, shared across workspaces and coalesced in flight.
 actor ImagePipeline {
@@ -32,7 +34,60 @@ actor ImagePipeline {
   func file(_ path: String, size: Int) async throws -> CGImage? {
     let attributes = try FileManager.default.attributesOfItem(atPath: path)
     let stamp = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-    return try await image(key: "file:\(path):\(stamp)", size: size) { try Data(contentsOf: URL(fileURLWithPath: path)) }
+    let fileSize = attributes[.size] as? Int ?? 0
+    let identity = "\(path):\(stamp):\(fileSize):\(size):v2"
+    return try await image(key: identity, size: size) {
+      try await withCheckedThrowingContinuation { continuation in
+        Self.fileQueue.async {
+          do { continuation.resume(returning: try Self.thumbnailData(path, identity: identity, size: size)) }
+          catch { continuation.resume(throwing: error) }
+        }
+      }
+    }
+  }
+  private nonisolated static let fileQueue = DispatchQueue(label: "NegativeMaster.thumbnails", qos: .utility)
+  nonisolated static func trimThumbnails() async {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      fileQueue.async {
+        let fm = FileManager.default
+        let folder = fm.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("NegativeMaster/thumbnails-v2")
+        let files = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey])) ?? []
+        let entries = files.filter { $0.pathExtension == "jpg" }.compactMap { url -> (URL, Date, Int)? in
+          guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]) else { return nil }
+          return (url, values.contentModificationDate ?? .distantPast, values.fileSize ?? 0)
+        }.sorted { $0.1 > $1.1 }
+        var bytes = 0
+        for (url, _, size) in entries {
+          bytes += size
+          if bytes > 128 * 1024 * 1024 { try? fm.removeItem(at: url) }
+        }
+        continuation.resume()
+      }
+    }
+  }
+  nonisolated static func thumbnailData(_ path: String, identity: String, size: Int) throws -> Data {
+    let fm = FileManager.default
+    let folder = fm.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("NegativeMaster/thumbnails-v2")
+    let hash = SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
+    let file = folder.appendingPathComponent(hash + ".jpg")
+    if let data = try? Data(contentsOf: file), decode(data, size: size) != nil { return data }
+    // URL-backed ImageIO can use the RAW's embedded preview without reading the full ARW into Data.
+    guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+      let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+        kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
+        kCGImageSourceThumbnailMaxPixelSize: size,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceShouldCacheImmediately: true
+      ] as CFDictionary) else { throw WorkbenchError(message: "无法生成缩略图") }
+    let data = NSMutableData()
+    guard let target = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else {
+      throw WorkbenchError(message: "无法保存缩略图")
+    }
+    CGImageDestinationAddImage(target, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+    guard CGImageDestinationFinalize(target) else { throw WorkbenchError(message: "缩略图编码失败") }
+    try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    try? (data as Data).write(to: file, options: .atomic)
+    return data as Data
   }
   nonisolated static func decode(_ data: Data, size: Int) -> CGImage? {
     guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }

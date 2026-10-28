@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import traceback
 import tempfile
+import argparse
 from html.parser import HTMLParser
 
 ROOT = Path(sys.argv[1]).resolve()
@@ -21,13 +22,34 @@ with contextlib.redirect_stdout(sys.stderr):
 
 gui.SETTINGS_DIR = str(DATA_ROOT / 'settings')
 decast.PRESET_DIR = str(DATA_ROOT / 'presets')
+from native_preview import PreviewCache
+_preview_cache = PreviewCache()
+_preview_mode = False
+_preview_side = 1500
+_preview_key = None
+_full_shape = None
 _decode_params = {}
 _shared_load = gui.load_full
 
 def native_load(path, raw_denoise=False, decode_params=None):
-    # Share cache invalidation and decode semantics with the web workbench.
-    return _shared_load(path, raw_denoise,
-                        _decode_params if decode_params is None else decode_params)
+    global _preview_key, _full_shape
+    params = _decode_params if decode_params is None else decode_params
+    if not _preview_mode:
+        _preview_key = None
+        return _shared_load(path, raw_denoise, params)
+    opts = argparse.Namespace(**dict(gui.DEFAULTS, **params))
+    opts.raw_denoise = raw_denoise
+    key = (_preview_cache.key(path, opts), _preview_side)
+    if key == _preview_key and gui.CACHE['path'] == path:
+        return
+    image, shape = _preview_cache.load(path, opts)
+    step = max(1, int(np.ceil(max(image.shape[:2]) / _preview_side)))
+    prev = image[::step, ::step].copy()
+    gui.CACHE.update(path=path, full=image, prev=prev, lastP=None,
+                     base=None, base_key=None, base_vrect=None,
+                     raw_dn=raw_denoise, decode=None, scale=max(prev.shape[:2])/max(shape))
+    _full_shape = shape
+    _preview_key = key
 
 gui.load_full = native_load
 client = gui.app.test_client()
@@ -112,6 +134,8 @@ def adjustments(path):
             data = gui._xml_to_data(text) if xml else json.loads(text)
             p = dict(gui.DEFAULTS)
             p.update(data.get('P',{}))
+            if data.get('geometrySource') == 'auto':
+                p['geometry_source'] = 'auto'
             if data.get('cropN'):
                 p['crop_rect'] = [data['cropN'][k] for k in ('x0','y0','x1','y1')]
             return dict(params=p, data=data)
@@ -120,7 +144,7 @@ def adjustments(path):
 
 def save_adjustments(path, p, sidecar=False):
     cr = p.get('crop_rect')
-    data = dict(P=p, cropN=dict(zip(('x0','y0','x1','y1'),cr)) if cr else {},curFmt='free',orient='land')
+    data = dict(P=p, geometrySource=p.get('geometry_source', 'manual'), cropN=dict(zip(('x0','y0','x1','y1'),cr)) if cr else {},curFmt='free',orient='land')
     target = Path(gui.settings_file(path))
     target.parent.mkdir(parents=True,exist_ok=True)
     tmp = target.with_suffix('.tmp')
@@ -143,9 +167,11 @@ def restore_reference(params):
 
 
 def handle(message):
-    global _decode_params
+    global _decode_params, _preview_mode, _preview_side
     action = message.get('action','api')
     body = message.get('body',{})
+    _preview_mode = action in ('render', 'negative', 'autocrop', 'wbtemp')
+    _preview_side = 720 if body.get('interactive') and action == 'render' else 1500
     if action == 'bootstrap':
         return dict(ok=True, defaults=gui.DEFAULTS, fields=parser.fields,
                     rawExtensions=sorted(ext.lstrip(".") for ext in decast.RAW_EXTS),
@@ -162,8 +188,8 @@ def handle(message):
         gui.load_full(body['path'],p.get('raw_denoise',False))
         result = request('/api/render',p)
         result['histogram'] = request('/api/hist',method='GET')
-        result['fullWidth'] = int(gui.CACHE['full'].shape[1])
-        result['fullHeight'] = int(gui.CACHE['full'].shape[0])
+        result['fullWidth'] = int(_full_shape[1])
+        result['fullHeight'] = int(_full_shape[0])
         if body.get('include_negative', True):
             result['negative'] = request('/api/render',dict(p,negative_preview=True))['bytes']
         return result

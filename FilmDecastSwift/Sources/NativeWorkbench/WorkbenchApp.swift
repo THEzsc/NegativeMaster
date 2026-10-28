@@ -54,14 +54,16 @@ import SwiftUI
           .disabled(state.selected == nil || state.workspace != .develop)
         Button("水平镜像", action: { state.mirror("h") }).disabled(state.selected == nil || state.workspace != .develop)
         Button("自动裁剪与校平", action: state.autoCrop).disabled(state.selected == nil || state.busy || state.workspace != .develop)
-        Button("查看原始底片", action: { state.showNegative.toggle() }).keyboardShortcut("b").disabled(
-          state.selected == nil)
+        Button("裁剪与微量旋转", action: state.beginCrop).keyboardShortcut("c", modifiers: [.command, .option])
+          .disabled(state.selected == nil || state.workspace != .develop)
+        Button("生成缩略图", action: state.generateThumbnails).disabled(state.photos.isEmpty)
         Button("重置调整", action: state.resetDevelop).disabled(state.selected == nil || state.workspace != .develop)
       }
       CommandGroup(after: .toolbar) {
         Button(state.inspector ? "隐藏检查器" : "显示检查器", action: { state.inspector.toggle() })
           .keyboardShortcut("i", modifiers: [.command, .option])
         Button("适合窗口", action: { state.zoom = 1 }).keyboardShortcut("0")
+        Toggle("照片栏放在底部", isOn: $state.filmstripBottom)
         Picker("外观", selection: $appearance) {
           Text("跟随系统").tag("system")
           Text("浅色").tag("light")
