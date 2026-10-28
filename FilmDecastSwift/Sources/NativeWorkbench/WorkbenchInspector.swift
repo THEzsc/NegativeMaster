@@ -202,7 +202,7 @@ struct WorkbenchInspector: View {
         Button("导出勾选的 \(s.visibleCheckedPhotos.count) 张…", action: s.exportBatch)
           .disabled(s.visibleCheckedPhotos.isEmpty)
         Button("发送到整卷排版…") { s.presentTransfer("sheet") }
-        Button("导出到胶卷库…") { s.presentTransfer("archive") }
+        Button("索引到胶卷库…") { s.presentTransfer("archive") }
       }
     }
   }

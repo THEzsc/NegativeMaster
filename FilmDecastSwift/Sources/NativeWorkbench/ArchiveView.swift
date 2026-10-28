@@ -74,13 +74,13 @@ struct ArchiveDetail: View {
           Text("照片 · \(a.detail["frames"].array.count)").font(.title3.bold())
           Spacer()
           Menu("关联照片") {
-            Button("关联已导出成片…") { a.importFrames() }
+            Button("索引照片文件夹…") { a.importFrames() }
             Button("关联文件夹全部照片…") { a.importFrames(all:true) }
             Button("重新关联缺失路径…") { a.importFrames(relink:true) }
           }.disabled(a.busy)
         }
         if a.detail["frames"].array.isEmpty {
-          ContentUnavailableView("关联这卷的照片", systemImage:"photo.on.rectangle", description:Text("选择成片文件夹。档案保存预览与原始路径，可添加评分和备注。"))
+          ContentUnavailableView("关联这卷的照片", systemImage:"photo.on.rectangle", description:Text("选择胶卷文件夹，直接索引成片或生成 RAW 轻量预览。"))
         }
         LazyVGrid(columns:[GridItem(.adaptive(minimum:190),spacing:16)],alignment:.leading,spacing:20) {
           ForEach(a.detail["frames"].array) { frame in ArchiveFrameCard(a:a,frame:frame) }
@@ -197,10 +197,16 @@ struct ArchiveEditor: View {
 
 struct ArchiveFrameEditor: View {
   @ObservedObject var a: ArchiveState
+  private var framePreviewPath: String {
+    let path = a.frameDraft["path"].string
+    let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
+    if ["jpg", "jpeg", "png", "tif", "tiff", "webp", "bmp"].contains(ext), FileManager.default.fileExists(atPath: path) { return path }
+    return a.assetRoot + a.frameDraft["thumb"].string
+  }
   var body: some View {
     VStack(alignment:.leading,spacing:16) {
       Text(a.frameDraft["name"].string).font(.title3.bold())
-      CachedPhoto(path:a.assetRoot+a.frameDraft["thumb"].string,size:1200).frame(height:320)
+      CachedPhoto(path: framePreviewPath, size:1200).frame(height:320)
       Picker("评分",selection:Binding(get:{Int(a.frameDraft["rating"].double)},set:{a.frameDraft["rating"] = .number(Double($0))})) { Text("未评分").tag(0); ForEach(1...5,id:\.self) { Text("\($0) 星").tag($0) } }
       TextEditor(text:Binding(get:{a.frameDraft["notes"].string},set:{a.frameDraft["notes"] = .string($0)})).frame(height:90).accessibilityLabel("照片备注")
       if let error = a.error { Text(error).font(.callout).foregroundStyle(.red) }

@@ -138,7 +138,7 @@ import UniformTypeIdentifiers
   }
   func addDirectory(_ path: String, relink: Bool = false, all: Bool = false) {
     guard let id = selected else { return }
-    mutate("/api/archive/rolls/\(id)/" + (relink ? "relink" : "frames"), body: .object(["directory": .string(path), "mode": .string(all ? "all" : "positive")]), success: relink ? "照片路径已更新" : "照片关联完成")
+    mutate("/api/archive/rolls/\(id)/" + (relink ? "relink" : "frames"), body: .object(["directory": .string(path), "mode": .string(all ? "all" : "index")]), success: relink ? "照片路径已更新" : "照片关联完成")
   }
   func acceptURLs(_ urls: [URL]) {
     guard let first = urls.first, !busy else { return }

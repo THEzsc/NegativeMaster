@@ -55,6 +55,11 @@ import UniformTypeIdentifiers
   var transferScope = "all"
   var transferArchiveID = "new"
   var transferTitle = ""
+  var indexingArchive = false
+  var indexDone = 0
+  var indexTotal = 0
+  var indexName = ""
+  var stopIndex = false
   var search = ""
   var rawOnly = UserDefaults.standard.bool(forKey: "native.rawOnly") {
     didSet { UserDefaults.standard.set(rawOnly, forKey: "native.rawOnly") }

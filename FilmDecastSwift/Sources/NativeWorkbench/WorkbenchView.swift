@@ -137,7 +137,7 @@ struct WorkbenchView: View {
           Button("导出所选照片…", action: s.exportBatch).disabled(s.visibleCheckedPhotos.isEmpty)
           Divider()
           Button("发送到整卷排版…") { s.presentTransfer("sheet") }
-          Button("导出到胶卷库…") { s.presentTransfer("archive") }
+          Button("索引到胶卷库…") { s.presentTransfer("archive") }
         } label: { Label("导出", systemImage: "square.and.arrow.up") }
           .accessibilityLabel("导出").help("导出当前照片、整卷或勾选照片")
           .disabled(s.busy || !s.ready || s.photos.isEmpty)
