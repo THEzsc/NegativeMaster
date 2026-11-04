@@ -1,6 +1,8 @@
 'use strict';
 (() => {
   const $ = id => document.getElementById(id);
+  let selected = new Set(), selectionAnchor = null, pendingSeed = null;
+  try { pendingSeed = JSON.parse(sessionStorage.getItem('nm.archive.seed')); } catch {}
   const state = {stocks: [], statuses: {}, rolls: [], current: null, editing: null, frame: null, sequence: 0, selectionSequence: 0, busy: false, artwork: null, artworkOpen: false, artworkSaving: false, artworkTab: 'images', artworkLimit: 24};
   const el = (tag, className, value) => { const node = document.createElement(tag); if (className) node.className = className; if (value !== undefined) node.textContent = value; return node; };
   const asset = name => `/api/archive/assets/${encodeURIComponent(name)}`;
@@ -53,7 +55,7 @@
     const sequence = ++state.selectionSequence;
     const result = await api(rollUrl(id));
     if (sequence !== state.selectionSequence) return;
-    state.current = result.roll; state.artworkOpen = false; renderDetail(); renderList();
+    selected.clear(); selectionAnchor=null; state.current = result.roll; state.artworkOpen = false; renderDetail(); renderList();
     history.replaceState(null, '', `/archive#${encodeURIComponent(id)}`);
   }
   function addFact(list, title, value) { if (!value) return; list.append(el('dt', '', title), el('dd', '', value)); }
@@ -82,7 +84,7 @@
     addFact(facts, '相机', roll.camera); addFact(facts, '镜头', roll.lens); addFact(facts, '实拍 EI', roll.exposure_index); addFact(facts, '冲洗工艺', roll.process); addFact(facts, '冲洗日期', roll.developed_on); addFact(facts, '实验室', roll.lab); addFact(facts, '冲洗记录', roll.development); addFact(facts, '底片存放', roll.storage);
     $('roll-notes').textContent = roll.notes; $('roll-notes').hidden = !roll.notes;
     $('photo-count').textContent = `${roll.frames.length} 张`;
-    const grid = $('frame-grid'); grid.replaceChildren();
+    const grid = $('frame-grid'); grid.replaceChildren(); selected = new Set([...selected].filter(id => roll.frames.some(f => f.id === id)));
     if (!roll.frames.length) grid.append(el('div', 'frame-empty', '照片还没入册。\n关联成片文件夹，为这一卷补上画面。'));
     for (const [index, frame] of roll.frames.entries()) {
       const button = el('button', 'archive-frame'); button.type = 'button'; button.setAttribute('aria-label', `打开第 ${index + 1} 张：${frame.name}`);
@@ -90,8 +92,12 @@
       if (frame.thumb) { const img = el('img'); img.src = asset(frame.thumb); img.alt = frame.name; img.loading = 'lazy'; picture.append(img); } else picture.textContent = '无预览 · 保留源文件关联';
       const caption = el('span', 'frame-caption'); caption.append(el('span', '', `${String(index + 1).padStart(2, '0')}  ${frame.name}`), el('span', '', '★'.repeat(frame.rating)));
       button.append(picture, caption); if (frame.missing) button.append(el('span', 'frame-missing', '源文件离线 · 预览仍保留')); else if (frame.notes) button.append(el('span', 'frame-missing', '有照片备注'));
-      button.addEventListener('click', () => openFrame(frame)); grid.append(button);
+      button.dataset.frameId=frame.id;button.setAttribute('aria-selected',String(selected.has(frame.id)));
+      button.addEventListener('click', event => {selected=new Set(NMDevelopModel.selection(roll.frames.map(f=>f.id),[...selected],selectionAnchor,frame.id,event.shiftKey,event.metaKey||event.ctrlKey));if(!event.shiftKey)selectionAnchor=frame.id;updateSelection();});
+      button.addEventListener('dblclick', () => openFrame(frame));
+      button.addEventListener('keydown', event => {if(event.key==='Enter'){event.preventDefault();openFrame(frame);}else if(event.key==='Delete'||event.key==='Backspace'){event.preventDefault();removeSelected();}});grid.append(button);
     }
+    updateSelection();
     const sources = $('stock-reference-links'); sources.replaceChildren();
     for (const source of stock?.sources || []) { const link = externalLink(source.url, source.title); if (link) sources.append(link); }
     $('stock-description').textContent = stock?.notes || '自定义型号：可在档案备注中补充实物信息与资料来源。';
@@ -186,10 +192,24 @@
     const roll = state.current; if (!confirm(`删除「${roll.title}」的档案与照片关联？原始照片不会删除。建议先备份档案。`)) return;
     await api(rollUrl(roll.id), 'DELETE'); state.current = null; renderDetail(); history.replaceState(null, '', '/archive'); await loadRolls({selectFirst: true}); status('档案已删除，原始照片保持不变。');
   }));
+
+  const selectionBar=el('div');selectionBar.id='archive-selection';
+  const selectionCount=el('span'),selectAll=el('button','','全选'),clearSelection=el('button','','清空选择'),removeSelection=el('button','','移除所选');
+  for(const b of [selectAll,clearSelection,removeSelection])b.type='button';
+  selectionBar.append(selectionCount,selectAll,clearSelection,removeSelection);$('frame-grid').before(selectionBar);
+  function updateSelection(){for(const b of $('frame-grid').querySelectorAll('[data-frame-id]'))b.setAttribute('aria-selected',String(selected.has(b.dataset.frameId)));selectionCount.textContent=`已选 ${selected.size}`;removeSelection.disabled=!selected.size;}
+  selectAll.onclick=()=>{selected=new Set(state.current.frames.map(f=>f.id));updateSelection();};clearSelection.onclick=()=>{selected.clear();updateSelection();};
+  const removeSelected=wrap(async()=>{if(!selected.size||state.busy)return;if(!confirm(`移除所选 ${selected.size} 张照片的关联？原始文件会保留。`))return;state.busy=true;try{const result=await api(`${rollUrl(state.current.id)}/frames/remove`,'POST',{ids:[...selected]});selected.clear();await acceptRoll(result,'已移除所选关联');}finally{state.busy=false;}});
+  removeSelection.onclick=removeSelected;
+  const seedNote=el('p','form-note');$('photos-directory').parentElement.before(seedNote);
+  const clearSeed=el('button','quiet-button','改用文件夹');clearSeed.type='button';seedNote.after(clearSeed);
+  function seedUI(){const has=!!pendingSeed?.paths?.length;seedNote.textContent=has?`来自调片：${pendingSeed.paths.length} 张照片`:'';clearSeed.hidden=!has;$('photos-directory').required=!has;$('photos-directory').disabled=has;}
+  clearSeed.onclick=()=>{pendingSeed=null;sessionStorage.removeItem('nm.archive.seed');seedUI();};seedUI();
+
   $('add-photos').addEventListener('click', () => { $('photos-error').textContent = ''; $('photos-dialog').showModal(); $('photos-directory').focus(); });
   $('photos-form').addEventListener('submit', wrap(async event => {
     event.preventDefault(); $('link-photos').disabled = true; $('link-photos').textContent = '正在生成预览…';
-    try { const result = await api(`${rollUrl(state.current.id)}/frames`, 'POST', {directory: $('photos-directory').value, mode: $('photos-mode').value}); $('photos-dialog').close(); await acceptRoll(result, `已关联 ${result.added} 张照片。` + (result.warnings.length ? ` ${result.warnings.length} 张未生成预览，RAW 或异常图片仅保留路径。` : '原片保持不变。')); }
+    try { const result = await api(`${rollUrl(state.current.id)}/frames`, 'POST', pendingSeed?.paths?.length ? {paths:pendingSeed.paths, mode:'index'} : {directory: $('photos-directory').value, mode: $('photos-mode').value}); pendingSeed=null;sessionStorage.removeItem('nm.archive.seed');seedUI();$('photos-dialog').close(); await acceptRoll(result, `已关联 ${result.added} 张照片。` + (result.warnings.length ? ` ${result.warnings.length} 张未生成预览。` : '原片保持不变。')); }
     finally { $('link-photos').disabled = false; $('link-photos').textContent = '关联照片'; }
   }, 'photos-error'));
   $('relink-photos').addEventListener('click', wrap(async () => { const result = await api(`${rollUrl(state.current.id)}/relink`, 'POST', {directory: $('photos-directory').value}); $('photos-dialog').close(); await acceptRoll(result, `已重连 ${result.linked} 张照片。只有名称唯一且在新目录存在的文件会更新关联。`); }, 'photos-error'));
@@ -232,6 +252,6 @@
     for (const [key, label] of Object.entries(state.statuses)) { $('filter-status').append(new Option(label, key)); $('editor-status').append(new Option(label, key)); }
     const id = location.hash.slice(1);
     if (id) { try { await selectRoll(decodeURIComponent(id)); } catch { history.replaceState(null, '', '/archive'); } }
-    await loadRolls({selectFirst: true}); status('本地档案已就绪 · 原始照片保持不变');
+    await loadRolls({selectFirst: true}); status(pendingSeed?.paths?.length ? `已接收 ${pendingSeed.paths.length} 张照片，选择胶卷后点“关联照片”` : '本地档案已就绪');
   })();
 })();

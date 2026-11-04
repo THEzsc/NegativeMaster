@@ -18,66 +18,38 @@
   }
   sections.forEach(s=>s.dataset.workflowGroup=sectionGroup(s));
   const rail=document.createElement('aside');rail.id='negative-rail';rail.setAttribute('aria-label','胶卷照片');
-  rail.innerHTML='<h2>本卷底片 <span>LOCAL / 本地</span></h2>';
+  rail.innerHTML='<h2>胶卷照片</h2>';
   rail.append(sections[0]);$('stage').before(rail);
   if(innerWidth<1000)document.body.classList.add('rail-hidden');
 
-  const nav=document.createElement('div');nav.id='workflow-tabs';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','调片步骤');
-  for(const [id,label] of [['flow','01 转换'],['tone','02 影调'],['color','03 色彩'],['export','04 导出']]){
-    const b=document.createElement('button');b.textContent=label;b.type='button';b.dataset.group=id;b.setAttribute('role','tab');
-    b.onclick=()=>selectTab(id);nav.append(b);
-  }
-  $('panel').querySelector('h1').after(nav);
-  nav.addEventListener('keydown',e=>{
-    if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
-    e.preventDefault();const buttons=[...nav.children],i=buttons.indexOf(document.activeElement);
-    const n=e.key==='Home'?0:e.key==='End'?buttons.length-1:(i+(e.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;
-    buttons[n].click();buttons[n].focus();
-  });
-  function selectTab(id){
-    for(const b of nav.children){const active=b.dataset.group===id;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;}
-    $('panel').querySelectorAll('details.sec').forEach(s=>s.hidden=s.dataset.workflowGroup!=='all'&&s.dataset.workflowGroup!==id);
-  }
-  const assistant=document.createElement('details');assistant.id='workflow-assistant';assistant.className='sec';assistant.open=true;assistant.dataset.workflowGroup='flow';
-  assistant.innerHTML=`<summary>从片框到影调</summary><div class="bd">
-    <p class="workflow-intro">先确认片框与片基，再建立同卷的影调基准。每一步都可手动调整。</p>
-    <div class="workflow-step"><b>01</b><span>确认输入</span></div>
-    <label class="row" for="input-gamma">普通图片的编码</label>
-    <select id="input-gamma"><option value="srgb">sRGB · JPEG / 常规扫描图</option><option value="linear">线性 · 扫描仪线性 TIFF</option></select>
-    <p class="hint">RAW 自动以线性数据解码。仅在扫描软件明确输出线性文件时选择“线性”。</p>
-    <div class="workflow-step"><b>02</b><span>识别片框，校平画面</span></div>
-    <button id="workflow-crop" style="width:100%;min-height:38px">检测片框与倾斜</button>
-    <p class="hint">保留横竖方向；弱片边会参考同卷已存调整。无法可靠判断时保留当前框。</p>
-    <div class="workflow-step"><b>03</b><span>建立影调基准</span></div>
-    <div class="workflow-actions"><button id="analyze-frame">分析这一张</button><button id="analyze-roll">分析同卷</button></div>
+  const assistant=document.createElement('details');assistant.id='workflow-assistant';assistant.className='sec';
+  assistant.innerHTML=`<summary>胶片</summary><div class="bd">
+    <label class="row"><span><input id="film-roll" type="checkbox">应用到整卷</span></label>
+    <label class="row"><span><input id="emulsion" type="checkbox" checked>药膜面翻拍</span></label>
+    <div class="workflow-actions"><button id="analyze-frame">分析当前 Gamma</button><button id="analyze-roll">整卷分析 Gamma</button></div>
     <div id="tone-report" role="status" aria-live="polite" hidden></div>
-    <p id="workflow-footnote">同卷分析使用勾选照片，未勾选时使用当前可见列表，均匀抽取最多 12 张。建议只用于建立起点，不等同于胶片的实测 gamma。</p>
   </div>`;
-  nav.after(assistant);
-  const modeRow=$('modes'),engineRow=$('ndtoggle').parentElement,ndControls=$('ndrow');
-  const firstStep=assistant.querySelector('.workflow-step');
-  firstStep.before(modeRow,engineRow,ndControls);
-  sections.find(s=>s.querySelector('summary')?.textContent==='模式与影调').querySelector('summary').textContent='基础影调';
+  const film=assistant.querySelector('.bd');
+  film.append($('modes'),$('ndtoggle').parentElement,$('ndrow'));
+  const preset=$('presel').closest('details');film.append(...preset.querySelector('.bd').children);preset.remove();
+  const gamma=$('gamma');film.append(gamma.previousElementSibling,gamma);
+  $('panel').append(assistant);
+  const input=document.createElement('label');input.className='row';input.innerHTML='图片编码 <select id="input-gamma"><option value="srgb">sRGB</option><option value="linear">线性 TIFF</option></select>';
+  $('resetdefault').closest('.bd').prepend(input);
   $('input-gamma').onchange=()=>{P.input_gamma=$('input-gamma').value;render();};
-  $('workflow-crop').onclick=()=>$('autocrop').click();
-
-  const looks=document.createElement('details');looks.className='sec';looks.open=true;looks.dataset.workflowGroup='tone';
-  looks.innerHTML='<summary>印相风格</summary><div class="bd"><p class="hint">保留 gamma、曝光、裁切和白平衡，只改变下列风格的影调控制。可撤销。</p><div id="look-grid"></div><p id="look-note">选择一个起点，再用下方控制细调。</p></div>';
-  assistant.after(looks);
+  const looks=document.createElement('details');looks.className='sec';
+  looks.innerHTML='<summary>影调风格</summary><div class="bd"><div id="look-grid"></div></div>';
+  $('panel').append(looks);
   for(const [key,look] of Object.entries(M.looks)){
-    const b=document.createElement('button');b.type='button';b.innerHTML='<span class="look-swatch" aria-hidden="true"></span>';
-    const label=document.createElement('span');label.textContent=look.name;b.append(label);b.title=look.note;
-    b.onclick=()=>{if(!loaded){stat('先载入一张底片');return;}P=M.patchTone(currentSettings(),key).P;refl();render();$('look-note').textContent=look.note;stat('已应用：'+look.name+' · 可用撤销恢复');};
-    $('look-grid').append(b);
+    const b=document.createElement('button');b.type='button';b.textContent=look.name;b.title=look.note;
+    b.onclick=()=>{if(!loaded)return;P=M.patchTone(currentSettings(),key).P;refl();render();};$('look-grid').append(b);
   }
-
-  const railButton=document.createElement('button');railButton.id='toggle-negative-rail';railButton.textContent='底片列表';railButton.type='button';
+  const railButton=document.createElement('button');railButton.id='toggle-negative-rail';railButton.textContent='照片栏';railButton.type='button';
   railButton.setAttribute('aria-controls','negative-rail');
   function syncRail(){railButton.setAttribute('aria-expanded',String(!document.body.classList.contains('rail-hidden')));}
   railButton.onclick=()=>{document.body.classList.toggle('rail-hidden');syncRail();if(loaded)fitWrap();};
   $('stagebar').prepend(railButton);syncRail();
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&innerWidth<1000){document.body.classList.add('rail-hidden');syncRail();}});
-  $('empty').innerHTML='让每一卷，回到它的光。<small>打开负片 → 确认片框 → 建立同卷影调 → 导出<br>原始照片保留，调整写入旁边的参数文件。</small><button id="workflow-open" class="acc">打开底片文件夹</button>';
+  $('empty').innerHTML='打开底片开始调片<small>支持 RAW、TIFF 和 JPEG</small><button id="workflow-open" class="acc">打开文件夹</button>';
   $('workflow-open').onclick=()=>$('pickdir').click();
   $('status').setAttribute('role','status');$('status').setAttribute('aria-live','polite');
 
@@ -179,5 +151,5 @@
   }
   $('analyze-frame').onclick=()=>analyze('frame');$('analyze-roll').onclick=()=>analyze('roll');
   window.NMWorkflow={record,loaded(){baseline=null;historyFile=null;invalidateReport();record();}};
-  selectTab('flow');
+
 })();

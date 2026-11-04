@@ -40,6 +40,7 @@ class ArtworkTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             stage = Path(directory)
             for name in files: shutil.copy2(ROOT/name,stage/name)
+            shutil.copytree(ROOT/'FilmDecastSwift/Support', stage/'FilmDecastSwift/Support', ignore=shutil.ignore_patterns('__pycache__'))
             for name in ('data','static','templates','presets'):
                 shutil.copytree(ROOT/name,stage/name)
             code = "import sys;sys.path.insert(0,sys.argv[1]);import gui;c=gui.app.test_client();assert c.get('/archive').status_code==200;assert c.get('/api/archive/artwork').json['artworks'];assert '/api/workflow/analyze' in {r.rule for r in gui.app.url_map.iter_rules()};assert c.get('/sheet').status_code==200"

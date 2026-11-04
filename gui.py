@@ -27,6 +27,7 @@ gui.py —— 去色罩工具的可视化界面（本地网页）
 import io
 import os
 import sys
+from pathlib import Path
 import json
 import hashlib
 import threading
@@ -128,6 +129,26 @@ def release_image_cache(_error):
         _IMAGE_LOCK.release()
 
 
+_REFERENCE_CACHE = {}
+_REFERENCE_LOCK = threading.Lock()
+
+
+def saved_reference(path):
+    source = Path(path)
+    stat = source.stat()
+    key = (str(source.resolve()), stat.st_size, stat.st_mtime_ns)
+    with _REFERENCE_LOCK:
+        if key not in _REFERENCE_CACHE:
+            with Image.open(source) as image:
+                image.thumbnail((1000, 1000))
+                pixels = np.asarray(image.convert('RGB'), dtype=np.float32) / 255
+            value = decast.build_ref_cdf(pixels)
+            if len(_REFERENCE_CACHE) >= 2:
+                _REFERENCE_CACHE.pop(next(iter(_REFERENCE_CACHE)))
+            _REFERENCE_CACHE[key] = value
+        return _REFERENCE_CACHE[key]
+
+
 def make_opts(params):
     """把前端参数字典拼成 decast 需要的 options 命名空间。"""
     d = dict(DEFAULTS)
@@ -137,6 +158,10 @@ def make_opts(params):
     ns = argparse.Namespace(**d)
     ns._ref_centers = REF["centers"]
     ns._ref_cdfs = REF["cdfs"] if params.get("use_match") else None
+    if params.get('use_match') and params.get('reference_path'):
+        ns._ref_centers, ns._ref_cdfs = saved_reference(params['reference_path'])
+    if params.get('use_match') and ns._ref_cdfs is None:
+        raise ValueError('请重新选择参照成片')
     return ns
 
 
@@ -170,6 +195,7 @@ def load_full(path, raw_denoise=False, decode_params=None):
     decode = {k: (decode_params or {}).get(k, DEFAULTS[k])
               for k in ("input_gamma", "no_camera_wb", "no_autorotate")}
     if (CACHE["path"] == path and CACHE["full"] is not None
+            and not CACHE.get("web_preview")
             and CACHE["raw_dn"] == raw_denoise and CACHE.get("decode") == decode):
         return
     opts = argparse.Namespace(**DEFAULTS)
@@ -180,9 +206,32 @@ def load_full(path, raw_denoise=False, decode_params=None):
     h, w = lin.shape[:2]
     step = max(1, int(np.ceil(max(h, w) / PREVIEW_MAXSIDE)))
     prev = lin[::step, ::step].copy()
-    CACHE.update(path=path, full=lin, prev=prev, lastP=None,
+    CACHE.update(path=path, full=lin, prev=prev, lastP=None, web_preview=False,
                  base=None, base_key=None, base_vrect=None,
                  raw_dn=raw_denoise, decode=decode, scale=max(prev.shape[:2]) / max(h, w))
+
+
+_WEB_PREVIEW = None
+
+def load_web_preview(path, params):
+    global _WEB_PREVIEW
+    from native_preview import PreviewCache
+    if _WEB_PREVIEW is None:
+        _WEB_PREVIEW = PreviewCache(directory=Path(SETTINGS_DIR) / 'linear-preview')
+    _WEB_PREVIEW.directory = Path(SETTINGS_DIR) / 'linear-preview'
+    opts = make_opts(params)
+    image, shape = _WEB_PREVIEW.load(path, opts)
+    side = 720 if params.get('interactive') else PREVIEW_MAXSIDE
+    key = (_WEB_PREVIEW.key(path, opts), side)
+    if CACHE.get('web_key') == key and CACHE.get('web_preview'):
+        return shape
+    step = max(1, int(np.ceil(max(image.shape[:2]) / side)))
+    prev = image if step == 1 else image[::step, ::step].copy()
+    CACHE.update(path=path, full=image, prev=prev, lastP=None, web_preview=True,
+                 web_key=key, base=None, base_key=None, base_vrect=None,
+                 raw_dn=params.get('raw_denoise', False),
+                 scale=max(prev.shape[:2])/max(shape))
+    return shape
 
 
 def settings_file(path):
@@ -300,10 +349,14 @@ def api_load():
     if not os.path.isfile(path):
         return jsonify(ok=False, err="文件不存在"), 400
     try:
-        load_full(path, request.json.get("raw_denoise", False), request.json)
+        if request.json.get('preview'):
+            shape = load_web_preview(path, request.json)
+        else:
+            load_full(path, request.json.get("raw_denoise", False), request.json)
+            shape = CACHE["full"].shape[:2]
     except Exception as e:
         return jsonify(ok=False, err=str(e)), 500
-    h, w = CACHE["full"].shape[:2]
+    h, w = shape
     return jsonify(ok=True, w=int(w), h=int(h), name=os.path.basename(path))
 
 
@@ -340,7 +393,10 @@ def api_render():
 
     # RAW FBDD 降噪开关变化时重新解码当前图（load_full 内部有缓存判断）
     try:
-        load_full(CACHE["path"], params.get("raw_denoise", False), params)
+        if params.get('preview'):
+            load_web_preview(CACHE["path"], params)
+        else:
+            load_full(CACHE["path"], params.get("raw_denoise", False), params)
     except Exception as e:
         return jsonify(ok=False, err=str(e)), 500
 
@@ -416,7 +472,10 @@ def api_wbtemp():
     if not rect:
         return jsonify(ok=False, err="没有白点框"), 400
     try:
-        load_full(CACHE["path"], params.get("raw_denoise", False), params)
+        if params.get('preview'):
+            load_web_preview(CACHE["path"], params)
+        else:
+            load_full(CACHE["path"], params.get("raw_denoise", False), params)
     except Exception as e:
         return jsonify(ok=False, err=str(e)), 500
     opts = make_opts(params)
@@ -1517,12 +1576,12 @@ input[type=range]:hover::-moz-range-thumb {
       <button id="reset" style="flex:1">恢复默认</button></div>
     <button id="applyroll" style="width:100%;margin-top:6px">套用当前参数到整卷</button>
     <button id="wbroll" style="width:100%;margin-top:4px">仅把白平衡套整卷（保留各自裁切等）</button>
-    <label class="row" style="margin-top:12px">批量导出（勾选的文件）</label>
+    <label class="row" style="margin-top:12px">整卷导出</label>
     <div class="btnrow">
       <input type="text" id="batchout" placeholder="输出目录（留空=各自同目录/去色罩输出/）" style="flex:1;width:auto">
       <button id="pickbatch">选…</button></div>
     <label class="row" style="margin-top:4px"><span><input type="checkbox" id="usesaved" checked style="width:auto;margin-right:6px">优先用各自已存参数</span></label>
-    <button id="batch" style="width:100%;margin-top:4px">批量导出</button>
+    <button id="batch" style="width:100%;margin-top:4px">导出整卷 / 所选照片</button>
     <div id="bprog"><i></i></div>
     <div id="blog"></div>
   </div></details>
@@ -1633,6 +1692,7 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 function dispWH(){ return (P.rotate%180===0)?[fullW,fullH]:[fullH,fullW]; }
 function imgAspect(){ const wh=dispWH(); return wh[1]? wh[0]/wh[1] : 1.5; }
 function fitWrap(){
+  if(window.NMWeb)return window.NMWeb.fit();
   const im=$("img"), st=$("stage");
   const a=(im.naturalWidth&&im.naturalHeight)?im.naturalWidth/im.naturalHeight:imgAspect();
   const availH=st.clientHeight-24-64;   // 顶部内边距 + 底部预留底栏
@@ -1701,7 +1761,8 @@ function applyTransform(){
   document.documentElement.style.setProperty("--bz",(1/Z)+"px");
   $("cropdim").style.transform="scale("+(1/Z)+")";
   $("cropdim").style.transformOrigin="left bottom";
-  $("zoominfo").textContent=Z>1.01?Z.toFixed(1)+"×":"";
+  $("zoominfo").textContent=Math.round(100*$("imgwrap").clientWidth*Z*(devicePixelRatio||1)/Math.max(1,dispWH()[0])/(window.NMWeb?.cropWidth()||1))+"%";
+  window.NMWeb?.detail();
 }
 function resetView(){ Z=1;TX=0;TY=0;applyTransform(); }
 function zoomAt(cx,cy,z2){
@@ -1784,6 +1845,10 @@ function cropDown(e){
     wr.setPointerCapture(e.pointerId);
     e.preventDefault(); return;
   }
+  if(window.NMWeb&&!window.NMWeb.cropEditing()){
+    drag={mode:"pan",cx:e.clientX,cy:e.clientY,tx:TX,ty:TY,moved:false};
+    wr.setPointerCapture(e.pointerId);e.preventDefault();return;
+  }
   const onCrop=!!(e.target.dataset&&e.target.dataset.h)||!!e.target.closest("#crop");
   if(Z>1&&!onCrop){
     // 放大状态下，在裁切框外按下 = 平移
@@ -1838,7 +1903,7 @@ function cropUp(){
     stat("采样中性灰…");
     // 框选中性灰 → 自动换算成 色温/色调 回填，不再单独存白点框
     fetch("/api/wbtemp",{method:"POST",headers:HJ,
-      body:JSON.stringify(Object.assign({},P,{wb_rect:r,crop_rect:cropRect()}))})
+      body:JSON.stringify(Object.assign({},P,{wb_rect:r,crop_rect:cropRect(),source_path:curFile,preview:true}))})
       .then(x=>x.json()).then(d=>{
         if(d.ok){ P.temp=d.temp; P.tint=d.tint; P.wb_rect=null; P.wb_point=null;
           stat("白点→ 色温 "+d.temp+" / 色调 "+d.tint); }
@@ -1974,7 +2039,7 @@ function buildChips(){
   HB.forEach(pair=>{
     const b=document.createElement("button");
     b.className="pill cband"; b.dataset.b=pair[0]; b.textContent=pair[1];
-    b.style.borderBottom="3px solid "+pair[2];
+    b.style.background=pair[2];b.setAttribute("aria-label",pair[1]);b.title=pair[1];
     b.onclick=()=>{curBand=pair[0]; hslSync();};
     box.appendChild(b);
   });
@@ -2032,13 +2097,14 @@ function refl(){
 // 预览以服务器能跑的帧率实时跟手（后端还有分阶段缓存加速）。
 let lastURL=null, negOn=false, inflight=false, rdirty=false;
 function render(){
+  window.NMWeb?.invalidateDetail();
   if(!loaded) return;
   window.NMWorkflow?.record();
   autosaveXml();                 // 参数一变就排一次自动保存（防抖+去重）
   if(inflight){ rdirty=true; return; }
   inflight=true; $("spin").style.display="inline";
   const fileAtRender=curFile,sequenceAtRender=loadSequence;
-  const body=Object.assign({},P,{crop_rect:cropRect(),source_path:curFile});
+  const body=Object.assign({},P,{crop_rect:cropRect(),source_path:curFile,preview:true,interactive:window.NMWeb?.interactive||false});
   fetch("/api/render",{method:"POST",headers:HJ,body:JSON.stringify(body)})
     .then(r=>{ if(!r.ok) throw new Error("render "+r.status); return r.blob(); })
     .then(b=>{
@@ -2054,7 +2120,7 @@ function render(){
     .finally(()=>{
       inflight=false;
       if(rdirty){ rdirty=false; render(); }          // 拖动中：立刻渲下一帧
-      else { $("spin").style.display="none"; fetchHist(); }  // 停下了才刷直方图
+      else { $("spin").style.display="none"; fetchHist(); window.NMWeb?.detail(); }  // 停下了才刷直方图
     });
 }
 function sched(){ render(); }
@@ -2094,7 +2160,7 @@ function drawHist(d){
 }
 function showNeg(on){
   if(!loaded||on===negOn) return; negOn=on;
-  $("negbtn").classList.toggle("on",on);
+  $("negbtn").classList.toggle("on",on); window.NMWeb?.invalidateDetail(); window.NMWeb?.fit();
   if(on){
     fetch("/api/render",{method:"POST",headers:HJ,
       body:JSON.stringify({rotate:P.rotate,flip:P.flip,negative_preview:true})})
@@ -2279,9 +2345,10 @@ async function loadFile(path){
   if(sequence!==loadSequence)return;
   stat("解码中… "+LocalPaths.basename(path));
   fetch("/api/load",{method:"POST",headers:HJ,
-    body:JSON.stringify({path,raw_denoise:P.raw_denoise})}).then(r=>r.json()).then(d=>{
+    body:JSON.stringify({path,raw_denoise:P.raw_denoise,preview:true})}).then(r=>r.json()).then(d=>{
       if(sequence!==loadSequence)return;
       if(!d.ok){stat("✗ "+d.err);return;}
+      window.NMWeb?.invalidateDetail();
       curFile=path; fullW=d.w; fullH=d.h; $("rotpad").style.display="flex";
       $("meta").textContent=d.name+" · "+d.w+"×"+d.h;
       $("fileselect").value=path;                       // 同步底栏下拉与列表高亮
@@ -2305,7 +2372,7 @@ async function loadFile(path){
         syncFmtPills(); refl(); drawCrop();
         lastSavedSig=settingsSig();   // 先记基线，避免刚载入未改动就误写边车
         loaded=true;
-        window.NMWorkflow?.loaded();
+        window.NMWorkflow?.loaded();window.NMWeb?.loaded();
         render();
       };
       if($("resetdefault").checked){    // 开关：每张一律用默认参数
@@ -2409,12 +2476,12 @@ $("usematch").addEventListener("mousedown",()=>{ const v=$("ref").value.trim();
   if(v && !REFLOADED){ fetch("/api/loadref",{method:"POST",headers:HJ,
     body:JSON.stringify({path:v})}).then(r=>r.json()).then(d=>{REFLOADED=d.ok;
       stat(d.ok?"参照已载入":"✗ "+d.err);
-      if(d.ok&&P.use_match) render();  // 参照载入完成后补一次渲染，避免首次点击时还没生效
+      if(d.ok){P.reference_path=v;if(P.use_match)render();}  // 参照载入完成后补一次渲染，避免首次点击时还没生效
     });}
 });
 let REFLOADED=false;
 $("ref").addEventListener("change",()=>{REFLOADED=false;});
-$("clearref").onclick=()=>{P.use_match=false;REFLOADED=false;$("ref").value="";
+$("clearref").onclick=()=>{P.use_match=false;delete P.reference_path;REFLOADED=false;$("ref").value="";
   fetch("/api/loadref",{method:"POST",headers:HJ,body:JSON.stringify({path:""})});
   refl();render();};
 
@@ -2426,7 +2493,7 @@ function loadPresets(sel){
     if(sel) s.value=sel;});
 }
 $("presel").onchange=()=>{ const n=$("presel").value; if(!n) return;
-  fetch("/api/presets?name="+encodeURIComponent(n)).then(r=>r.json()).then(d=>{
+  return fetch("/api/presets?name="+encodeURIComponent(n)).then(r=>r.json()).then(d=>{
     if(!d.ok){stat("✗ "+d.err);return;}
     for(const k of PKEYS) if(d.data[k]!==undefined)
       P[k]=(d.data[k]&&typeof d.data[k]==="object")?dclone(d.data[k]):d.data[k];
@@ -2458,52 +2525,40 @@ $("export").onclick=()=>{ if(!loaded){stat("先载入图片");return;}
 function blog(t){ const l=$("blog"); l.textContent+=t+"\n"; l.scrollTop=l.scrollHeight; }
 let batchBusy=false, batchCancel=false;
 $("batch").onclick=async()=>{
-  if(batchBusy){ batchCancel=true; $("batch").textContent="取消中…"; return; }  // 运行中再点=取消
-  const items=[...document.querySelectorAll("#files .fitem")].filter(el=>el.querySelector(".fck").checked);
-  if(!items.length){stat("先在文件列表里勾选文件");return;}
-  const outdir=$("batchout").value.trim();
-  const useSaved=$("usesaved").checked;
-  const bar=$("bprog"); bar.style.display="block"; bar.firstElementChild.style.width="0%";
-  $("blog").textContent="";
-  batchBusy=true; batchCancel=false;
-  const bbtn=$("batch"); bbtn.textContent="取消导出"; bbtn.style.background="#c0392b"; bbtn.style.color="#fff";
-  let done=0, okc=0;
-  for(const el of items){
-    if(batchCancel){ blog("⏹ 已取消，剩余未导出"); break; }
-    const f=el.dataset.path;
-    try{
-      // 参数：优先各自已存记忆，否则用当前面板参数
-      let params=Object.assign({},P), rect=cropRect();
-      if(useSaved){
-        const s=await(await fetch("/api/settings?path="+encodeURIComponent(f))).json();
-        if(s.ok&&s.data){
-          if(s.data.P) params=Object.assign(dclone(D),s.data.P);
-          if(s.data.cropN){const c=s.data.cropN; rect=[c.x0,c.y0,c.x1,c.y1];}
-        }
-      }
-      const ld=await(await fetch("/api/load",{method:"POST",headers:HJ,
-        body:JSON.stringify({path:f})})).json();
-      if(!ld.ok) throw new Error(ld.err||"载入失败");
-      // 输出目录：留空 = 各源文件同目录/去色罩输出/（服务端自动建目录）
-      const out=LocalPaths.exportDirectory(f,outdir);
-      const body=Object.assign({},params,{crop_rect:rect,source_path:f,out:out},exportOpts());
-      const ex=await(await fetch("/api/export",{method:"POST",headers:HJ,
-        body:JSON.stringify(body)})).json();
-      if(!ex.ok) throw new Error(ex.err||"导出失败");
-      okc++; blog("✓ "+LocalPaths.basename(f)+" → "+ex.out);
-    }catch(err){ blog("✗ "+LocalPaths.basename(f)+"："+err.message); }
-    done++; bar.firstElementChild.style.width=(done/items.length*100)+"%";
-    stat("批量导出 "+done+"/"+items.length+"…");
+  if(batchBusy){batchCancel=true;return;}
+  const paths=window.NMWeb?window.NMWeb.scope():[curFile];
+  if(!paths.length){stat("先打开照片");return;}
+  try{await flushAutosave();}catch(e){stat(e.message);return;}
+  const source=dclone(currentSettings()),options=exportOpts(),outdir=$("batchout").value.trim(),saved=$("usesaved").checked;
+  batchBusy=true;batchCancel=false;$("export").disabled=true;
+  const frozen=[$("negative-rail"),$("stage"),...document.querySelectorAll('#panel details.sec')].filter(n=>!n.contains($("batch")));
+  frozen.forEach(n=>n.inert=true);
+  $("batch").textContent="停止导出";$("blog").textContent="";$("bprog").style.display="block";
+  const manifests=new Map();let count=0;
+  try{
+    for(let i=0;i<paths.length&&!batchCancel;i++){
+      const path=paths[i];
+      try{
+        let p={...source.P,crop_rect:[source.cropN.x0,source.cropN.y0,source.cropN.x1,source.cropN.y1]};
+        if(saved)p=(await window.NMWeb.api('snapshot',{path})).params;
+        const ld=await(await fetch('/api/load',{method:'POST',headers:HJ,body:JSON.stringify({path,...p,preview:true})})).json();if(!ld.ok)throw new Error(ld.err);
+        const ex=await(await fetch('/api/export',{method:'POST',headers:HJ,body:JSON.stringify({...p,...options,source_path:path,out:LocalPaths.exportDirectory(path,outdir)})})).json();if(!ex.ok)throw new Error(ex.err);
+        count++;blog(LocalPaths.basename(path)+' → '+ex.out);
+        if(options.format==='jpg'){const folder=ex.out.slice(0,Math.max(ex.out.lastIndexOf('/'),ex.out.lastIndexOf('\\')));if(!manifests.has(folder))manifests.set(folder,[]);manifests.get(folder).push({source:path,path:ex.out});}
+      }catch(e){blog(LocalPaths.basename(path)+'：'+e.message);}
+      $('bprog').firstElementChild.style.width=((i+1)/paths.length*100)+'%';stat(`导出 ${i+1}/${paths.length}`);
+    }
+    for(const [directory,items] of manifests)try{await window.NMWeb.api('export-log',{directory,items});}catch(e){blog('JPEG 已导出，索引日志失败：'+e.message);}
+  }finally{
+    // Restore the active source before allowing editing again.
+    if(curFile)try{const r=await fetch('/api/load',{method:'POST',headers:HJ,body:JSON.stringify({path:curFile,...P,preview:true})});if(!r.ok)throw new Error('重新载入失败');}catch(e){loaded=false;blog(e.message);}
+    batchBusy=false;$('export').disabled=false;frozen.forEach(n=>n.inert=false);$('batch').textContent='导出整卷 / 所选照片';stat(`已导出 ${count}/${paths.length} 张`);
   }
-  batchBusy=false;
-  const bbtn2=$("batch"); bbtn2.textContent="批量导出"; bbtn2.style.background=""; bbtn2.style.color="";
-  stat((batchCancel?"已取消，":"批量完成：")+okc+"/"+done+" 导出，共 "+items.length+" 张");
-  // 服务端缓存已换到最后一张，把当前显示的重新载回来
-  if(curFile) fetch("/api/load",{method:"POST",headers:HJ,body:JSON.stringify({path:curFile})});
 };
 
 // ---- 快捷键（输入框聚焦时忽略）----
 window.addEventListener("keydown",e=>{
+  if(batchBusy)return;
   if($("helpmodal").style.display==="flex"){ if(e.key==="Escape") $("helpmodal").style.display="none"; return; }
   const t=e.target.tagName;
   if(t==="INPUT"||t==="TEXTAREA"||t==="SELECT") return;
@@ -2519,7 +2574,14 @@ window.addEventListener("keyup",e=>{ if(e.key===" ") showNeg(false); });
 
 function stat(t){$("status").textContent=t;}
 // 启动：列默认目录 + 预设列表 + HSL 色区按钮
-listFiles("");
+let resumeSession=null;
+try{resumeSession=JSON.parse(sessionStorage.getItem('nm.develop.session'));}catch{}
+if(resumeSession?.paths?.length){
+  setTimeout(()=>{$('dir').value=resumeSession.directory||'';fillFiles(resumeSession.paths);
+    for(const row of document.querySelectorAll('#files .fitem')){const selected=resumeSession.selected?.includes(row.dataset.path);row.querySelector('.fck').checked=!!selected;row.classList.toggle('selected',!!selected);row.setAttribute('aria-selected',String(!!selected));}
+    if(resumeSession.file)loadFile(resumeSession.file);
+  },0);
+}else listFiles("");
 loadPresets();
 buildChips();
 refl();
@@ -2529,6 +2591,9 @@ applyTransform();
 
 
 # Shared workbench shell and the independent roll-layout routes.
+from web_workbench import create_workbench_blueprint
+import sys
+app.register_blueprint(create_workbench_blueprint(sys.modules[__name__]))
 from sheet_app import create_sheet_blueprint
 from archive_app import create_archive_blueprint
 app.register_blueprint(create_archive_blueprint(make_opts=make_opts, read_xml=_xml_to_data, settings_file=settings_file))
@@ -2543,9 +2608,10 @@ INDEX_HTML = INDEX_HTML.replace('</head>', '<link rel="stylesheet" href="/static
                                '<script src="/static/theme.js"></script>'
                                '<script src="/static/local_paths.js"></script></head>')
 INDEX_HTML = INDEX_HTML.replace('</body>', '<script src="/static/legacy_bridge.js"></script></body>')
-INDEX_HTML = INDEX_HTML.replace('</head>', '<link rel="stylesheet" href="/static/workflow.css"></head>')
+INDEX_HTML = INDEX_HTML.replace('</head>', '<link rel="stylesheet" href="/static/workflow.css"><link rel="stylesheet" href="/static/web_parity.css"></head>')
 INDEX_HTML = INDEX_HTML.replace('</body>', '<script src="/static/workflow_model.js"></script>'
-                               '<script src="/static/workflow.js"></script></body>')
+                               '<script src="/static/workflow.js"></script>'
+                               '<script src="/static/develop_model.js"></script><script src="/static/web_parity.js"></script></body>')
 INDEX_HTML = INDEX_HTML.replace('<title>胶片去色罩 · 可视化</title>',
                                '<title>调片 · NegativeMaster</title>')
 INDEX_HTML = INDEX_HTML.replace('<h1>胶片去色罩 · 可视化', '<h1>调片设置')

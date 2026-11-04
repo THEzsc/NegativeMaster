@@ -20,7 +20,13 @@ The repository includes two front ends over the same processing idea:
 - Lightroom-style finishing controls: exposure, highlights, shadows, whites, blacks, curves, HSL, vibrance, vignette, sharpening, and chroma denoise.
 - Histogram matching against a reference positive scan.
 - 16-bit TIFF and JPEG export, with batch export in the UI.
-- Per-image parameter memory, reusable presets, and whole-roll parameter application.
+- Per-image parameter memory, reusable presets, and selective synchronization with durable batch undo.
+- Collapsible web editing panels, an inline HSL color row, emulsion-side mirroring, crop-preserving rotation, and a cropped viewing area outside crop editing.
+- RAW-only filtering, lazy cached thumbnails, optional bottom filmstrip, and click / Cmd-Ctrl / Shift selection.
+- Per-frame whole-roll crop and Gamma analysis with selectable results; uncertain results require manual review.
+- Bounded interactive previews and on-demand detail rendering; final exports still decode the original at full resolution.
+- JPEG batch-export manifests shared by contact sheets and the archive. Missing exports use lightweight saved-adjustment previews.
+- Archive single-click selection, double-click details, and batch removal of associations without deleting originals.
 - Local SQLite film archive: roll dates/locations, camera/lens, ISO/EI, development notes, physical storage, tags, frame ratings, sourced covers, and portable metadata/preview backups.
 
 ## Install
