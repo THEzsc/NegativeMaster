@@ -20,6 +20,296 @@ private final class ObservationChanges: @unchecked Sendable {
   }
 }
 final class NativeWorkbenchTests: XCTestCase {
+  @MainActor func testArchiveSingleSelectionRangeAndDetailsAreSeparate() {
+    let a = ArchiveState()
+    let frames: [J] = (1...4).map { .object(["id": .string("frame-\($0)")]) }
+    a.detail = .object(["frames": .array(frames)])
+    a.selectFrame(frames[0])
+    XCTAssertEqual(a.selectedFrames, ["frame-1"])
+    XCTAssertFalse(a.showFrameEditor)
+    a.selectFrame(frames[2], extending: true)
+    XCTAssertEqual(a.selectedFrames, ["frame-1", "frame-2", "frame-3"])
+    a.selectFrame(frames[1], toggling: true)
+    XCTAssertEqual(a.selectedFrames, ["frame-1", "frame-3"])
+    a.openFrame(frames[3])
+    XCTAssertTrue(a.showFrameEditor)
+    XCTAssertEqual(a.frameDraft, frames[3])
+    a.detail = .object(["frames": .array([frames[0]])])
+    XCTAssertTrue(a.selectedFrames.isEmpty)
+  }
+  func testMouseWheelKeepsPreciseAndModifiedScrollingNative() {
+    XCTAssertEqual(MouseWheelInput.delta(x: 0, y: -3, precise: false, modifiers: []), -3)
+    XCTAssertNil(MouseWheelInput.delta(x: 0, y: 3, precise: true, modifiers: []))
+    XCTAssertNil(MouseWheelInput.delta(x: 1, y: 3, precise: false, modifiers: []))
+    XCTAssertNil(MouseWheelInput.delta(x: 0, y: 0, precise: false, modifiers: []))
+    for modifier: NSEvent.ModifierFlags in [.shift, .command, .control, .option] {
+      XCTAssertNil(MouseWheelInput.delta(x: 0, y: 3, precise: false, modifiers: modifier))
+    }
+    XCTAssertEqual(MouseWheelInput.zoom(1, delta: 1, inverted: false), 1.12, accuracy: 0.0001)
+    XCTAssertEqual(MouseWheelInput.zoom(1, delta: -1, inverted: true), 1.12, accuracy: 0.0001)
+    XCTAssertEqual(MouseWheelInput.zoom(16, delta: 100, inverted: false), 16)
+    XCTAssertEqual(MouseWheelInput.zoom(0.25, delta: -100, inverted: false), 0.25)
+  }
+
+  func testEmulsionToggleIsIdempotentAndUsesTheCapturedFilmAxis() {
+    let p = J.object(["rotate": .number(90), "flip": .string("none"),
+      "level_angle": .number(0.5), "gamma": .number(1.3),
+      "crop_rect": .doubles([0.125, 0.25, 0.625, 0.875])])
+    let on = DevelopOrientation.applyingEmulsion(true, to: p)
+    XCTAssertEqual(on["flip"], .string("v"))
+    XCTAssertEqual(on["crop_rect"], .doubles([0.125, 0.125, 0.625, 0.75]))
+    XCTAssertEqual(on["level_angle"], .number(-0.5))
+    XCTAssertEqual(on["gamma"], p["gamma"])
+    XCTAssertEqual(DevelopOrientation.applyingEmulsion(true, to: on), on)
+    let off = DevelopOrientation.applyingEmulsion(false, to: on)
+    for key in ["rotate", "flip", "crop_rect", "level_angle", "gamma"] { XCTAssertEqual(off[key], p[key]) }
+    var old = p; old["flip"] = .string("h")
+    let retained = DevelopOrientation.applyingEmulsion(true, to: old)
+    XCTAssertEqual(retained["flip"], old["flip"])
+    XCTAssertEqual(retained["crop_rect"], old["crop_rect"])
+    old["emulsion_mirrored"] = .bool(false)
+    XCTAssertFalse(DevelopOrientation.emulsionMirrored(old), "Explicit settings override legacy inference")
+  }
+
+  @MainActor func testFilmGammaScopeIncludesHiddenPhotosWithoutCopyingGamma() {
+    let s = WorkbenchState(); s.ready = true; s.rawOnly = false
+    s.photos = (1...3).map { Photo(path: "/film-\($0).ARW", name: "film-\($0).ARW") }
+    s.search = "film-1"; s.checked = [s.photos[0].path]
+    s.params = .object(["gamma": .number(1.7)])
+    s.filmAppliesToRoll = true
+    s.estimateFilmGamma()
+    XCTAssertTrue(s.showRollAutomation)
+    XCTAssertEqual(s.automationKind, "gamma")
+    XCTAssertEqual(s.automationScope, "roll")
+    XCTAssertEqual(s.automationPhotos.count, 3)
+    XCTAssertEqual(s.params["gamma"], .number(1.7))
+    XCTAssertTrue(s.automationRows.isEmpty, "Opening the estimate controls does not write adjustments")
+    XCTAssertEqual(WorkbenchState.migratedDevelopPanels(["gamma", "curves"]), ["film", "curves"])
+  }
+
+  func testPreviewDemandUsesBackingPixelsAndRetainsFullFrameCropScale() {
+    let source = CGSize(width: 8000, height: 6000)
+    let full = CGRect(x: 0, y: 0, width: 1, height: 1)
+    let half = CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5)
+    XCTAssertEqual(PreviewResolution.percent(displayed: CGSize(width: 4000, height: 3000),
+      crop: full, backingScale: 2, source: source), 100)
+    XCTAssertEqual(PreviewResolution.percent(displayed: CGSize(width: 2000, height: 1500),
+      crop: full, backingScale: 2, source: source), 50)
+    XCTAssertEqual(PreviewResolution.side(displayed: CGSize(width: 2000, height: 1500),
+      crop: half, backingScale: 2, source: source), 8000)
+    XCTAssertEqual(PreviewResolution.side(displayed: CGSize(width: 8000, height: 6000),
+      crop: full, backingScale: 2, source: source), 8000, "Never request invented detail beyond the source")
+    XCTAssertEqual(PreviewResolution.side(displayed: CGSize(width: 600, height: 450),
+      crop: full, backingScale: 2, source: source), 1500)
+  }
+
+  @MainActor func testDetailIsReleasedWhenShrinkingEditingOrChangingPhoto() {
+    let s = WorkbenchState()
+    func loaded() {
+      s.detailSide = 8000; s.detailLoadedSide = 8000
+      s.detailImage = NSImage(size: CGSize(width: 8000, height: 6000))
+    }
+    loaded(); s.requestDetail(side: 1500)
+    XCTAssertNil(s.detailImage)
+    loaded(); s.queueRender()
+    XCTAssertNil(s.detailImage)
+    loaded(); s.selected = "/different.ARW"
+    XCTAssertNil(s.detailImage); XCTAssertEqual(s.detailSide, 1500)
+    loaded(); s.busy = true
+    XCTAssertNil(s.detailImage)
+    s.busy = false
+    loaded(); s.workspace = .sheet
+    XCTAssertNil(s.detailImage)
+  }
+
+  func testDetailImageIODoesNotApplyThumbnailLimit() async throws {
+    let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
+    defer { try? FileManager.default.removeItem(at: file) }
+    let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 3200, pixelsHigh: 640,
+      bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
+      colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    try bitmap.representation(using: .jpeg, properties: [:])!.write(to: file)
+    let detail = await ImagePipeline.detail(file, size: 3200)
+    let half = await ImagePipeline.detail(file, size: 1600)
+    XCTAssertEqual(detail?.width, 3200)
+    XCTAssertEqual(half?.width, 1600)
+  }
+
+  func testTransientBridgeReleasesWorkerStateAndRecoversAfterCancellation() async throws {
+    let bridge = EngineBridge(background: true, transient: true)
+    let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
+    defer { try? FileManager.default.removeItem(at: file) }
+    try imageData().write(to: file)
+    _ = try await bridge.api("/api/load", .object(["path": .string(file.path)]))
+    do {
+      _ = try await bridge.api("/api/render")
+      XCTFail("A transient worker must not retain the preceding image allocation")
+    } catch { XCTAssertTrue(error.localizedDescription.contains("先载入图片")) }
+    let cancelled = Task { try await bridge.call(.object(["action": .string("bootstrap")])) }
+    try await Task.sleep(for: .milliseconds(20)); cancelled.cancel()
+    _ = try? await cancelled.value
+    let next = try await bridge.call(.object(["action": .string("bootstrap")]))
+    XCTAssertFalse(next["defaults"].object.isEmpty)
+  }
+
+  func testOrientationKeepsCropAndAllSamplesOnTheSamePixels() {
+    let rect = J.doubles([0.125, 0.25, 0.625, 0.75])
+    var source = J.object(["rotate": .number(0), "flip": .string("none"),
+      "level_angle": .number(0.5), "exposure": .number(0.7),
+      "wb_point": .doubles([0.25, 0.125])])
+    let keys = ["crop_rect", "wb_rect", "film_base_rect", "shadow_rect", "highlight_rect"]
+    for key in keys { source[key] = rect }
+    let moved = DevelopOrientation.clockwise.applying(to: source)
+    for key in keys { XCTAssertEqual(moved[key], .doubles([0.25, 0.125, 0.75, 0.625])) }
+    XCTAssertEqual(moved["wb_point"], .doubles([0.875, 0.25]))
+    XCTAssertEqual(moved["level_angle"], source["level_angle"])
+    XCTAssertEqual(moved["exposure"], source["exposure"])
+    let restored = DevelopOrientation.counterclockwise.applying(to: moved)
+    for key in keys { XCTAssertEqual(restored[key], source[key]) }
+    XCTAssertEqual(restored["wb_point"], source["wb_point"])
+    let object = J.object(["x0": .number(0.125), "y0": .number(0.25),
+                          "x1": .number(0.625), "y1": .number(0.75)])
+    XCTAssertEqual(DevelopOrientation.horizontal.rectangle(object)["x0"], .number(0.375))
+    XCTAssertEqual(DevelopOrientation.horizontal.rectangle(object)["x1"], .number(0.875))
+    XCTAssertEqual(DevelopOrientation.clockwise.rectangle(.null), .null)
+  }
+
+  func testOrientationCompositionIncludesExistingMirrors() {
+    func displayed(_ p: J, x: Double, y: Double) -> (Double, Double) {
+      var x = x, y = y
+      for _ in 0..<(Int(p["rotate"].double) / 90) { (x, y) = (1-y, x) }
+      if p["flip"].string == "h" { x = 1-x }
+      if p["flip"].string == "v" { y = 1-y }
+      return (x, y)
+    }
+    for rotation in [0, 90, 180, 270] {
+      for flip in ["none", "h", "v"] {
+        let source = J.object(["rotate": .number(Double(rotation)), "flip": .string(flip),
+                               "level_angle": .number(0.5)])
+        let before = displayed(source, x: 0.125, y: 0.75)
+        for operation in [DevelopOrientation.clockwise, .counterclockwise, .horizontal, .vertical] {
+          let next = operation.applying(to: source)
+          let actual = displayed(next, x: 0.125, y: 0.75)
+          let expected = operation.point(before.0, before.1)
+          XCTAssertEqual(actual.0, expected.0, accuracy: 1e-12)
+          XCTAssertEqual(actual.1, expected.1, accuracy: 1e-12)
+          XCTAssertEqual(next["level_angle"].double, operation.swapsAxes ? 0.5 : -0.5)
+          XCTAssertEqual(next["crop_rect"], .null)
+        }
+      }
+    }
+  }
+
+  @MainActor func testRotateAndMirrorAreSingleUndoableCropEdits() {
+    let s = WorkbenchState()
+    s.params = .object(["rotate": .number(90), "flip": .string("h"),
+      "crop_rect": .doubles([0.125, 0.25, 0.625, 0.75]), "level_angle": .number(0.5)])
+    s.cropAspect = "3:2"
+    let original = s.params
+    s.rotate(90)
+    XCTAssertEqual(s.params["rotate"], .number(0), "Mirrored photos still rotate clockwise on screen")
+    XCTAssertEqual(s.params["crop_rect"], .doubles([0.25, 0.125, 0.75, 0.625]))
+    XCTAssertEqual(s.cropAspect, "2:3")
+    let rotated = s.params
+    s.undo()
+    XCTAssertEqual(s.params, original)
+    XCTAssertEqual(s.cropAspect, "3:2")
+    XCTAssertFalse(s.canUndo)
+    s.redo()
+    XCTAssertEqual(s.params, rotated)
+    XCTAssertEqual(s.cropAspect, "2:3")
+    s.mirror("v")
+    XCTAssertEqual(s.params["flip"], .string("none"))
+    XCTAssertEqual(s.params["rotate"], .number(180))
+    XCTAssertEqual(s.params["level_angle"], .number(-0.5))
+    XCTAssertEqual(s.params["crop_rect"], .doubles([0.25, 0.375, 0.75, 0.875]))
+    s.undo()
+    XCTAssertEqual(s.params, rotated)
+  }
+
+  @MainActor func testRotationRoundTripAndBatchGuardPreserveCrop() {
+    let s = WorkbenchState()
+    s.params = .object(["rotate": .number(0), "flip": .string("none"),
+      "crop_rect": .doubles([0.125, 0.25, 0.625, 0.75]), "geometry_source": .string("manual")])
+    s.cropAspect = "6:7"
+    let original = s.params
+    s.rotate(-90); s.rotate(90)
+    XCTAssertEqual(s.params, original)
+    XCTAssertEqual(s.cropAspect, "6:7")
+    s.rotate(180)
+    XCTAssertEqual(s.params["crop_rect"], .doubles([0.375, 0.25, 0.875, 0.75]))
+    XCTAssertEqual(s.cropAspect, "6:7")
+    let beforeBatch = s.params
+    s.applyingFilm = true
+    s.rotate(90); s.mirror("h")
+    XCTAssertEqual(s.params, beforeBatch)
+  }
+
+  @MainActor func testBasicPanelMigrationPreservesCollapsedState() {
+    XCTAssertEqual(WorkbenchState.migratedDevelopPanels(nil), ["histogram", "light"])
+    XCTAssertEqual(WorkbenchState.migratedDevelopPanels(["whiteBalance", "color", "curves"]), ["light", "curves"])
+    XCTAssertEqual(WorkbenchState.migratedDevelopPanels([]), [])
+  }
+
+  func testCropViewportAndSampleCoordinates() {
+    let crop = J.doubles([0.2, 0.1, 0.8, 0.9])
+    let view = DevelopViewport(crop: crop, editingCrop: false)
+    XCTAssertEqual(view.rect.width, 0.6, accuracy: 0.000001)
+    let sample = view.fullRect(from: [0.25, 0.25, 0.75, 0.75])
+    for (actual, expected) in zip(sample, [0.35, 0.3, 0.65, 0.7]) {
+      XCTAssertEqual(actual, expected, accuracy: 0.000001)
+    }
+    let displayed = view.displayedRect(from: sample)
+    XCTAssertEqual(displayed.minX, 0.25, accuracy: 0.000001)
+    XCTAssertEqual(displayed.height, 0.5, accuracy: 0.000001)
+    XCTAssertEqual(DevelopViewport(crop: crop, editingCrop: true).rect, CGRect(x: 0, y: 0, width: 1, height: 1))
+    XCTAssertEqual(DevelopViewport(crop: .doubles([.nan, 0, 1, 1]), editingCrop: false).rect.width, 1)
+  }
+  @MainActor func testSyncScopeExcludesSourceAndHonoursExplicitRange() {
+    let s = WorkbenchState()
+    s.photos = (1...4).map { Photo(path: "/tmp/sync-\($0).ARW", name: "sync-\($0).ARW") }
+    s.selected = s.photos[0].path; s.rawOnly = false
+    s.checked = [s.photos[0].path, s.photos[2].path]
+    XCTAssertEqual(s.syncTargets, s.photos.dropFirst().map(\.path))
+    s.syncScope = "selected"
+    XCTAssertEqual(s.syncTargets, [s.photos[2].path])
+    s.search = "sync-1"
+    XCTAssertTrue(s.syncTargets.isEmpty)
+    s.syncScope = "roll"
+    XCTAssertEqual(s.syncTargets.count, 3)
+  }
+  @MainActor func testFilmScopeDefaultsOffAndIgnoresSearchAndSelection() {
+    let s = WorkbenchState()
+    s.photos = (1...3).map { Photo(path: "/tmp/film-\($0).ARW", name: "film-\($0).ARW") }
+    s.search = "film-1"; s.checked = [s.photos[0].path]
+    XCTAssertFalse(s.filmAppliesToRoll)
+    let before = s.params
+    s.filmAppliesToRoll = true
+    XCTAssertEqual(s.params, before)
+    XCTAssertEqual(s.filmTargetPaths, s.photos.map(\.path))
+    s.applyingFilm = true
+    s.selectPhoto(s.photos[1].path)
+    XCTAssertNil(s.selected)
+  }
+  @MainActor func testFilmChangeContinuesAfterFailureAndOnlyUpdatesMatchingPhoto() async {
+    let s = WorkbenchState()
+    s.photos = ["/a", "/broken", "/b"].map { Photo(path: $0, name: $0) }
+    s.selected = "/a"; s.parameterPath = "/a"
+    s.params = .object(["gamma": .number(1.8)])
+    await s.applyFilmChanges(paths: s.filmTargetPaths, change: .object(["mode": .string("bw")])) { message in
+      let path = message["body"]["path"].string
+      if path == "/broken" { throw WorkbenchError(message: "unreadable") }
+      if message["action"].string == "batch_snapshot" { return .object(["token": .string(path)]) }
+      XCTAssertEqual(message["action"].string, "film_apply")
+      XCTAssertEqual(message["body"]["token"].string, path)
+      XCTAssertEqual(Set(message["body"].object.keys), Set(["mode", "path", "token"]))
+      return .object(["params": .object(["mode": .string("bw"), "gamma": .number(path == "/a" ? 1.8 : 1.2)])])
+    }
+    XCTAssertEqual(s.params["gamma"], .number(1.8))
+    XCTAssertEqual(s.params["mode"], .string("bw"))
+    XCTAssertEqual(s.photos.map(\.edited), [true, false, true])
+    XCTAssertTrue(s.error?.contains("broken") == true)
+  }
   @MainActor func testRollAutomationDefaultsToVisibleRollEvenWithOneSelected() {
     let s = WorkbenchState(); s.ready = true; s.rawOnly = false
     s.photos = (1...4).map { Photo(path: "/tmp/roll-\($0).ARW", name: "roll-\($0).ARW") }
@@ -341,8 +631,13 @@ final class NativeWorkbenchTests: XCTestCase {
       currentPath: "/roll/01.ARW", currentParams: .object(["gamma": .number(0.85), "rotate": .number(90)]))
     var readPaths: [String] = []
     var exported: [J] = []
+    var logged: [J] = []
     await state.performBatchExport(plan) { message in
       let body = message["body"], path = body["path"].string
+      if message["action"].string == "export_log" {
+        logged = body["items"].array
+        return .object(["ok": .bool(true)])
+      }
       if message["action"].string == "adjustments" {
         readPaths.append(path)
         return .object(["params": .object(["gamma": .number(path.contains("02") ? 1.4 : 1.9)])])
@@ -359,6 +654,8 @@ final class NativeWorkbenchTests: XCTestCase {
     XCTAssertTrue(exported[0]["out"].string.hasSuffix("01_pos-1.jpg"))
     XCTAssertEqual(try Data(contentsOf: existing), Data("existing".utf8))
     XCTAssertEqual(state.batchCompleted, 2)
+    XCTAssertEqual(logged.map { $0["source"].string }, ["/roll/01.ARW", "/roll/03.ARW"])
+    XCTAssertEqual(logged.map { $0["path"].string }, state.batchOutputs.map(\.path))
     XCTAssertEqual(state.batchFailures.count, 1)
     XCTAssertEqual(state.batchOutputs.count, 2)
     XCTAssertTrue(state.batchFinished)

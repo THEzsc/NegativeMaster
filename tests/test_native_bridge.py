@@ -90,6 +90,123 @@ class NativeBridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.call('batch_snapshot',dict(path=str(photo)))
         self.assertEqual(sidecar.read_text(),'<broken')
 
+    def test_film_scope_patches_each_frame_without_copying_geometry(self):
+        # A preset cannot smuggle crop, rotation or input coordinates into another frame.
+        preset='native-film-scope'
+        (self.dir/'presets'/f'{preset}.json').write_text(json.dumps(dict(
+            gamma=1.25, contrast=.1, crop_rect=[0,0,1,1], rotate=180, film_base_rect=[1,2,3,4])))
+        for i in range(2):
+            photo=self.images/f'film-scope-{i}.png';photo.write_bytes(self.photo.read_bytes())
+            p=dict(self.defaults,mode='positive',gamma=1.5+i*.2,exposure=i*.4,
+                   crop_rect=[.1+i*.02,.2,.9,.8],rotate=i*90,level_angle=i*.3)
+            self.call('save',dict(path=str(photo),params=p,sidecar=True))
+            sidecar=Path(str(photo)+'.decast.xml')
+            sidecar.write_text(sidecar.read_text().replace('fmt="free"','fmt="3:2"').replace('orient="land"','orient="port"'))
+            before=sidecar.read_bytes()
+            snap=self.call('batch_snapshot',dict(path=str(photo)))
+            changed=self.call('film_apply',dict(path=str(photo),token=snap['token'],mode='bw'))
+            self.assertEqual(changed['params'],dict(p,mode='bw'))
+            self.assertIn('fmt="3:2"',sidecar.read_text())
+            self.assertIn('orient="port"',sidecar.read_text())
+            with self.assertRaises(ValueError):
+                self.call('film_apply',dict(path=str(photo),token=snap['token'],mode='color'))
+            self.call('batch_restore',dict(undo_id=changed['undo_id']))
+            self.assertEqual(before,sidecar.read_bytes())
+            snap=self.call('batch_snapshot',dict(path=str(photo)))
+            changed=self.call('film_apply',dict(path=str(photo),token=snap['token'],preset=preset))
+            self.assertEqual(changed['params'],dict(p,gamma=1.25,contrast=.1))
+            self.assertEqual(photo.read_bytes(),self.photo.read_bytes())
+            snap=self.call('batch_snapshot',dict(path=str(photo)))
+            for bad in ({'mode':'bogus'}, {'preset':'../escape'}, {'preset':'missing-preset'}):
+                with self.assertRaises(ValueError):
+                    self.call('film_apply',dict(path=str(photo),token=snap['token'],**bad))
+            self.assertEqual(self.call('batch_snapshot',dict(path=str(photo)))['token'],snap['token'])
+
+    def test_emulsion_defaults_preserve_saved_edits_and_batch_is_idempotent(self):
+        fresh=self.images/'emulsion-new.png';fresh.write_bytes(self.photo.read_bytes())
+        defaults=self.call('adjustments',dict(path=str(fresh)))
+        self.assertEqual(defaults['params']['flip'],'h')
+        self.assertTrue(defaults['params']['emulsion_mirrored'])
+        self.assertEqual(defaults['data'],{})
+        self.assertFalse(Path(str(fresh)+'.decast.xml').exists())
+        for i, flip in enumerate(('none','h','v')):
+            photo=self.images/f'emulsion-old-{i}.png';photo.write_bytes(self.photo.read_bytes())
+            old=dict(self.defaults,flip=flip,rotate=90,gamma=1.1+i*.2,level_angle=.5,
+                     crop_rect=[.125,.25,.625,.875],wb_point=[.25,.125])
+            old.pop('emulsion_mirrored')  # Old app versions did not store this property.
+            self.call('save',dict(path=str(photo),params=old,sidecar=True))
+            xml=Path(str(photo)+'.decast.xml'); before=xml.read_bytes()
+            self.assertEqual(self.call('adjustments',dict(path=str(photo)))['params'],old)
+            snap=self.call('batch_snapshot',dict(path=str(photo)))
+            changed=self.call('film_apply',dict(path=str(photo),token=snap['token'],emulsion=True))
+            p=changed['params']
+            self.assertTrue(p['emulsion_mirrored']);self.assertEqual(p['gamma'],old['gamma'])
+            if flip=='none':
+                self.assertEqual(p['flip'],'v')
+                self.assertEqual(p['crop_rect'],[.125,.125,.625,.75])
+                self.assertEqual(p['wb_point'],[.25,.875])
+                self.assertEqual(p['level_angle'],-.5)
+            else:
+                for key,value in old.items():self.assertEqual(p[key],value)
+            repeated=self.call('batch_snapshot',dict(path=str(photo)))
+            again=self.call('film_apply',dict(path=str(photo),token=repeated['token'],emulsion=True))
+            self.assertEqual(again['params'],p)
+            self.call('batch_restore',dict(undo_id=again['undo_id']))
+            self.call('batch_restore',dict(undo_id=changed['undo_id']))
+            self.assertEqual(xml.read_bytes(),before)
+            with self.assertRaises(ValueError):
+                self.call('film_apply',dict(path=str(photo),token=snap['token'],emulsion='true'))
+
+    def test_emulsion_disable_survives_reload_and_orientation_sync(self):
+        photo=self.images/'emulsion-disabled.png';photo.write_bytes(self.photo.read_bytes())
+        snap=self.call('batch_snapshot',dict(path=str(photo)))
+        changed=self.call('film_apply',dict(path=str(photo),token=snap['token'],emulsion=False))
+        self.assertEqual(changed['params']['flip'],'none')
+        self.assertFalse(self.call('adjustments',dict(path=str(photo)))['params']['emulsion_mirrored'])
+        snap=self.call('batch_snapshot',dict(path=str(photo)))
+        source=dict(self.defaults,flip='v',emulsion_mirrored=False)
+        changed=self.call('sync_apply',dict(path=str(photo),token=snap['token'],groups=['orientation'],source=source))
+        self.assertEqual(changed['params']['flip'],'v')
+        self.assertFalse(changed['params']['emulsion_mirrored'])
+
+    def test_sync_selected_groups_preserve_individual_edits_and_allow_undo(self):
+        groups={g['id']:g for g in self.bootstrap['syncGroups']}
+        for key in ('gamma','exposure','crop','orientation','samples'):
+            self.assertFalse(groups[key]['selected'])
+        photo=self.images/'selective-sync.png';photo.write_bytes(self.photo.read_bytes())
+        original=dict(self.defaults,mode='bw',gamma=1.9,exposure=.7,rotate=90,
+                      crop_rect=[.15,.1,.85,.9],level_angle=.3,geometry_source='auto',
+                      hsl={'red':{'h':12,'s':-8,'l':2}},film_base_rect=[.1,.1,.2,.2])
+        self.call('save',dict(path=str(photo),params=original,sidecar=True))
+        before=Path(str(photo)+'.decast.xml').read_bytes()
+        source=dict(self.defaults,mode='positive',gamma=.85,exposure=-2,temp=28,tint=-10,
+                    rotate=180,crop_rect=None,hsl={'blue':{'h':4,'s':14,'l':6}})
+        snap=self.call('batch_snapshot',dict(path=str(photo)))
+        r=self.call('sync_apply',dict(path=str(photo),token=snap['token'],groups=['whiteBalance','hsl'],source=source))
+        expected=dict(original,wb=source['wb'],temp=28,tint=-10,hsl=source['hsl'])
+        self.assertEqual(r['params'],expected)
+        # Merely selecting/saving an unchanged frame must not invalidate batch undo.
+        after=self.call('batch_snapshot',dict(path=str(photo)))
+        self.call('save',dict(path=str(photo),params=expected,sidecar=True))
+        self.assertEqual(self.call('batch_snapshot',dict(path=str(photo)))['token'],after['token'])
+        self.call('batch_restore',dict(undo_id=r['undo_id']))
+        self.assertEqual(Path(str(photo)+'.decast.xml').read_bytes(),before)
+        for groups in ([],['invented'],['crop','invented']):
+            with self.assertRaises(ValueError):
+                self.call('sync_apply',dict(path=str(photo),token=snap['token'],groups=groups,source=source))
+        self.assertEqual(Path(str(photo)+'.decast.xml').read_bytes(),before)
+
+    def test_sync_can_clear_crop_without_touching_orientation_or_tone(self):
+        photo=self.images/'clear-synced-crop.png';photo.write_bytes(self.photo.read_bytes())
+        original=dict(self.defaults,crop_rect=[.2,.1,.8,.9],level_angle=.5,geometry_source='auto',rotate=90,gamma=1.4)
+        self.call('save',dict(path=str(photo),params=original,sidecar=True))
+        snap=self.call('batch_snapshot',dict(path=str(photo)))
+        result=self.call('sync_apply',dict(path=str(photo),token=snap['token'],groups=['crop'],source=self.defaults))
+        self.assertEqual(result['params'],dict(original,crop_rect=None,level_angle=0,geometry_source='manual'))
+        self.assertFalse(self.call('adjustments',dict(path=str(photo)))['data'].get('cropN'))
+        with self.assertRaises(ValueError):
+            self.call('sync_apply',dict(path=str(photo),token=snap['token'],groups=['gamma'],source=self.defaults))
+
     def test_fast_gamma_analysis_keeps_sources_and_has_per_frame_values(self):
         photo=self.images/'batch-gamma.png'
         scene=np.linspace(0,1,240*160).reshape(160,240)**1.6
@@ -123,6 +240,41 @@ class NativeBridgeTests(unittest.TestCase):
         self.assertEqual(self.call('adjustments',dict(path=str(photo)))['params']['geometry_source'],'auto')
         self.assertIn('geometry_source="auto"',Path(str(photo)+'.decast.xml').read_text())
 
+    def test_detail_preview_resolves_source_pixels_and_preserves_geometry(self):
+        photo = self.images/'fine-lines.png'
+        lines = np.tile(np.where(np.arange(3200) % 2, 210, 40).astype(np.uint8), (640, 1))
+        Image.fromarray(np.repeat(lines[..., None], 3, axis=2)).save(photo)
+        original = photo.read_bytes()
+        p = dict(self.defaults, mode='positive', wb='none', gamma=1, contrast=0,
+                 crop_rect=[.1, .1, .9, .9])
+        low = np.asarray(self.image(self.call('render', dict(path=str(photo), params=p, include_negative=False))))
+        out = self.dir/'detail-100.jpg'
+        result = self.call('detail', dict(path=str(photo), params=p, side=3200, out=str(out)))
+        self.assertEqual((result['width'], result['height']), (3200, 640))
+        with Image.open(out) as im:
+            high = np.asarray(im)
+            self.assertTrue(im.info.get('icc_profile'))
+        self.assertGreater(float(high[320, :, 0].std()), float(low[low.shape[0]//2, :, 0].std()) + 40)
+        half = self.dir/'detail-50.jpg'
+        result = self.call('detail', dict(path=str(photo), params=p, side=1600, out=str(half)))
+        self.assertEqual((result['width'], result['height']), (1600, 320))
+        rotated = self.dir/'detail-rotated.jpg'
+        result = self.call('detail', dict(path=str(photo), params=dict(p, rotate=90), side=3200, out=str(rotated)))
+        self.assertEqual((result['width'], result['height']), (640, 3200))
+        negative = self.dir/'detail-negative.jpg'
+        result = self.call('detail', dict(path=str(photo), params=p, side=3200, negative=True, out=str(negative)))
+        self.assertEqual(result['width'], 3200)
+        for output in (out, photo):
+            before = output.read_bytes()
+            with self.assertRaises(ValueError):
+                self.call('detail', dict(path=str(photo), params=p, side=3200, out=str(output)))
+            self.assertEqual(output.read_bytes(), before)
+        self.assertEqual(photo.read_bytes(), original)
+        self.assertFalse(Path(str(photo)+'.decast.xml').exists())
+        # A detail request must not replace the normal worker's low-resolution cache.
+        after = self.call('render', dict(path=str(photo), params=p, include_negative=False))
+        self.assertEqual(self.image(after).width, 1500)
+
     def test_export_atomic_no_clobber(self):
         self.assertIn('arw', self.bootstrap['rawExtensions'])
         out=self.dir/'collision.jpg'
@@ -135,6 +287,27 @@ class NativeBridgeTests(unittest.TestCase):
         self.call('export',body)
         with Image.open(out) as image: image.verify()
         self.assertEqual(list(self.dir.glob('.nm-export-*')),[])
+
+    def test_jpeg_export_is_shared_by_sheet_and_archive_after_worker_restart(self):
+        source = self.images / 'jpeg-priority.tif'
+        Image.new('RGB', (90, 60), 'gray').save(source)
+        custom = self.dir / 'arbitrary-destination'; custom.mkdir(exist_ok=True)
+        jpeg = custom / 'custom-name-7.jpg'
+        p = dict(self.defaults, mode='positive')
+        self.call('export', dict(path=str(source), params=p, out=str(jpeg), bits=8))
+        log = self.call('export_log', dict(directory=str(custom), items=[dict(source=str(source), path=str(jpeg))]))
+        self.assertEqual(json.loads(Path(log['log']).read_text())['items'][0]['path'], str(jpeg.resolve()))
+        self.call('export', dict(path=str(source), params=p, out=str(custom/'later.tif'), bits=16))
+        job = self.api('/api/sheet/prepare', dict(paths=[str(source)]))['job']
+        self.assertEqual(self.ready(job)['items'][0]['path'], str(jpeg.resolve()))
+        request = dict(action='api', path='/api/archive/index-plan', body=dict(paths=[str(source)]))
+        env = dict(os.environ, NM_DATA_ROOT=str(self.dir), NM_PREVIEW_CACHE=str(self.dir/'preview-cache'))
+        process = subprocess.run([sys.executable, str(ROOT/'FilmDecastSwift/Support/native_worker.py'), str(ROOT)],
+            input=json.dumps(request)+'\n', capture_output=True, text=True, env=env, timeout=30)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        result = json.loads(process.stdout)
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(result['result']['items'][0]['path'], str(jpeg.resolve()))
 
     def test_01_bootstrap_controls_and_catalog(self):
         b=self.bootstrap
@@ -237,6 +410,17 @@ class NativeBridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.call('render',dict(path=str(self.dir/'missing.png'),params=self.defaults))
         self.assertTrue(self.call('bootstrap')['stocks'])
         with self.assertRaises(ValueError):self.api('/api/sheet/preview',dict(job='missing'))
+
+    def test_shared_decode_is_unchanged_after_editing_and_negative_comparison(self):
+        body = dict(path=str(self.photo), params=self.defaults, include_negative=False)
+        original = self.call('render', body)['bytes']
+        for mode in ('color', 'bw', 'positive'):
+            params = dict(self.defaults, mode=mode, rotate=90, flip='h', level_angle=.3,
+                          exposure=.7, gamma=1.4, crop_rect=[.1,.1,.9,.9],
+                          hsl={'red': {'h': 12, 's': -8, 'l': 2}})
+            self.call('render', dict(body, params=params))
+            self.call('negative', dict(body, params=params))
+            self.assertEqual(self.call('render', body)['bytes'], original)
 
     def test_10_lazy_negative_matches_legacy_render(self):
         body=dict(path=str(self.photo),params=dict(self.defaults,rotate=90,level_angle=.3))

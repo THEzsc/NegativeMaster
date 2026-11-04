@@ -27,6 +27,7 @@ from flask import Blueprint, jsonify, render_template, request, send_file
 from PIL import Image, ImageCms, ImageOps
 
 import decast
+import archive_index
 from contact_sheet import render_sheet, sheet_size, lettering_sample
 
 
@@ -105,8 +106,7 @@ def _path(value, *, directory=False):
 
 
 def _frame_key(path):
-    stem = path.stem
-    return re.sub(r"_pos$", "", stem, flags=re.I).casefold()
+    return archive_index.frame_key(path)
 
 
 def _natural_key(value):
@@ -115,7 +115,7 @@ def _natural_key(value):
 
 
 def _is_export(path):
-    return path.suffix.lower() in IMAGE_EXTS and path.stem.lower().endswith("_pos")
+    return path.suffix.lower() in IMAGE_EXTS and archive_index.is_export(path)
 
 
 def _collect_directory(directory):
@@ -146,14 +146,8 @@ def _discover_related(paths):
     parents = {}
     for path in paths:
         parents.setdefault(path.parent, set()).add(_frame_key(path))
-    export_folders = {"positive", "positives", "export", "exports", "output", "outputs",
-                      "成片", "导出", "输出", "正片", "positives_output"}
     for parent, keys in parents.items():
-        folders = [parent]
-        for entry in parent.iterdir():
-            if (entry.is_dir() and not entry.name.startswith(".")
-                    and entry.name.casefold() in export_folders):
-                folders.append(entry)
+        folders = archive_index.export_directories(parent)
         for folder in folders:
             for candidate in folder.iterdir():
                 if (candidate.is_file() and candidate.suffix.lower() in SUPPORTED_EXTS
@@ -324,6 +318,17 @@ def create_sheet_blueprint(make_opts, read_xml, settings_file, get_start_dirs):
         return None
 
     def select_sources(paths, positive_only, warnings):
+        preferred = {}
+        if not positive_only:
+            for item in archive_index.resolve_sources(paths, IMAGE_EXTS, decast.RAW_EXTS, settings_file):
+                path, original = Path(item['path']), Path(item['source'])
+                if path.suffix.lower() in archive_index.JPEG_EXTS and (
+                        path != original or _is_export(path)
+                        or path.parent.name.casefold() in archive_index.EXPORT_DIRS):
+                    key = _frame_key(original)
+                    previous = preferred.get(key)
+                    if previous is None or path.stat().st_mtime_ns > previous.stat().st_mtime_ns:
+                        preferred[key] = path
         grouped = {}
         for path in paths:
             grouped.setdefault(_frame_key(path), set()).add(path)
@@ -335,10 +340,13 @@ def create_sheet_blueprint(make_opts, read_xml, settings_file, get_start_dirs):
                 if images:
                     selected.append((images[0], "import", None))
                     continue
+            if key in preferred:
+                selected.append((preferred[key], "export", None))
+                continue
             positive = [p for p in group if _is_export(p)]
             if positive:
-                priority = {".tif": 0, ".tiff": 0, ".png": 1, ".jpg": 2, ".jpeg": 2}
-                chosen = min(positive, key=lambda p: (priority.get(p.suffix.lower(), 3), len(p.parts), str(p)))
+                priority = {".jpg": 0, ".jpeg": 0, ".png": 1, ".tif": 2, ".tiff": 2}
+                chosen = min(positive, key=lambda p: (priority.get(p.suffix.lower(), 3), -p.stat().st_mtime_ns, str(p)))
                 selected.append((chosen, "export", None))
                 continue
             raw = [p for p in group if p.suffix.lower() in decast.RAW_EXTS]
@@ -363,8 +371,6 @@ def create_sheet_blueprint(make_opts, read_xml, settings_file, get_start_dirs):
     def saved_positive(path, data, warnings):
         params = copy.deepcopy(data["P"])
         params.pop("negative_preview", None)
-        if params.get("use_match"):
-            warnings.append(f"{path.name} 使用过参照匹配；请优先导出成片以保留该效果。")
         params["use_match"] = False
         crop = data.get("cropN")
         if crop:
@@ -378,10 +384,11 @@ def create_sheet_blueprint(make_opts, read_xml, settings_file, get_start_dirs):
         opts._ref_centers = None
         opts._ref_cdfs = None
         opts.stats_rect = None
+        opts.preview_max_side = 2560
         lin, _ = decast.load_image(str(path), opts)
         if lin.shape[0] * lin.shape[1] > MAX_IMAGE_PIXELS:
             raise SheetInputError("单张图片超过 1.8 亿像素，请先缩小。")
-        original_side = max(lin.shape[:2])
+        original_side = getattr(opts, '_preview_original_side', max(lin.shape[:2]))
         lin = decast._resize_long_edge(lin, 2560)
         scale = max(lin.shape[:2]) / original_side
         if getattr(opts, "denoise", 0):
@@ -406,8 +413,16 @@ def create_sheet_blueprint(make_opts, read_xml, settings_file, get_start_dirs):
                 with lock:
                     job["message"] = "正在准备 " + path.name
                 try:
-                    image = (saved_positive(path, data, warnings) if source == "saved"
-                             else _positive_image(path))
+                    if source == "saved":
+                        if data['P'].get('use_match'):
+                            warnings.append(f"{path.name} 使用过参照匹配；请优先导出成片以保留该效果。")
+                        image = archive_index.cached_jpeg(path, data, settings_file,
+                            lambda: saved_positive(path, data, warnings))
+                    elif path.suffix.lower() in {'.tif', '.tiff'}:
+                        image = archive_index.cached_jpeg(path, 'positive', settings_file,
+                            lambda: _positive_image(path))
+                    else:
+                        image = _positive_image(path)
                     index = len(job["items"])
                     cached = job["cache"] / f"positive-{index}.jpg"
                     _rgb(image).save(cached, "JPEG", quality=95, subsampling=0,

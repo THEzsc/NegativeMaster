@@ -3,6 +3,7 @@ import SwiftUI
 
 struct WorkbenchCanvas: View {
   @Environment(WorkbenchState.self) var s
+  @Environment(\.displayScale) private var displayScale
   private var bindings: Bindable<WorkbenchState> { Bindable(s) }
   let mode: WorkbenchState.Workspace
   @State private var dragStart: CGPoint?
@@ -12,19 +13,33 @@ struct WorkbenchCanvas: View {
   @State private var frameStart: CGPoint?
   private var image: NSImage? {
     mode == .develop
-      ? (s.showNegative ? (s.negative ?? s.preview) : s.preview) : (s.frameView ? s.sheetFrameImage : s.sheetImage)
+      ? (s.detailImage ?? (s.showNegative ? (s.negative ?? s.preview) : s.preview)) : (s.frameView ? s.sheetFrameImage : s.sheetImage)
+  }
+  private var viewport: DevelopViewport {
+    DevelopViewport(crop: s.params["crop_rect"], editingCrop: mode != .develop || s.selectionTool == "crop" || s.showNegative)
   }
   var body: some View {
     GeometryReader { geo in
       ZStack {
         Color(nsColor: .underPageBackgroundColor)
         if let image {
-          let size = fitted(image.size, available: geo.size)
+          let rect = viewport.rect
+          let visibleSize = CGSize(width: image.size.width * rect.width, height: image.size.height * rect.height)
+          let size = fitted(visibleSize, available: geo.size)
+          let detailSide = PreviewResolution.side(displayed: size, crop: rect,
+            backingScale: Double(displayScale), source: s.displaySourceSize)
+          let percent = mode == .develop
+            ? PreviewResolution.percent(displayed: size, crop: rect,
+                backingScale: Double(displayScale), source: s.displaySourceSize)
+            : Int((s.zoom * 100).rounded())
           ScrollView([.horizontal, .vertical]) {
             ZStack {
               if mode == .sheet { Checkerboard().frame(width: size.width, height: size.height) }
-              Image(nsImage: image).resizable().interpolation(.high).frame(
-                width: size.width, height: size.height)
+              Image(nsImage: image).resizable().interpolation(.high)
+                .frame(width: size.width / rect.width, height: size.height / rect.height)
+                .offset(x: -rect.minX * size.width / rect.width, y: -rect.minY * size.height / rect.height)
+                .frame(width: size.width, height: size.height, alignment: .topLeading)
+                .clipped()
               if mode == .develop && !s.showNegative { developOverlay(size: size) }
               if mode == .sheet && s.frameView {
                 if s.frameGrid {
@@ -49,24 +64,41 @@ struct WorkbenchCanvas: View {
               }
             }
             .frame(width: size.width, height: size.height)
+            .clipped()
             .background {
               Rectangle().fill(Color(nsColor: .underPageBackgroundColor))
                 .shadow(color: .black.opacity(0.16), radius: 12, y: 5)
             }
             .padding(32)
             .frame(minWidth: geo.size.width, minHeight: geo.size.height)
+            .background(CanvasPanSupport(enabled: mode == .develop ? s.selectionTool.isEmpty : !s.frameView))
+            .background(ScrollWheelSupport(enabled: s.workspace == mode && !s.busy) { delta, inverted in
+              s.zoom = MouseWheelInput.zoom(s.zoom, delta: delta, inverted: inverted)
+            })
           }
+          .scrollIndicators(.hidden)
           .simultaneousGesture(
             MagnifyGesture().updating($magnifying) { _, active, _ in active = true }
               .onChanged { v in
                 if magnifyStart == nil { magnifyStart = s.zoom }
-                s.zoom = min(5, max(0.25, (magnifyStart ?? s.zoom) * v.magnification))
+                s.zoom = min(16, max(0.25, (magnifyStart ?? s.zoom) * v.magnification))
               }.onEnded { _ in magnifyStart = nil }
           )
           .onChange(of: magnifying) { _, active in
             if !active { magnifyStart = nil }
           }
-          .overlay(alignment: .bottom) { canvasTools.padding(.bottom, 18) }
+          .onChange(of: detailSide, initial: true) { _, side in
+            if mode == .develop { s.requestDetail(side: side) }
+          }
+          .onChange(of: s.workspace) { _, workspace in
+            if mode == .develop, workspace == .develop { s.requestDetail(side: detailSide) }
+          }
+          .onChange(of: s.editingBatch) { _, active in
+            if mode == .develop {
+              if active { s.invalidateDetail() } else { s.queueDetail() }
+            }
+          }
+          .overlay(alignment: .bottom) { canvasTools(percent: percent).padding(.bottom, 18) }
           .overlay(alignment: .topLeading) {
             if !s.selectionTool.isEmpty && mode == .develop {
               Label(
@@ -122,7 +154,7 @@ struct WorkbenchCanvas: View {
       }
     }.padding(30)
   }
-  private var canvasTools: some View {
+  private func canvasTools(percent: Int) -> some View {
     HStack(spacing: 12) {
       if mode == .develop {
         Button {
@@ -161,19 +193,8 @@ struct WorkbenchCanvas: View {
         }
       }
       Divider().frame(height: 18)
-      Button {
-        s.zoom = max(0.25, s.zoom / 1.25)
-      } label: {
-        Image(systemName: "minus.magnifyingglass")
-      }
-      Button("\(Int(s.zoom*100))%", action: { s.zoom = 1 }).font(.caption.monospacedDigit()).frame(
-        width: 44
-      ).help("适合窗口")
-      Button {
-        s.zoom = min(5, s.zoom * 1.25)
-      } label: {
-        Image(systemName: "plus.magnifyingglass")
-      }
+      Text("\(percent)%").font(.caption.monospacedDigit()).frame(minWidth: 44)
+        .accessibilityLabel("缩放 \(percent)%")
     }.buttonStyle(.borderless).padding(.horizontal, 16).padding(.vertical, 12).modifier(
       WorkbenchGlass()
     ).shadow(color: .black.opacity(0.1), radius: 8, y: 3)
@@ -194,19 +215,13 @@ struct WorkbenchCanvas: View {
           dragEnd = v.location
         }.onEnded { v in
           let r = normalized(v.startLocation, v.location, size: size)
-          if r[2] - r[0] > 0.002 && r[3] - r[1] > 0.002 { s.commitSample(s.selectionTool, rect: r) }
+          if r[2] - r[0] > 0.002 && r[3] - r[1] > 0.002 {
+            s.commitSample(s.selectionTool, rect: viewport.fullRect(from: r))
+          }
           dragStart = nil
           dragEnd = nil
           s.selectionTool = ""
         })
-    } else if cr.count == 4 {
-      Path { p in
-        p.addRect(
-          CGRect(
-            x: cr[0] * size.width, y: cr[1] * size.height, width: (cr[2] - cr[0]) * size.width,
-            height: (cr[3] - cr[1]) * size.height))
-      }.stroke(.white.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-        .allowsHitTesting(false)
     }
     if let a = dragStart, let b = dragEnd {
       let r = normalized(a, b, size: size)
@@ -217,10 +232,11 @@ struct WorkbenchCanvas: View {
     }
     ForEach(["wb_rect", "film_base_rect", "shadow_rect", "highlight_rect"], id: \.self) { key in
       let r = s.params[key].array.map(\.double)
-      if r.count == 4 {
+      if r.count == 4, !s.selectionTool.isEmpty {
+        let visible = viewport.displayedRect(from: r)
         Rectangle().stroke(key == "wb_rect" ? Color.yellow : Color.cyan, lineWidth: 1).frame(
-          width: (r[2] - r[0]) * size.width, height: (r[3] - r[1]) * size.height
-        ).position(x: (r[0] + r[2]) * size.width / 2, y: (r[1] + r[3]) * size.height / 2)
+          width: max(0, visible.width) * size.width, height: max(0, visible.height) * size.height
+        ).position(x: visible.midX * size.width, y: visible.midY * size.height)
           .allowsHitTesting(false)
       }
     }

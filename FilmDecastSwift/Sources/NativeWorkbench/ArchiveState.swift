@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor final class ArchiveState: ObservableObject {
-  let engine = EngineBridge()
+  let engine = EngineBridge(background: true)
   @Published var loaded = false
   @Published var loading = false
   @Published var busy = false
@@ -14,7 +14,11 @@ import UniformTypeIdentifiers
   @Published var years: [String] = []
   @Published var stats: J = .null
   @Published var selected: String?
-  @Published var detail: J = .null
+  @Published var detail: J = .null {
+    didSet { selectedFrames.formIntersection(Set(detail["frames"].array.map { $0["id"].string })) }
+  }
+  @Published var selectedFrames: Set<String> = []
+  private var frameAnchor: String?
   @Published var query = "" { didSet { refreshSoon() } }
   @Published var status = "" { didSet { refreshSoon() } }
   @Published var year = "" { didSet { refreshSoon() } }
@@ -162,10 +166,38 @@ import UniformTypeIdentifiers
     guard let id = selected else { return }
     mutate("/api/archive/rolls/\(id)/frames/\(frameDraft["id"].string)", body: .object(["notes": frameDraft["notes"], "rating": frameDraft["rating"]]), method: "PUT", success: "照片备注已保存") { _ in self.showFrameEditor = false }
   }
+  func selectFrame(_ frame: J, extending: Bool = false, toggling: Bool = false) {
+    guard !busy else { return }
+    let ids = detail["frames"].array.map { $0["id"].string }, id = frame["id"].string
+    guard let end = ids.firstIndex(of: id) else { return }
+    if extending, let anchor = frameAnchor, let start = ids.firstIndex(of: anchor) {
+      let range = Set(ids[min(start,end)...max(start,end)])
+      selectedFrames = toggling ? selectedFrames.union(range) : range
+    } else if toggling {
+      if selectedFrames.contains(id) { selectedFrames.remove(id) } else { selectedFrames.insert(id) }
+      frameAnchor = id
+    } else {
+      selectedFrames = [id]; frameAnchor = id
+    }
+  }
+  func openFrame(_ frame: J) {
+    guard !busy else { return }
+    selectFrame(frame)
+    frameDraft = frame; showFrameEditor = true
+  }
+  func removeSelectedFrames() {
+    guard let id = selected, !busy, !selectedFrames.isEmpty else { return }
+    let ids = selectedFrames.sorted()
+    let alert = NSAlert(); alert.messageText = "从胶卷库移除 \(ids.count) 张照片？"
+    alert.informativeText = "仅移除索引，磁盘上的照片会保留。"
+    alert.addButton(withTitle: "移除索引"); alert.addButton(withTitle: "取消")
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
+    mutate("/api/archive/rolls/\(id)/frames/remove", body: .object(["ids": .array(ids.map(J.string))]),
+      success: "已移除 \(ids.count) 张照片的索引") { _ in self.selectedFrames = [] }
+  }
   func removeFrame(_ frame: J) {
-    guard let id = selected else { return }
-    let a = NSAlert(); a.messageText = "移除这张照片的档案关联？"; a.informativeText = "原始照片会保留。"; a.addButton(withTitle: "移除关联"); a.addButton(withTitle: "取消")
-    if a.runModal() == .alertFirstButtonReturn { mutate("/api/archive/rolls/\(id)/frames/\(frame["id"].string)", method: "DELETE", success: "已移除关联") }
+    if !selectedFrames.contains(frame["id"].string) { selectFrame(frame) }
+    removeSelectedFrames()
   }
   func backup() {
     guard loaded, !busy else { return }

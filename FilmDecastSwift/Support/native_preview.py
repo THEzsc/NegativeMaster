@@ -5,14 +5,19 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import time
 import numpy as np
 from PIL import Image
 import decast
 
 class PreviewCache:
-    def __init__(self, directory=None, limit=4):
+    def __init__(self, directory=None, limit=2, byte_limit=24*1024*1024):
         self.directory = Path(directory or os.environ.get('NM_PREVIEW_CACHE', Path.home() / 'Library/Caches/NegativeMaster/linear-v1'))
         self.limit = limit
+        self.byte_limit = byte_limit
+        self.bytes = 0
+        self._last_trim = None
+        self._written_since_trim = 0
         self.memory = OrderedDict()
 
     def key(self, path, opts):
@@ -46,7 +51,8 @@ class PreviewCache:
                               user_flip=0 if opts.no_autorotate else -1, half_size=True)
                     if opts.raw_denoise:
                         pp['fbdd_noise_reduction'] = decast.rawpy.FBDDNoiseReductionMode.Full
-                    a = raw.postprocess(**pp).astype(np.float32) / 65535
+                    a = raw.postprocess(**pp).astype(np.float32)
+                    a /= 65535
             else:
                 a, _ = decast.load_image(path, opts)
                 shape = a.shape[:2]
@@ -54,7 +60,7 @@ class PreviewCache:
             if scale < 1:
                 size = (round(a.shape[1]*scale), round(a.shape[0]*scale))
                 a = np.stack([np.asarray(Image.fromarray(a[...,c]).resize(size, Image.Resampling.BOX)) for c in range(3)], axis=-1)
-            value = (a.astype(np.float32), shape)
+            value = (a.astype(np.float32, copy=False), shape)
             try:
                 self.directory.mkdir(parents=True, exist_ok=True)
                 with tempfile.NamedTemporaryFile(dir=self.directory, suffix='.tmp', delete=False) as f:
@@ -64,12 +70,22 @@ class PreviewCache:
                         os.replace(temp, cached)
                     finally:
                         temp.unlink(missing_ok=True)
-                self.trim()
+                # Avoid rescanning the entire disk cache on every photo change.
+                now = time.monotonic()
+                self._written_since_trim += cached.stat().st_size
+                if (self._last_trim is None or now - self._last_trim >= 60
+                        or self._written_since_trim >= 64*1024*1024):
+                    self.trim()
+                    self._last_trim = now
+                    self._written_since_trim = 0
             except OSError:
                 pass  # A read-only or full cache must not prevent editing.
-        self.memory[key] = value
-        while len(self.memory) > self.limit:
-            self.memory.popitem(last=False)
+        if value[0].nbytes <= self.byte_limit and self.limit > 0:
+            self.memory[key] = value
+            self.bytes += value[0].nbytes
+            while len(self.memory) > self.limit or self.bytes > self.byte_limit:
+                _, removed = self.memory.popitem(last=False)
+                self.bytes -= removed[0].nbytes
         return value
 
     def trim(self):

@@ -10,6 +10,9 @@ import traceback
 import tempfile
 import argparse
 from html.parser import HTMLParser
+from native_runtime import configure_threads
+
+configure_threads()
 
 ROOT = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(ROOT))
@@ -44,7 +47,8 @@ def native_load(path, raw_denoise=False, decode_params=None):
         return
     image, shape = _preview_cache.load(path, opts)
     step = max(1, int(np.ceil(max(image.shape[:2]) / _preview_side)))
-    prev = image[::step, ::step].copy()
+    # Fine previews can share the immutable decode; interactive previews own a small buffer.
+    prev = image if step == 1 else image[::step, ::step].copy()
     gui.CACHE.update(path=path, full=image, prev=prev, lastP=None,
                      base=None, base_key=None, base_vrect=None,
                      raw_dn=raw_denoise, decode=None, scale=max(prev.shape[:2])/max(shape))
@@ -139,12 +143,17 @@ def adjustments(path):
             if data.get('cropN'):
                 p['crop_rect'] = [data['cropN'][k] for k in ('x0','y0','x1','y1')]
             return dict(params=p, data=data)
-    return dict(params=dict(gui.DEFAULTS), data={})
+    from native_film import fresh_params
+    return dict(params=fresh_params(gui.DEFAULTS), data={})
 
 
 def save_adjustments(path, p, sidecar=False):
+    current = adjustments(path)
+    if current['data'] and current['params'] == p and (not sidecar or Path(gui.sidecar_path(path)).is_file()):
+        return dict(ok=True)
     cr = p.get('crop_rect')
-    data = dict(P=p, geometrySource=p.get('geometry_source', 'manual'), cropN=dict(zip(('x0','y0','x1','y1'),cr)) if cr else {},curFmt='free',orient='land')
+    data = dict(current['data']) if current['data'] else dict(curFmt='free', orient='land')
+    data.update(P=p, geometrySource=p.get('geometry_source', 'manual'), cropN=dict(zip(('x0','y0','x1','y1'),cr)) if cr else {})
     target = Path(gui.settings_file(path))
     target.parent.mkdir(parents=True,exist_ok=True)
     tmp = target.with_suffix('.tmp')
@@ -173,12 +182,19 @@ def handle(message):
     _preview_mode = action in ('render', 'negative', 'autocrop', 'wbtemp', 'analyze_gamma')
     _preview_side = 720 if body.get('interactive') and action == 'render' else 1500
     if action == 'bootstrap':
-        return dict(ok=True, defaults=gui.DEFAULTS, fields=parser.fields,
+        from native_sync import catalog
+        from native_film import fresh_params
+        return dict(ok=True, defaults=fresh_params(gui.DEFAULTS), fields=parser.fields,
+                    syncGroups=catalog(),
                     rawExtensions=sorted(ext.lstrip(".") for ext in decast.RAW_EXTS),
                     sheetDefaults=json.loads((Path(__file__).parent/'sheet-defaults.json').read_text()),
                     presets=decast.list_presets(), stocks=request('/api/sheet/catalog',method='GET')['stocks'])
     if action == 'adjustments':
         return adjustments(body['path'])
+    if action == 'detail':
+        from native_detail import render_detail
+        restore_reference(body['params'])
+        return render_detail(body, gui)
     if action == 'save':
         return save_adjustments(body['path'],body['params'],body.get('sidecar',False))
     if action == 'batch_snapshot':
@@ -192,6 +208,24 @@ def handle(message):
     if action == 'batch_apply':
         from native_batch import apply
         return apply(gui, DATA_ROOT, body['path'], body['patch'], body['token'], adjustments)
+    if action == 'film_apply':
+        from native_batch import apply
+        if 'emulsion' in body:
+            from native_film import emulsion_patch
+            patch = emulsion_patch(adjustments(body['path'])['params'], body['emulsion'])
+            return apply(gui, DATA_ROOT, body['path'], patch, body['token'], adjustments, emulsion=True)
+        if body.get('preset'):
+            if gui.bad_preset_name(body['preset']):
+                raise ValueError('预设名称无效')
+            patch = decast.load_preset(body['preset'])
+        else:
+            patch = {'mode': body.get('mode')}
+        return apply(gui, DATA_ROOT, body['path'], patch, body['token'], adjustments, film=True)
+    if action == 'sync_apply':
+        from native_batch import apply
+        from native_sync import patch_for
+        patch = patch_for(body.get('groups'), body.get('source'), gui.DEFAULTS)
+        return apply(gui, DATA_ROOT, body['path'], patch, body['token'], adjustments, sync=True)
     if action == 'batch_restore':
         from native_batch import restore
         return restore(gui, DATA_ROOT, body['undo_id'], adjustments)
@@ -248,6 +282,10 @@ def handle(message):
         result = _cover(image,(1200,round(1200/ratio)),body.get('override'),body.get('fit','contain'))
         buf=io.BytesIO();result.save(buf,'PNG')
         return dict(ok=True,bytes=base64.b64encode(buf.getvalue()).decode())
+    if action == 'export_log':
+        from archive_index import write_export_log
+        log = write_export_log(body['items'], body['directory'], gui.settings_file)
+        return dict(ok=True, log=str(log))
     if action == 'export':
         p = body['params']
         restore_reference(p)

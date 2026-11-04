@@ -34,6 +34,15 @@ enum GammaRecommendation {
 }
 
 extension WorkbenchState {
+  func estimateFilmGamma() {
+    guard ready, !busy, !analyzing else { return }
+    if filmAppliesToRoll {
+      presentRollAutomation("gamma")
+      automationScope = "roll"
+    } else {
+      analyzeGamma(roll: false)
+    }
+  }
   var workflowSettings: J {
     var result = J.object(["P": params, "curFmt": .string("free"), "orient": .string("land")])
     let crop = params["crop_rect"].array
@@ -114,38 +123,34 @@ extension WorkbenchState {
 
 struct NativeWorkflowControls: View {
   @Environment(WorkbenchState.self) var s
-  private var bindings: Bindable<WorkbenchState> { Bindable(s) }
   var body: some View {
     DevelopPanel("影调风格", id: "looks") {
       Menu("应用风格") {
         ForEach(ToneLook.all) { look in Button(look.name) { s.applyLook(look) } }
       }
     }
-    DevelopPanel("Gamma 分析", id: "gamma") {
-      HStack {
-        Button("分析这一张") { s.analyzeGamma(roll: false) }
-        Button("整卷逐张分析…") { s.analyzeGamma(roll: true) }
-      }.disabled(s.analyzing)
-      if s.analyzing { ProgressView("正在分析明暗分布…").controlSize(.small) }
-      if s.gammaAnalysis != .null {
-        let report = s.gammaAnalysis["report"]
-        if case .number(let value) = report["recommendation"] {
-          LabeledContent(report["parameter_key"].string == "nd_gamma" ? "建议纸张反差" : "建议 Gamma", value: String(format: "%.3f", value))
-        } else { Text("当前画面没有可靠的 Gamma 建议") }
-        let confidence = ["high":"高", "medium":"中", "low":"低", "none":"不足"][report["confidence"].string] ?? "不足"
-        Text("可信度：\(confidence)").font(.caption).foregroundStyle(.secondary)
-        ForEach(Array(report["warnings"].array.enumerated()), id: \.offset) { _, warning in Text(warning.string).font(.caption).foregroundStyle(.secondary) }
-        if !s.gammaFresh { Text("调整已改变，请重新分析").font(.caption).foregroundStyle(.orange) }
-        HStack {
-          Button("应用到这张", action: s.applyGamma)
-          if s.analysisIsRoll {
-            Button("锁定到已分析的 \(s.analysisPaths.count) 张", action: s.lockRollGamma).disabled(!s.canLockRoll)
-          }
-        }.disabled(!s.gammaApplicable)
-        if !s.gammaAnalysis["errors"].array.isEmpty {
-          DisclosureGroup("\(s.gammaAnalysis["errors"].array.count) 张未参与分析") {
-            ForEach(Array(s.gammaAnalysis["errors"].array.enumerated()), id: \.offset) { _, item in Text(item["path"].string + "：" + item["error"].string).font(.caption) }
-          }
+  }
+}
+
+struct FilmGammaControls: View {
+  @Environment(WorkbenchState.self) var s
+  var body: some View {
+    Button(s.filmAppliesToRoll ? "逐张估计整卷 Gamma…" : "估计这张 Gamma", action: s.estimateFilmGamma)
+      .disabled(s.analyzing)
+    if s.analyzing { ProgressView("正在分析明暗分布…").controlSize(.small) }
+    if !s.filmAppliesToRoll && s.gammaAnalysis != .null {
+      let report = s.gammaAnalysis["report"]
+      if case .number(let value) = report["recommendation"] {
+        LabeledContent(report["parameter_key"].string == "nd_gamma" ? "建议纸张反差" : "建议 Gamma", value: String(format: "%.3f", value))
+      } else { Text("当前画面没有可靠的 Gamma 建议") }
+      let confidence = ["high":"高", "medium":"中", "low":"低", "none":"不足"][report["confidence"].string] ?? "不足"
+      Text("可信度：\(confidence)").font(.caption).foregroundStyle(.secondary)
+      ForEach(Array(report["warnings"].array.enumerated()), id: \.offset) { _, warning in Text(warning.string).font(.caption).foregroundStyle(.secondary) }
+      if !s.gammaFresh { Text("调整已改变，请重新分析").font(.caption).foregroundStyle(.orange) }
+      Button("应用到这张", action: s.applyGamma).disabled(!s.gammaApplicable)
+      if !s.gammaAnalysis["errors"].array.isEmpty {
+        DisclosureGroup("\(s.gammaAnalysis["errors"].array.count) 张未参与分析") {
+          ForEach(Array(s.gammaAnalysis["errors"].array.enumerated()), id: \.offset) { _, item in Text(item["path"].string + "：" + item["error"].string).font(.caption) }
         }
       }
     }

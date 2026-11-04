@@ -20,6 +20,22 @@ from archive_app import create_archive_blueprint
 
 
 class ArchiveTests(unittest.TestCase):
+    def test_batch_removal_is_roll_scoped_atomic_and_keeps_files(self):
+        roll = self.create()
+        result = self.add(roll, mode='all')
+        frames = result['roll']['frames']
+        endpoint = f"/api/archive/rolls/{roll['id']}/frames/remove"
+        before = {f['path']: Path(f['path']).read_bytes() for f in frames}
+        failed = self.write('post', endpoint, dict(ids=[frames[0]['id'], 'missing-id']))
+        self.assertEqual(failed.status_code, 400)
+        current = self.client.get(f"/api/archive/rolls/{roll['id']}").get_json()['roll']
+        self.assertEqual(len(current['frames']), len(frames))
+        removed = self.write('post', endpoint, dict(ids=[f['id'] for f in frames[:2]])).get_json()
+        self.assertEqual(removed['removed'], 2)
+        self.assertEqual(len(removed['roll']['frames']), len(frames)-2)
+        for path, data in before.items():
+            self.assertEqual(Path(path).read_bytes(), data)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)

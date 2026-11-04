@@ -3,6 +3,7 @@ import AppKit
 
 extension WorkbenchState {
   func selectPhoto(_ path: String, extending: Bool = false, toggling: Bool = false) {
+    guard !editingBatch else { return }
     let paths = filteredPhotos.map(\.path)
     guard let index = paths.firstIndex(of: path) else { return }
     if extending, let anchor = selectionAnchor, let start = paths.firstIndex(of: anchor) {
@@ -32,17 +33,27 @@ extension WorkbenchState {
     let index = paths.firstIndex(of: selected ?? "") ?? (delta > 0 ? -1 : paths.count)
     selectPhoto(paths[min(paths.count - 1, max(0, index + delta))], extending: extending)
   }
-  func generateThumbnails() {
+  func stopThumbnailGeneration() {
     thumbnailTask?.cancel()
+    thumbnailTask = nil
+    thumbnailDone = 0; thumbnailTotal = 0
+  }
+  // Visible thumbnails load on demand. Only this explicit command warms a whole roll.
+  func generateThumbnails() {
+    stopThumbnailGeneration()
     let paths = filteredPhotos.map(\.path)
     thumbnailDone = 0; thumbnailTotal = paths.count
     thumbnailTask = Task {
       for path in paths {
+        // Give foreground editing and other applications priority over cache warming.
+        while rendering || busy || editingBatch || workspace != .develop || !NSApp.isActive {
+          do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+        }
         guard !Task.isCancelled else { return }
         _ = try? await ImagePipeline.shared.file(path, size: 160)
         guard !Task.isCancelled else { return }
         thumbnailDone += 1
-        await Task.yield()
+        do { try await Task.sleep(for: .milliseconds(40)) } catch { return }
       }
       await ImagePipeline.trimThumbnails()
     }
@@ -74,6 +85,7 @@ struct PhotoBrowser: View {
         ScrollView(horizontal ? .horizontal : .vertical) {
           if horizontal {
             LazyHStack(spacing: 6) { ForEach(s.filteredPhotos) { photo in tile(photo).id(photo.path) } }.padding(10)
+              .background(ScrollWheelSupport())
           } else {
             LazyVStack(spacing: 3) { ForEach(s.filteredPhotos) { photo in tile(photo).id(photo.path) } }.padding(.horizontal, 8).padding(.vertical, 4)
           }
@@ -128,6 +140,9 @@ struct PhotoBrowser: View {
       .contextMenu {
         Button("在 Finder 中显示") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: photo.path)]) }
         Button("只选择这张") { s.selectPhoto(photo.path) }
+        Divider()
+        Button("从列表移除", role: .destructive) { s.removePhotoFromList(photo.path) }
+          .disabled(s.busy || s.analyzing)
       }
   }
 }

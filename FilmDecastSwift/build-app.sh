@@ -20,7 +20,7 @@ if [[ -e "$APP_PATH" ]]; then
 fi
 
 cd "$SOURCE_DIR"
-swift build -c release --product FilmDecast
+swift build -c release --product FilmDecast -j "${NM_BUILD_JOBS:-2}"
 BIN_DIR="$(swift build -c release --show-bin-path)"
 PROJECT_DIR="$(cd "$SOURCE_DIR/.." && pwd)"
 PYTHON="$PROJECT_DIR/.venv/bin/python"
@@ -44,7 +44,7 @@ cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>2.1</string>
-    <key>CFBundleVersion</key><string>10</string>
+    <key>CFBundleVersion</key><string>14</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
@@ -57,7 +57,7 @@ done
 for folder in data static templates presets; do
   /usr/bin/ditto "$PROJECT_DIR/$folder" "$APP_PATH/Contents/Resources/Engine/$folder"
 done
-cp "$SOURCE_DIR/Support/native_worker.py" "$SOURCE_DIR/Support/native_preview.py" "$SOURCE_DIR/Support/native_batch.py" "$SOURCE_DIR/Support/sheet-defaults.json" "$APP_PATH/Contents/Resources/Engine/FilmDecastSwift/Support/"
+cp "$SOURCE_DIR/Support/native_worker.py" "$SOURCE_DIR/Support/native_preview.py" "$SOURCE_DIR/Support/native_detail.py" "$SOURCE_DIR/Support/native_film.py" "$SOURCE_DIR/Support/native_runtime.py" "$SOURCE_DIR/Support/native_batch.py" "$SOURCE_DIR/Support/native_sync.py" "$SOURCE_DIR/Support/sheet-defaults.json" "$APP_PATH/Contents/Resources/Engine/FilmDecastSwift/Support/"
 "$PYTHON" "$SOURCE_DIR/Support/package_runtime.py" "$APP_PATH/Contents/Resources/Runtime"
 "$PYTHON" - "$PROJECT_DIR" "$APP_PATH/Contents/Resources/Runtime.json" <<'PYCODE'
 import json,sys

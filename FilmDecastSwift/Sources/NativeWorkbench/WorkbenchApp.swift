@@ -65,6 +65,8 @@ import SwiftUI
         Button(state.inspector ? "隐藏检查器" : "显示检查器", action: { state.inspector.toggle() })
           .keyboardShortcut("i", modifiers: [.command, .option])
         Button("适合窗口", action: { state.zoom = 1 }).keyboardShortcut("0")
+        Button("放大", action: { state.zoom = min(16, state.zoom * 1.25) }).keyboardShortcut("+")
+        Button("缩小", action: { state.zoom = max(0.25, state.zoom / 1.25) }).keyboardShortcut("-")
         Toggle("照片栏放在底部", isOn: $state.filmstripBottom)
         Picker("外观", selection: $appearance) {
           Text("跟随系统").tag("system")

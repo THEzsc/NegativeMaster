@@ -38,74 +38,51 @@ struct WorkbenchInspector: View {
     }.controlSize(.small)
   }
   @ViewBuilder private var developForm: some View {
-    DevelopPanel("胶片", id: "film") {
-      stringPicker(
-        "类型", key: "mode", choices: [("color", "彩色负片"), ("bw", "黑白负片"), ("positive", "正片")])
-      Picker("预设", selection: Binding(get: { s.selectedPreset }, set: { s.applyPreset($0) })) {
-        Text("自定义").tag("")
-        ForEach(s.presetNames, id: \.self) { Text($0).tag($0) }
-      }
-      HStack {
-        Button("存为预设…") { s.askName("preset") }
-        Spacer()
-        Button("删除预设", role: .destructive, action: s.deletePreset).disabled(
-          s.selectedPreset.isEmpty)
-      }
-    }
     DevelopPanel("直方图", id: "histogram") {
       HistogramView(data: ["r", "g", "b"].map { s.histogram[$0].array.map { Float($0.double) } })
         .frame(height: 75)
     }
-    DevelopPanel("光线", id: "light") {
+    DevelopPanel("裁剪与旋转", id: "crop") {
+      HStack {
+        Button("左转") { s.rotate(-90) }
+        Button("右转") { s.rotate(90) }
+        Button("水平翻转") { s.mirror("h") }
+        Button("垂直翻转") { s.mirror("v") }
+      }
+      Picker("裁剪比例", selection: Binding(get: { s.cropAspect }, set: {
+        s.cropAspect = $0
+        s.updateCropAspect()
+      })) {
+        Text("自由").tag("free")
+        ForEach(["3:2", "2:3", "4:3", "3:4", "1:1", "6:7", "7:6"], id: \.self) {
+          Text($0).tag($0)
+        }
+      }
+      Button(s.selectionTool == "crop" ? "完成裁剪" : "编辑裁剪框") {
+        s.selectionTool = s.selectionTool == "crop" ? "" : "crop"
+      }
+      Button("清除裁剪") { s.setParam("crop_rect", .null) }
+      Button("重置裁剪边距") { s.setParam("crop_rect", .doubles([0.06, 0.06, 0.94, 0.94])) }
+      number("level_angle", "微量旋转 · 度", -15...15, 0.05)
+      HStack {
+        Button("−0.1°") { s.setParam("level_angle", .number(max(-15, s.params["level_angle"].double - 0.1))) }
+        Button("归零") { s.setParam("level_angle", .number(0)) }
+        Button("+0.1°") { s.setParam("level_angle", .number(min(15, s.params["level_angle"].double + 0.1))) }
+      }
+    }
+    DevelopPanel("基本", id: "light") {
+      stringPicker("白平衡", key: "wb", choices: [("gray", "自动"), ("none", "关闭")])
+      number("temp", "色温", -100...100, 1)
+      number("tint", "色调", -100...100, 1)
+      sampleButton("wb_rect", "框选中性灰")
       number("exposure", "曝光", -3...3, 0.05)
-      number("gamma", "亮度 Gamma", 0.6...3, 0.05)
       number("contrast", "对比度", -0.5...0.6, 0.02)
       number("highlights", "高光", -100...100, 1)
       number("shadows", "阴影", -100...100, 1)
       number("whites", "白色", -100...100, 1)
       number("blacks", "黑色", -100...100, 1)
-    }
-    DevelopPanel("色阶", id: "levels") {
-      number("black_pct", "黑点百分位", 0...3, 0.1)
-      number("white_pct", "白点百分位", 97...100, 0.1)
-    }
-    NativeWorkflowControls()
-    DevelopPanel("同步调整", id: "sync") {
-      Button("应用当前调整到\(s.checked.isEmpty ? "整卷":"已选照片")", action: { s.applyToRoll() })
-      Button("仅把白平衡应用到整卷") { s.applyToRoll(whiteBalanceOnly: true) }
-      Button("保存照片旁的 XML", action: { s.persistNow(sidecar: true) })
-    }
-    DevelopPanel("白平衡", id: "whiteBalance") {
-      stringPicker("白平衡", key: "wb", choices: [("gray", "自动"), ("none", "关闭")])
-      number("temp", "色温", -100...100, 1)
-      number("tint", "色调", -100...100, 1)
-      sampleButton("wb_rect", "框选中性灰")
-    }
-    DevelopPanel("色彩", id: "color") {
-      number("saturation", "饱和度", 0...2, 0.02)
       number("vibrance", "鲜艳度", -100...100, 1)
-    }
-    DevelopPanel("颜色混合 · HSL", id: "hsl") {
-      Picker("颜色", selection: $hslBand) {
-        ForEach(
-          Array(
-            zip(
-              ["red", "orange", "yellow", "green", "aqua", "blue", "purple", "magenta"],
-              ["红", "橙", "黄", "绿", "青", "蓝", "紫", "洋红"])), id: \.0
-        ) { Text($0.1).tag($0.0) }
-      }
-      number("hsl.\(hslBand).h", "色相", -100...100, 1)
-      number("hsl.\(hslBand).s", "饱和度", -100...100, 1)
-      number("hsl.\(hslBand).l", "明亮度", -100...100, 1)
-      Button("重置全部 HSL") { s.setParam("hsl", .object([:])) }
-    }
-    DevelopPanel("参照匹配", id: "reference") {
-      Button("选择参照成片…", action: s.pickReference)
-      if !s.referenceName.isEmpty {
-        Text(s.referenceName).font(.caption).foregroundStyle(.secondary)
-        Toggle("启用参照匹配", isOn: boolBinding("use_match")).help("启用后替代部分基础影调调整")
-        Button("清除参照", action: s.clearReference)
-      }
+      number("saturation", "饱和度", 0...2, 0.02)
     }
     DevelopPanel("色调曲线", id: "curves") {
       Picker("通道", selection: $curveChannel) {
@@ -120,12 +97,50 @@ struct WorkbenchInspector: View {
       ).frame(height: 240).help("点击添加控制点，拖动调整；双击删除控制点")
       Button("重置当前曲线") { s.setParam(curveChannel, .null) }
     }
+    DevelopPanel("颜色混合 · HSL", id: "hsl") {
+      HSLBandSelector(selection: $hslBand)
+      number("hsl.\(hslBand).h", "色相", -100...100, 1)
+      number("hsl.\(hslBand).s", "饱和度", -100...100, 1)
+      number("hsl.\(hslBand).l", "明亮度", -100...100, 1)
+      Button("重置全部 HSL") { s.setParam("hsl", .object([:])) }
+    }
     DevelopPanel("细节", id: "detail") {
-      number("denoise", "色度降噪", 0...12, 1)
       number("sharpen", "锐化强度", 0...3, 0.05)
       number("sharpen_radius", "锐化半径", 0.5...5, 0.1)
+      number("denoise", "色度降噪", 0...12, 1)
       Toggle("RAW 解码降噪", isOn: boolBinding("raw_denoise"))
+    }
+    DevelopPanel("效果", id: "effects") {
       number("vignette", "晕影", -100...100, 1)
+    }
+    DevelopPanel("胶片", id: "film") {
+      Toggle("应用到整卷", isOn: bindings.filmAppliesToRoll)
+        .toggleStyle(.checkbox)
+        .help("将之后修改的胶片类型、预设和药膜面翻拍设置应用到整卷；Gamma 按每张分别估计。")
+      Toggle("药膜面翻拍", isOn: Binding(get: { s.emulsionMirrored }, set: { s.setEmulsionMirrored($0) }))
+        .toggleStyle(.checkbox)
+        .help("校正药膜面翻拍的镜像方向；新照片默认开启。")
+      Picker("类型", selection: Binding(get: { s.params["mode"].string }, set: { s.setFilmMode($0) })) {
+        Text("彩色负片").tag("color")
+        Text("黑白负片").tag("bw")
+        Text("正片").tag("positive")
+      }
+      Picker("预设", selection: Binding(get: { s.selectedPreset }, set: { s.applyPreset($0) })) {
+        Text("自定义").tag("")
+        ForEach(s.presetNames, id: \.self) { Text($0).tag($0) }
+      }
+      HStack {
+        Button("存为预设…") { s.askName("preset") }
+        Spacer()
+        Button("删除预设", role: .destructive, action: s.deletePreset).disabled(
+          s.selectedPreset.isEmpty)
+      }
+      FilmGammaControls()
+    }
+    DevelopPanel("反转与色阶", id: "levels") {
+      number("gamma", "亮度 Gamma", 0.6...3, 0.05)
+      number("black_pct", "黑点百分位", 0...3, 0.1)
+      number("white_pct", "白点百分位", 97...100, 0.1)
     }
     DevelopPanel("片基与影调取样", id: "sampling") {
       sampleButton("film_base_rect", "框选片基")
@@ -143,39 +158,29 @@ struct WorkbenchInspector: View {
         number("nd_softclip", "高光柔和度", 0...1, 0.01)
       }
     }
+    DevelopPanel("自动裁剪", id: "autoCrop") {
+      Button("自动裁剪与校平", action: s.autoCrop)
+      Button("整卷自动裁剪…") { s.presentRollAutomation("crop") }
+      Toggle("参考同卷已调照片", isOn: bindings.useRollReference)
+    }
+    NativeWorkflowControls()
+    DevelopPanel("参照匹配", id: "reference") {
+      Button("选择参照成片…", action: s.pickReference)
+      if !s.referenceName.isEmpty {
+        Text(s.referenceName).font(.caption).foregroundStyle(.secondary)
+        Toggle("启用参照匹配", isOn: boolBinding("use_match")).help("启用后替代部分基础影调调整")
+        Button("清除参照", action: s.clearReference)
+      }
+    }
     DevelopPanel("输入", id: "input") {
       Toggle("载入时重置调整", isOn: bindings.resetOnLoad)
       stringPicker("普通图片编码", key: "input_gamma", choices: [("srgb", "sRGB"), ("linear", "线性")])
       Toggle("关闭相机白平衡", isOn: boolBinding("no_camera_wb"))
       Toggle("关闭 EXIF 自动旋转", isOn: boolBinding("no_autorotate"))
     }
-    DevelopPanel("裁剪与旋转", id: "crop") {
-      HStack {
-        Button("左转") { s.rotate(-90) }
-        Button("右转") { s.rotate(90) }
-        Button("水平翻转") { s.mirror("h") }
-        Button("垂直翻转") { s.mirror("v") }
-      }
-      Picker("裁剪比例", selection: bindings.cropAspect) {
-        Text("自由").tag("free")
-        ForEach(["3:2", "2:3", "4:3", "3:4", "1:1", "6:7", "7:6"], id: \.self) {
-          Text($0).tag($0)
-        }
-      }.onChange(of: s.cropAspect) { _, _ in s.updateCropAspect() }
-      Button(s.selectionTool == "crop" ? "完成裁剪" : "编辑裁剪框") {
-        s.selectionTool = s.selectionTool == "crop" ? "" : "crop"
-      }
-      Button("清除裁剪") { s.setParam("crop_rect", .null) }
-      Button("重置裁剪边距") { s.setParam("crop_rect", .doubles([0.06, 0.06, 0.94, 0.94])) }
-      number("level_angle", "微量旋转 · 度", -15...15, 0.05)
-      HStack {
-        Button("−0.1°") { s.setParam("level_angle", .number(max(-15, s.params["level_angle"].double - 0.1))) }
-        Button("归零") { s.setParam("level_angle", .number(0)) }
-        Button("+0.1°") { s.setParam("level_angle", .number(min(15, s.params["level_angle"].double + 0.1))) }
-      }
-      Button("自动裁剪与校平", action: s.autoCrop)
-      Button("整卷自动裁剪…") { s.presentRollAutomation("crop") }
-      Toggle("参考同卷已调照片", isOn: bindings.useRollReference)
+    DevelopPanel("同步调整", id: "sync") {
+      SyncAdjustmentsControls()
+      Button("保存照片旁的 XML", action: { s.persistNow(sidecar: true) })
     }
     DevelopPanel("导出照片", id: "export") {
       Picker("格式", selection: bindings.exportFormat) {
@@ -427,16 +432,40 @@ struct WorkbenchInspector: View {
 }
 
 struct NumericControl: View {
+  @Environment(\.compactDevelopControls) private var compact
   let title: String
   @Binding var value: Double
   let range: ClosedRange<Double>
   var step = 1.0
   var body: some View {
-    VStack(spacing: 6) {
+    if compact {
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: 8) {
+          Text(title).fixedSize().frame(minWidth: 56, alignment: .leading)
+          slider.frame(minWidth: 100)
+          valueField.frame(width: 52)
+        }.frame(minHeight: 28)
+        stacked
+      }
+    } else {
+      stacked.padding(.vertical, 3)
+    }
+  }
+  private var stacked: some View {
+    VStack(spacing: compact ? 2 : 6) {
       HStack {
         Text(title)
         Spacer()
-        TextField(
+        valueField.frame(width: 64)
+      }
+      slider
+    }
+  }
+  private var slider: some View {
+    Slider(value: $value, in: range, step: step).labelsHidden().accessibilityLabel(title)
+  }
+  private var valueField: some View {
+    TextField(
           title,
           value: Binding(
             get: { value },
@@ -446,10 +475,7 @@ struct NumericControl: View {
             }), format: .number.precision(.fractionLength(step >= 1 ? 0 : 2))
         ).labelsHidden().multilineTextAlignment(.trailing).textFieldStyle(.plain).font(
           .system(.caption, design: .monospaced)
-        ).frame(width: 64).accessibilityLabel(title + "数值")
-      }
-      Slider(value: $value, in: range, step: step).labelsHidden().accessibilityLabel(title)
-    }.padding(.vertical, 3)
+        ).accessibilityLabel(title + "数值")
   }
 }
 struct SchemaControl: View {

@@ -126,8 +126,14 @@ def load_image(path, args):
             if args.raw_denoise:
                 # RAW 阶段的 FBDD 降噪，反转前就先压一遍传感器噪声
                 pp["fbdd_noise_reduction"] = rawpy.FBDDNoiseReductionMode.Full
+            preview_side = getattr(args, 'preview_max_side', 0)
+            if preview_side > 0:
+                pp['half_size'] = True
+                args._preview_original_side = max(raw.sizes.height, raw.sizes.width)
             rgb16 = raw.postprocess(**pp)
         lin = rgb16.astype(np.float32) / 65535.0
+        if preview_side > 0:
+            lin = _resize_long_edge(lin, preview_side)
         return lin, True
 
     if ext in IMG_EXTS:
@@ -183,6 +189,10 @@ def load_image(path, args):
             if not np.isfinite(input_gamma) or input_gamma <= 0:
                 raise ValueError("输入 gamma 必须是正有限数、srgb 或 linear")
             lin = np.power(enc, input_gamma)
+        preview_side = getattr(args, 'preview_max_side', 0)
+        if preview_side > 0:
+            args._preview_original_side = max(lin.shape[:2])
+            lin = _resize_long_edge(lin, preview_side)
         return lin.astype(np.float32), False
 
     raise RuntimeError(f"不支持的文件类型：{ext}")

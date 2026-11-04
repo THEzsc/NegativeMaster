@@ -48,7 +48,10 @@ struct RollSuggestion: Identifiable {
 }
 
 extension WorkbenchState {
-  var automationPhotos: [Photo] { automationScope == "selected" ? visibleCheckedPhotos : filteredPhotos }
+  var automationPhotos: [Photo] {
+    if automationScope == "roll" { return photos }
+    return automationScope == "selected" ? visibleCheckedPhotos : filteredPhotos
+  }
   var automationTitle: String { automationKind == "crop" ? "整卷自动裁剪与校平" : "整卷逐张 Gamma 分析" }
   var automationChosen: Int { automationRows.filter { $0.included && $0.eligible && !$0.applied }.count }
   var automationUndoCount: Int { automationRows.filter { $0.applied && $0.undoID != nil }.count }
@@ -159,6 +162,7 @@ struct RollAutomationSheet: View {
       Text(s.automationTitle).font(.title2.bold())
       if s.automationPhase == "configure" {
         Picker("处理范围", selection: bindings.automationScope) {
+          Text("当前整卷 · \(s.photos.count) 张").tag("roll")
           Text("当前列表 · \(s.filteredPhotos.count) 张").tag("visible")
           Text("所选照片 · \(s.visibleCheckedPhotos.count) 张").tag("selected")
         }

@@ -307,7 +307,7 @@ def create_archive_blueprint(data_dir=None, make_opts=None, read_xml=None, setti
         paths = [Path(text_value(p, 4096, "照片路径")).expanduser() for p in paths]
         paths.sort(key=lambda p: tuple((1, int(t)) if t.isdigit() else (0, t.casefold()) for t in re.split(r"(\d+)", str(p))))
         try:
-            items = archive_index.resolve_sources(paths, IMAGE_EXTS, RAW_EXTS)
+            items = archive_index.resolve_sources(paths, IMAGE_EXTS, RAW_EXTS, settings_file)
         except ValueError as exc:
             raise ArchiveError(str(exc)) from None
         if len(items) > MAX_FRAMES:
@@ -329,7 +329,15 @@ def create_archive_blueprint(data_dir=None, make_opts=None, read_xml=None, setti
             thumb = ''
             try:
                 if item['raw']:
-                    image = archive_index.raw_preview(path, make_opts, read_xml, settings_file)
+                    image = archive_index.cached_jpeg(path,
+                        archive_index.saved_data(path, read_xml, settings_file), settings_file,
+                        lambda: archive_index.raw_preview(path, make_opts, read_xml, settings_file), 960)
+                    thumb = store.save_image(image, max_side=960, quality=72)
+                    image.close()
+                elif (path == source and not archive_index.is_export(Path(path))
+                      and (Path(path).suffix.lower() not in archive_index.JPEG_EXTS
+                           or archive_index.saved_data(path, read_xml, settings_file))):
+                    image = archive_index.image_preview(path, make_opts, read_xml, settings_file)
                     thumb = store.save_image(image, max_side=960, quality=72)
                     image.close()
                 else:
@@ -419,6 +427,26 @@ def create_archive_blueprint(data_dir=None, make_opts=None, read_xml=None, setti
             db.execute("UPDATE rolls SET updated_at=? WHERE id=?", (now(), identifier))
             result = store.roll(db, identifier, frames=True)
         return jsonify(ok=True, roll=result, added=added, warnings=warnings)
+
+    @bp.post("/api/archive/rolls/<identifier>/frames/remove")
+    def remove_frames(identifier):
+        ids = body().get('ids')
+        if (not isinstance(ids, list) or not ids or len(ids) > MAX_FRAMES
+                or any(not isinstance(fid, str) or not fid for fid in ids)):
+            raise ArchiveError('请选择要移除的照片。')
+        ids = list(dict.fromkeys(ids))
+        placeholders = ','.join('?' for _ in ids)
+        with store.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            store.roll(db, identifier)
+            count = db.execute(f'SELECT COUNT(*) FROM frames WHERE roll_id=? AND id IN ({placeholders})',
+                               (identifier, *ids)).fetchone()[0]
+            if count != len(ids):
+                raise ArchiveError('照片关联已变化，请刷新后重新选择。')
+            db.execute(f'DELETE FROM frames WHERE roll_id=? AND id IN ({placeholders})', (identifier, *ids))
+            db.execute('UPDATE rolls SET updated_at=? WHERE id=?', (now(), identifier))
+            result = store.roll(db, identifier, frames=True)
+        return jsonify(ok=True, removed=count, roll=result)
 
     @bp.route("/api/archive/rolls/<identifier>/frames/<fid>", methods=["PUT", "DELETE"])
     def edit_frame(identifier, fid):

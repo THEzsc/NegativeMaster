@@ -32,6 +32,7 @@ actor ImagePipeline {
     } catch { pending[key] = nil; throw error }
   }
   func file(_ path: String, size: Int) async throws -> CGImage? {
+    try Task.checkCancellation()
     let attributes = try FileManager.default.attributesOfItem(atPath: path)
     let stamp = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
     let fileSize = attributes[.size] as? Int ?? 0
@@ -102,6 +103,18 @@ actor ImagePipeline {
     await Task.detached(priority: .userInitiated) {
       guard let data = Data(base64Encoded: value.string) else { return nil }
       return decode(data, size: 2000)
+    }.value
+  }
+  nonisolated static func detail(_ url: URL, size: Int) async -> CGImage? {
+    await Task.detached(priority: .utility) {
+      guard let source = CGImageSourceCreateWithURL(url as CFURL,
+        [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
+      return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceThumbnailMaxPixelSize: size,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceShouldCacheImmediately: true
+      ] as CFDictionary)
     }.value
   }
 }

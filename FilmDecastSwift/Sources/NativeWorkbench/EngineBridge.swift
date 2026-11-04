@@ -7,6 +7,8 @@ struct WorkbenchError: LocalizedError {
 
 /// A serial, persistent local worker. Images never leave the machine; no HTTP listener.
 private final class WorkerConnection {
+  private let background: Bool
+  init(background: Bool = false) { self.background = background }
   private var process: Process?
   private var input: FileHandle?
   private var output: FileHandle?
@@ -38,6 +40,7 @@ private final class WorkerConnection {
       throw WorkbenchError(message: "找不到本地图像处理环境。请在原项目运行 FilmDecastSwift/build-app.sh 重新打包。")
     }
     let p = Process()
+    p.qualityOfService = background ? .utility : .userInitiated
     let to = Pipe()
     let from = Pipe()
     p.executableURL = URL(fileURLWithPath: python)
@@ -82,8 +85,17 @@ private final class WorkerConnection {
     output = from.fileHandleForReading
     buffer = Data()
   }
-  func call(_ message: J) throws -> J {
+  func call(_ message: J, transientTicket: RequestCancellation? = nil) throws -> J {
     try start()
+    if let ticket = transientTicket, let process {
+      ticket.onCancel { if process.isRunning { process.terminate() } }
+    }
+    defer {
+      if let ticket = transientTicket {
+        ticket.clearCancelAction()
+        stop()
+      }
+    }
     guard let input, let output else { throw WorkbenchError(message: "图像引擎未启动") }
     var data = message.data
     data.append(10)
@@ -104,21 +116,42 @@ private final class WorkerConnection {
     guard reply["ok"].bool else { throw WorkbenchError(message: reply["error"].string) }
     return reply["result"]
   }
+  private func stop() {
+    try? input?.close()
+    if let process, process.isRunning { process.terminate(); process.waitUntilExit() }
+    try? output?.close()
+    process = nil; input = nil; output = nil; buffer = Data()
+  }
   deinit { try? input?.close(); if process?.isRunning == true { process?.terminate() } }
 }
 
 private final class RequestCancellation: @unchecked Sendable {
   private let lock = NSLock()
   private var cancelled = false
-  func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+  private var cancelAction: (() -> Void)?
+  func cancel() {
+    lock.lock(); cancelled = true; let action = cancelAction; lock.unlock()
+    action?()
+  }
+  func onCancel(_ action: @escaping () -> Void) {
+    lock.lock(); cancelAction = action; let run = cancelled; lock.unlock()
+    if run { action() }
+  }
+  func clearCancelAction() { lock.lock(); cancelAction = nil; lock.unlock() }
   var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
 }
 
 /// Blocking pipe IO lives on a dedicated serial queue, never a Swift cooperative executor.
 /// A cancelled request already sent to Python is drained before the next request starts.
 final class EngineBridge: @unchecked Sendable {
-  private let queue = DispatchQueue(label: "NegativeMaster.engine", qos: .userInitiated)
-  private let connection = WorkerConnection()
+  private let queue: DispatchQueue
+  private let connection: WorkerConnection
+  private let transient: Bool
+  init(background: Bool = false, transient: Bool = false) {
+    self.transient = transient
+    queue = DispatchQueue(label: "NegativeMaster.engine", qos: background ? .utility : .userInitiated)
+    connection = WorkerConnection(background: background)
+  }
   func call(_ message: J) async throws -> J {
     try Task.checkCancellation()
     let ticket = RequestCancellation()
@@ -127,10 +160,10 @@ final class EngineBridge: @unchecked Sendable {
         queue.async { [self] in
           guard !ticket.isCancelled else { continuation.resume(throwing: CancellationError()); return }
           do {
-            let result = try connection.call(message)
+            let result = try connection.call(message, transientTicket: transient ? ticket : nil)
             if ticket.isCancelled { continuation.resume(throwing: CancellationError()) }
             else { continuation.resume(returning: result) }
-          } catch { continuation.resume(throwing: error) }
+          } catch { continuation.resume(throwing: ticket.isCancelled ? CancellationError() : error) }
         }
       }
     } onCancel: { ticket.cancel() }

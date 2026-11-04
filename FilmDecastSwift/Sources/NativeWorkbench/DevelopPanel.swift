@@ -1,5 +1,16 @@
 import SwiftUI
 
+private struct CompactDevelopControlsKey: EnvironmentKey {
+  static let defaultValue = false
+}
+
+extension EnvironmentValues {
+  var compactDevelopControls: Bool {
+    get { self[CompactDevelopControlsKey.self] }
+    set { self[CompactDevelopControlsKey.self] = newValue }
+  }
+}
+
 /// Collapsing a panel never changes photo parameters or other panels.
 struct DevelopPanel<Content: View>: View {
   @Environment(WorkbenchState.self) private var state
@@ -18,7 +29,13 @@ struct DevelopPanel<Content: View>: View {
   var body: some View {
     Section {
       if expanded {
-        content().disabled(state.selected == nil || state.busy)
+        // One form row per panel avoids the grouped form's per-control separators/insets.
+        VStack(alignment: .leading, spacing: 8) {
+          content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.compactDevelopControls, true)
+        .disabled(state.selected == nil || state.busy)
       }
     } header: {
       Button {

@@ -10,8 +10,9 @@ import UniformTypeIdentifiers
     case archive = "胶卷库"
   }
   let engine = EngineBridge()
-  let analysisEngine = EngineBridge()
+  let analysisEngine = EngineBridge(background: true)
   let previewEngine = EngineBridge()
+  let detailEngine = EngineBridge(background: true, transient: true)
   let archive = ArchiveState()
   var gammaAnalysis: J = .null
   var analyzing = false
@@ -24,6 +25,7 @@ import UniformTypeIdentifiers
     willSet { if newValue != workspace { SwitchPerformance.begin(newValue.rawValue) } }
     didSet {
       guard workspace != oldValue else { return }
+      invalidateDetail(resetDemand: true)
       if !selectionTool.isEmpty { selectionTool = "" }
       if zoom != 1 { zoom = 1 }
     }
@@ -33,7 +35,12 @@ import UniformTypeIdentifiers
   var showPathSheet = false
   var pathEntry = ""
   var resetOnLoad = false
-  var busy = false
+  var busy = false {
+    didSet {
+      guard busy != oldValue else { return }
+      if busy { invalidateDetail() } else { queueDetail() }
+    }
+  }
   var batchRunning = false
   var rendering = false
   var progress = 0.0
@@ -41,7 +48,9 @@ import UniformTypeIdentifiers
   var error: String?
   var warnings: [String] = []
   var photos: [Photo] = []
-  var selected: String?
+  var selected: String? {
+    didSet { if selected != oldValue { invalidateDetail(resetDemand: true) } }
+  }
   var checked: Set<String> = []
   var selectionAnchor: String?
   var filmstripBottom = UserDefaults.standard.bool(forKey: "native.filmstripBottom") {
@@ -92,10 +101,23 @@ import UniformTypeIdentifiers
   var params: J = .object([:])
   var defaults: J = .object([:])
   var preview: NSImage?
+  var detailImage: NSImage?
+  var detailSide = 1500
+  @ObservationIgnored var detailLoadedSide = 0
+  @ObservationIgnored var detailGeneration = 0
+  @ObservationIgnored var detailTask: Task<Void, Never>?
   var negative: NSImage?
   var histogram: J = .null
   var imageSize = CGSize.zero
-  var showNegative = false { didSet { if showNegative { queueNegative() } } }
+  var showNegative = false {
+    didSet {
+      guard showNegative != oldValue else { return }
+      invalidateDetail()
+      if showNegative { queueNegative() }
+      else { negativeTask?.cancel() }
+      queueDetail()
+    }
+  }
   @ObservationIgnored private var negativeTask: Task<Void, Never>?
   private var negativeParams: J = .null
   private var negativePath = ""
@@ -105,6 +127,16 @@ import UniformTypeIdentifiers
   var useRollReference = true
   var presetNames: [String] = []
   var selectedPreset = ""
+  var filmAppliesToRoll = false
+  var applyingFilm = false
+  var applyingSync = false
+  var editingBatch: Bool { applyingFilm || applyingSync }
+  var syncGroups: [J] = []
+  var syncSelected: Set<String> = []
+  var syncScope = "roll"
+  var syncUndo: [String: String] = [:]
+  @ObservationIgnored var syncTask: Task<Void, Never>?
+  @ObservationIgnored var filmTask: Task<Void, Never>?
   var nameEntry = ""
   var showNameSheet = false
   var namePurpose = "preset"
@@ -115,12 +147,22 @@ import UniformTypeIdentifiers
   var exportResize = 0.0
   var lastExport: URL?
   var inspector = true
-  var expandedDevelopPanels = Set(UserDefaults.standard.stringArray(forKey: "native.expandedDevelopPanels") ?? ["film", "histogram", "light"])
+  var expandedDevelopPanels = WorkbenchState.migratedDevelopPanels(UserDefaults.standard.stringArray(forKey: "native.expandedDevelopPanels"))
   var requestedDevelopPanel = "light"
   var developPanelJump = 0
 
+  static func migratedDevelopPanels(_ saved: [String]?) -> Set<String> {
+    guard let saved else { return ["histogram", "light"] }
+    // Keep the existing light ID for Basic and preserve intentionally collapsed panels.
+    return Set(saved.map {
+      if $0 == "gamma" { return "film" }
+      return ["whiteBalance", "color"].contains($0) ? "light" : $0
+    })
+  }
+
   func setDevelopPanel(_ id: String, expanded: Bool) {
     if expanded { expandedDevelopPanels.insert(id) } else { expandedDevelopPanels.remove(id) }
+    if id == "crop", !expanded, selectionTool == "crop" { selectionTool = "" }
     UserDefaults.standard.set(expandedDevelopPanels.sorted(), forKey: "native.expandedDevelopPanels")
   }
 
@@ -199,6 +241,7 @@ import UniformTypeIdentifiers
   var snapshot: J {
     .object([
       "workspace": .string(workspace.rawValue), "params": params, "config": sheetConfig,
+      "cropAspect": .string(cropAspect),
       "stock": .string(stockID), "frames": frames,
       "order": .array(sheetPhotos.map { .number(Double($0.sheetID)) }),
       "selection": .array(sheetSelection.sorted().map { .number(Double($0)) }),
@@ -221,6 +264,7 @@ import UniformTypeIdentifiers
   private func restore(_ s: J) {
     workspace = Workspace(rawValue: s["workspace"].string) ?? .develop
     params = s["params"]
+    if case .string(let aspect) = s["cropAspect"] { cropAspect = aspect }
     sheetConfig = s["config"]
     stockID = s["stock"].string
     frames = s["frames"]
@@ -235,11 +279,13 @@ import UniformTypeIdentifiers
     historyFlags()
   }
   func undo() {
+    guard !editingBatch else { return }
     guard let s = undoStack.popLast() else { return }
     redoStack.append(snapshot)
     restore(s)
   }
   func redo() {
+    guard !editingBatch else { return }
     guard let s = redoStack.popLast() else { return }
     undoStack.append(snapshot)
     restore(s)
@@ -259,6 +305,8 @@ import UniformTypeIdentifiers
       sheetConfig = sheetDefaults
       fields = r["fields"].array.map { ControlField(value: $0) }
       stocks = r["stocks"].array
+      syncGroups = r["syncGroups"].array
+      syncSelected = Set(syncGroups.filter { $0["selected"].bool }.map { $0["id"].string })
       presetNames = r["presets"].array.map(\.string)
       if let first = stocks.first { applyStock(first["id"].string, record: false) }
       layoutNames = layouts.object.keys.sorted()
@@ -268,6 +316,7 @@ import UniformTypeIdentifiers
     } catch { failure(error) }
   }
   func setParam(_ key: String, _ value: J) {
+    guard !editingBatch else { return }
     remember("p." + key)
     params.put(key, value)
     if ["crop_rect", "level_angle"].contains(key) { params["geometry_source"] = .string("manual") }
@@ -314,8 +363,11 @@ import UniformTypeIdentifiers
     acceptURLs([URL(fileURLWithPath: path)])
   }
   func flushBeforeQuit() async {
+    await filmTask?.value
+    await syncTask?.value
     saveTask?.cancel()
     renderTask?.cancel()
+    invalidateDetail(resetDemand: true)
     sheetTask?.cancel()
     frameTask?.cancel()
     thumbnailTask?.cancel()
@@ -363,13 +415,16 @@ import UniformTypeIdentifiers
     if workspace == .sheet {
       prepareSheet(paths: urls.map(\.path), positiveOnly: true)
     } else {
+      stopThumbnailGeneration()
       photos = urls.map { Photo(path: $0.path, name: $0.lastPathComponent) }
       folder = first.deletingLastPathComponent()
       selectPhoto(first.path)
-      generateThumbnails()
     }
   }
   func openFolder(_ u: URL) {
+    guard !editingBatch else { return }
+    invalidateDetail(resetDemand: true)
+    stopThumbnailGeneration()
     persistNow()
     selected = nil
     preview = nil
@@ -391,7 +446,6 @@ import UniformTypeIdentifiers
         }
         checked.removeAll()
         selectionAnchor = nil
-        generateThumbnails()
         busy = false
         if let first = filteredPhotos.first {
           selectPhoto(first.path)
@@ -407,7 +461,9 @@ import UniformTypeIdentifiers
     }
   }
   func select(_ path: String) {
+    guard !editingBatch else { return }
     guard selected != path else { return }
+    invalidateDetail(resetDemand: true)
     persistNow()
     selectRevision += 1
     let token = selectRevision
@@ -449,6 +505,36 @@ import UniformTypeIdentifiers
       }
     }
   }
+  func removePhotoFromList(_ path: String) {
+    guard !busy, !analyzing, photos.contains(where: { $0.path == path }) else { return }
+    let visible = filteredPhotos.map(\.path)
+    let index = visible.firstIndex(of: path) ?? 0
+    let wasActive = selected == path
+    photos.removeAll { $0.path == path }
+    checked.remove(path)
+    if selectionAnchor == path { selectionAnchor = nil }
+    guard wasActive else { return }
+    selectedPreset = ""
+    let remaining = filteredPhotos.map(\.path)
+    if !remaining.isEmpty {
+      let next = remaining[min(index, remaining.count - 1)]
+      // select saves the outgoing photo's edits before loading its neighbour.
+      select(next)
+      checked.insert(next)
+      selectionAnchor = next
+    } else {
+      persistNow()
+      selectRevision += 1
+      renderTask?.cancel(); renderTask = nil; renderEpoch += 1; revision += 1
+      negativeTask?.cancel()
+      selected = nil; parameterPath = nil
+      preview = nil; negative = nil; histogram = .null; imageSize = .zero
+      params = defaults; gammaAnalysis = .null
+      showNegative = false; selectionTool = ""; rendering = false
+      undoStack = []; redoStack = []; historyFlags()
+      status = photos.isEmpty ? "打开底片开始调片" : "没有符合筛选条件的照片"
+    }
+  }
   private func migrateLegacy(_ old: J) -> J {
     var p = defaults
     let mapping = [
@@ -472,9 +558,11 @@ import UniformTypeIdentifiers
       "cropRect": "crop_rect", "wbRect": "wb_rect", "filmBaseRect": "film_base_rect",
       "shadowRect": "shadow_rect", "highlightRect": "highlight_rect",
     ] where old[a] != .null { p[b] = .array(["x0", "y0", "x1", "y1"].map { old[a][$0] }) }
+    p["emulsion_mirrored"] = .bool(["h", "v"].contains(p["flip"].string))
     return p
   }
   func persistSoon() {
+    guard !editingBatch else { return }
     saveTask?.cancel()
     guard let path = selected, parameterPath == path else { return }
     let p = params
@@ -491,6 +579,7 @@ import UniformTypeIdentifiers
     }
   }
   func persistNow(sidecar: Bool = true) {
+    guard !editingBatch else { return }
     saveTask?.cancel()
     guard let path = selected, parameterPath == path else { return }
     let p = params
@@ -510,6 +599,7 @@ import UniformTypeIdentifiers
   }
   /// One in-flight preview plus the latest parameters; dragging never queues a backlog.
   func queueRender() {
+    invalidateDetail()
     revision += 1
     guard selected != nil, parameterPath == selected, ready else { return }
     rendering = true
@@ -518,7 +608,7 @@ import UniformTypeIdentifiers
     let epoch = renderEpoch
     renderTask = Task {
       defer {
-        if epoch == renderEpoch { renderTask = nil; rendering = false }
+        if epoch == renderEpoch { renderTask = nil; rendering = false; queueDetail() }
       }
       do {
         while !Task.isCancelled {
@@ -534,7 +624,7 @@ import UniformTypeIdentifiers
           if token != revision { continue }
           try await renderPreview(path, params: p, interactive: false, token: token)
           if token == revision {
-            queueNegative(warm: true)
+            if showNegative { queueNegative() }
             return
           }
         }
@@ -558,8 +648,8 @@ import UniformTypeIdentifiers
     imageSize = CGSize(width: r["fullWidth"].double, height: r["fullHeight"].double)
     status = "\(URL(fileURLWithPath: path).lastPathComponent) · \(Int(imageSize.width)) × \(Int(imageSize.height))"
   }
-  func queueNegative(warm: Bool = false) {
-    guard let path = selected, parameterPath == path, (warm || showNegative) else { return }
+  func queueNegative() {
+    guard let path = selected, parameterPath == path, showNegative else { return }
     let p = params
     guard path != negativePath || p != negativeParams || negative == nil else { return }
     negativeTask?.cancel()
@@ -575,21 +665,22 @@ import UniformTypeIdentifiers
     }
   }
   func rotate(_ delta: Int) {
-    setParam("rotate", .number(Double((Int(params["rotate"].double) + delta + 360) % 360)))
-    setParam("crop_rect", .null)
+    guard !editingBatch, delta % 90 == 0 else { return }
+    let turns = (delta / 90 % 4 + 4) % 4
+    guard turns != 0 else { return }
+    remember()
+    let operation: DevelopOrientation = turns == 3 ? .counterclockwise : .clockwise
+    for _ in 0..<(turns == 3 ? 1 : turns) {
+      params = operation.applying(to: params)
+      cropAspect = operation.aspect(cropAspect)
+    }
+    queueRender()
+    persistSoon()
   }
   func mirror(_ axis: String) {
+    guard !editingBatch, axis == "h" || axis == "v" else { return }
     remember()
-    let current = params["flip"].string
-    if current == axis {
-      params["flip"] = .string("none")
-    } else if current == "none" {
-      params["flip"] = .string(axis)
-    } else {
-      params["flip"] = .string("none")
-      params["rotate"] = .number(Double((Int(params["rotate"].double) + 180) % 360))
-    }
-    params["crop_rect"] = .null
+    params = (axis == "h" ? DevelopOrientation.horizontal : .vertical).applying(to: params)
     queueRender()
     persistSoon()
   }
@@ -648,6 +739,7 @@ import UniformTypeIdentifiers
     }
   }
   func resetDevelop() {
+    guard !editingBatch else { return }
     remember()
     params = defaults
     queueRender()
@@ -680,10 +772,16 @@ import UniformTypeIdentifiers
     }
   }
   func applyPreset(_ name: String) {
-    guard !name.isEmpty else { return }
+    guard !name.isEmpty, !busy else { return }
+    if filmAppliesToRoll {
+      applyFilmToRoll(.object(["preset": .string(name)]))
+      return
+    }
+    let path = selected, selection = selectRevision
     Task {
       do {
         let r = try await engine.api("/api/presets?name=" + escaped(name), method: "GET")
+        guard selected == path, selectRevision == selection, !editingBatch else { return }
         remember()
         for (k, v) in r["data"].object { params[k] = v }
         selectedPreset = name
@@ -691,6 +789,67 @@ import UniformTypeIdentifiers
         persistSoon()
       } catch { failure(error) }
     }
+  }
+  func setFilmMode(_ mode: String) {
+    guard !busy, ["color", "bw", "positive"].contains(mode) else { return }
+    if filmAppliesToRoll {
+      applyFilmToRoll(.object(["mode": .string(mode)]))
+    } else {
+      setParam("mode", .string(mode))
+      selectedPreset = ""
+    }
+  }
+  var emulsionMirrored: Bool { DevelopOrientation.emulsionMirrored(params) }
+  func setEmulsionMirrored(_ enabled: Bool) {
+    guard !busy, !editingBatch, selected != nil else { return }
+    if filmAppliesToRoll {
+      applyFilmToRoll(.object(["emulsion": .bool(enabled)]))
+    } else {
+      remember()
+      params = DevelopOrientation.applyingEmulsion(enabled, to: params)
+      gammaAnalysis = .null
+      queueRender(); persistSoon()
+    }
+  }
+  var filmTargetPaths: [String] { photos.map(\.path) }
+  func applyFilmToRoll(_ change: J) {
+    guard !busy, let active = selected, parameterPath == active, !filmTargetPaths.isEmpty else { return }
+    let paths = filmTargetPaths, current = params
+    saveTask?.cancel()
+    busy = true; applyingFilm = true; progress = 0
+    status = "正在应用到整卷…"
+    filmTask = Task {
+      defer { busy = false; applyingFilm = false }
+      do {
+        // Drain pending writes on the serial transport before reading individual frames.
+        _ = try await engine.call(.object(["action": .string("save"), "body": .object([
+          "path": .string(active), "params": current, "sidecar": .bool(true)
+        ])]))
+        await applyFilmChanges(paths: paths, change: change) { try await self.engine.call($0) }
+      } catch { failure(error) }
+    }
+  }
+  func applyFilmChanges(paths: [String], change: J, request: (J) async throws -> J) async {
+    var completed = 0, issues: [String] = []
+    for (i, path) in paths.enumerated() {
+      do {
+        let snapshot = try await request(.object(["action": .string("batch_snapshot"), "body": .object(["path": .string(path)])]))
+        var body = change
+        body["path"] = .string(path); body["token"] = snapshot["token"]
+        let result = try await request(.object(["action": .string("film_apply"), "body": body]))
+        if selected == path, parameterPath == path {
+          remember(); params = result["params"]
+          selectedPreset = change["preset"].string
+          gammaAnalysis = .null; queueRender()
+        }
+        if let index = photos.firstIndex(where: { $0.path == path }) { photos[index].edited = true }
+        completed += 1
+        issues += result["warnings"].array.map { URL(fileURLWithPath: path).lastPathComponent + "：" + $0.string }
+      } catch { issues.append(URL(fileURLWithPath: path).lastPathComponent + "：" + error.localizedDescription) }
+      progress = Double(i + 1) / Double(paths.count)
+    }
+    status = "已应用到 \(completed) / \(paths.count) 张照片"
+    if !issues.isEmpty { error = issues.joined(separator: "\n") }
   }
   func askName(_ purpose: String) {
     namePurpose = purpose
@@ -732,45 +891,6 @@ import UniformTypeIdentifiers
   func escaped(_ value: String) -> String {
     value.addingPercentEncoding(
       withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+#?"))) ?? ""
-  }
-  func applyToRoll(whiteBalanceOnly: Bool = false) {
-    let targets =
-      checked.isEmpty
-      ? filteredPhotos.map(\.path) : visibleCheckedPhotos.map(\.path)
-    guard !targets.isEmpty else { return }
-    let p = params
-    busy = true
-    cancelBatch = false
-    Task {
-      do {
-        for (i, path) in targets.enumerated() {
-          if cancelBatch { break }
-          var applied = p
-          if whiteBalanceOnly {
-            applied = try await engine.call(
-              .object(["action": .string("adjustments"), "body": .object(["path": .string(path)])]))[
-                "params"]
-            for key in ["wb", "temp", "tint"] { applied[key] = p[key] }
-          }
-          _ = try await engine.call(
-            .object([
-              "action": .string("save"),
-              "body": .object(["path": .string(path), "params": applied, "sidecar": .bool(true)]),
-            ]))
-          progress = Double(i + 1) / Double(targets.count)
-        }
-        photos = photos.map {
-          var x = $0
-          if targets.contains(x.path) { x.edited = true }
-          return x
-        }
-        busy = false
-        status = whiteBalanceOnly ? "已应用白平衡，各照片的其他调整已保留" : "已应用当前调整到胶卷"
-      } catch {
-        busy = false
-        failure(error)
-      }
-    }
   }
   func exportCurrent() {
     if workspace == .archive { archive.backup(); return }

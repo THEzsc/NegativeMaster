@@ -137,7 +137,7 @@ class SheetApiTests(unittest.TestCase):
             identifier, state = self.prepared({"directory": str(self.roll)})
         self.assertEqual(state["state"], "ready")
         self.assertEqual(len(state["items"]), 1)
-        self.assertEqual(state["items"][0]["path"], str(tiff))
+        self.assertEqual(state["items"][0]["path"], str(jpg))
         self.assertEqual(state["items"][0]["source"], "export")
         self.assertTrue(any("FRAME002" in warning for warning in state["warnings"]))
         thumb = self.client.get(f"/api/sheet/thumb/{identifier}/0")
@@ -175,6 +175,45 @@ class SheetApiTests(unittest.TestCase):
         self.assertIsNone(opts._ref_cdfs)
         self.assertIsNone(opts._ref_centers)
         self.assertEqual(xml.read_bytes(), before)
+
+    def test_native_export_folder_and_numbered_jpeg_win_over_tiff(self):
+        source = self.image('FAST001.tif')
+        folder = self.roll / '导出成片'; folder.mkdir()
+        self.image('FAST001_pos.tif', folder=folder)
+        self.image('FAST001_pos.jpg', folder=folder)
+        jpeg = self.image('FAST001_pos-1.jpg', folder=folder)
+        with patch.object(sheet_app.decast, 'load_image', side_effect=AssertionError('no conversion')):
+            _, result = self.prepared(dict(paths=[str(source)]))
+        self.assertEqual(len(result['items']), 1)
+        self.assertEqual(result['items'][0]['path'], str(jpeg))
+
+    def test_saved_tiff_preview_reused_and_invalidated_by_adjustments(self):
+        source = self.image('CACHE001.tif')
+        settings = Path(self.settings_file(str(source)))
+        settings.write_text(json.dumps(dict(P=dict(gamma=1.1))))
+        with patch.object(sheet_app.decast, 'load_image', return_value=(np.ones((20, 30, 3)), False)) as load:
+            with patch.object(sheet_app.decast, 'convert_negative', side_effect=lambda lin, opts: lin):
+                self.prepared(dict(paths=[str(source)]))
+                self.prepared(dict(paths=[str(source)]))
+                self.assertEqual(load.call_count, 1)
+                settings.write_text(json.dumps(dict(P=dict(gamma=1.4))))
+                self.prepared(dict(paths=[str(source)]))
+                self.assertEqual(load.call_count, 2)
+
+    def test_recorded_jpeg_outside_roll_is_used_and_missing_one_falls_back(self):
+        source = self.image('EXTERNAL001.tif')
+        (self.roll / 'EXTERNAL001.ARW').write_bytes(b'RAW must not replace selected TIFF provenance')
+        self.xml(source)
+        external = self.root / 'custom'; external.mkdir()
+        jpeg = self.image('renamed.jpg', folder=external)
+        sheet_app.archive_index.write_export_log([dict(source=str(source), path=str(jpeg))], external, self.settings_file)
+        _, result = self.prepared(dict(paths=[str(source)]))
+        self.assertEqual(result['items'][0]['path'], str(jpeg))
+        jpeg.unlink()
+        with patch.object(sheet_app.decast, 'load_image', return_value=(np.ones((20, 30, 3)), False)):
+            with patch.object(sheet_app.decast, 'convert_negative', side_effect=lambda lin, opts: lin):
+                _, result = self.prepared(dict(paths=[str(source)]))
+        self.assertEqual(result['items'][0]['source'], 'saved')
 
     def test_settings_fallback_on_original_jpeg_uses_its_actual_saved_source(self):
         raw = self.roll / "FRAME004.ARW"

@@ -99,6 +99,7 @@ extension WorkbenchState {
       return
     }
     var report = ["NegativeMaster 整卷导出", "格式：\(plan.settings.format.uppercased()) · 长边：\(Int(plan.settings.resize))（0 为原尺寸）", ""]
+    var jpegIndex: [J] = []
     for (i, path) in plan.paths.enumerated() {
       if cancelBatch { break }
       batchCurrentName = URL(fileURLWithPath: path).lastPathComponent
@@ -116,6 +117,9 @@ extension WorkbenchState {
         _ = try await request(plan.settings.message(path: path, params: settings, output: output))
         batchCompleted += 1
         batchOutputs.append(output)
+        if plan.settings.format == "jpg" {
+          jpegIndex.append(.object(["source": .string(path), "path": .string(output.path)]))
+        }
         report.append("成功：\(batchCurrentName) → \(output.lastPathComponent)")
       } catch {
         let message = "\(batchCurrentName)：\(error.localizedDescription)"
@@ -131,6 +135,13 @@ extension WorkbenchState {
       + (batchFailures.isEmpty ? "" : "，失败 \(batchFailures.count) 张")
       + (batchCancelled ? "，已停止后续 \(remaining) 张" : "")
     report.append("\n" + status)
+    if !jpegIndex.isEmpty {
+      do {
+        _ = try await request(.object(["action": .string("export_log"), "body": .object([
+          "directory": .string(plan.destination.path), "items": .array(jpegIndex)
+        ])]))
+      } catch { batchError = "JPEG 已导出，但索引日志保存失败：\(error.localizedDescription)" }
+    }
     do {
       let url = BatchExportPlan.availableURL(in: plan.destination, stem: "导出记录", ext: "txt")
       try report.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)

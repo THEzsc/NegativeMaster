@@ -33,24 +33,40 @@ def validate_patch(patch):
             raise ValueError('裁剪范围无效')
 
 
-def apply(gui, root, path, patch, expected, read_adjustments):
-    validate_patch(patch)
+def apply(gui, root, path, patch, expected, read_adjustments, *, film=False, sync=False, emulsion=False):
+    if emulsion:
+        from native_film import EMULSION_KEYS
+        if not set(patch).issubset(EMULSION_KEYS) or not isinstance(patch.get('emulsion_mirrored'), bool):
+            raise ValueError('药膜面翻拍设置无效')
+    elif sync:
+        from native_sync import validate
+        validate(patch)
+    elif film:
+        from decast import PRESET_KEYS
+        if not patch or not set(patch).issubset(PRESET_KEYS):
+            raise ValueError('胶片预设包含不支持的参数')
+        if 'mode' in patch and patch['mode'] not in ('color', 'bw', 'positive'):
+            raise ValueError('胶片类型无效')
+    else:
+        validate_patch(patch)
     if not Path(path).is_file():
         raise ValueError('原照片不存在')
     files, before, token = snapshot(gui, path)
     if token != expected:
-        raise ValueError('分析后照片参数已改变，请重新分析')
+        raise ValueError('照片参数已改变，请重新操作')
     current = read_adjustments(path)
     p = current['params']
-    if 'gamma' in patch or 'nd_gamma' in patch:
+    if not film and not sync and ('gamma' in patch or 'nd_gamma' in patch):
         nd = p.get('mode') == 'color' and p.get('negadoctor', False)
         if p.get('use_match') or p.get('mode') == 'positive' or nd != ('nd_gamma' in patch):
             raise ValueError('当前反转引擎与 Gamma 建议不一致')
     data = copy.deepcopy(current['data']) or dict(P=copy.deepcopy(p), curFmt='free', orient='land')
     data.setdefault('P', {}).update(patch)
     if 'crop_rect' in patch:
-        data['cropN'] = dict(zip(('x0', 'y0', 'x1', 'y1'), patch['crop_rect']))
-        data['geometrySource'] = 'auto'
+        data['cropN'] = dict(zip(('x0', 'y0', 'x1', 'y1'), patch['crop_rect'])) if patch['crop_rect'] else {}
+        data['geometrySource'] = patch.get('geometry_source', 'manual')
+    elif 'geometry_source' in patch:
+        data['geometrySource'] = patch['geometry_source']
     # Record recovery data before replacing any sidecar. XML remains authoritative.
     journal = Path(root) / 'batch_history'
     journal.mkdir(parents=True, exist_ok=True)

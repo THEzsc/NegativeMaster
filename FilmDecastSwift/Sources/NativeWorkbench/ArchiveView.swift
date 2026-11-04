@@ -42,6 +42,7 @@ struct ArchiveSidebar: View {
 struct ArchiveDetail: View {
   @ObservedObject var a: ArchiveState
   @Environment(WorkbenchState.self) var s
+  @FocusState private var galleryFocused: Bool
   private var bindings: Bindable<WorkbenchState> { Bindable(s) }
   var body: some View {
     VStack(spacing:0) {
@@ -73,6 +74,10 @@ struct ArchiveDetail: View {
         HStack {
           Text("照片 · \(a.detail["frames"].array.count)").font(.title3.bold())
           Spacer()
+          if !a.selectedFrames.isEmpty {
+            Text("已选 \(a.selectedFrames.count)").font(.caption).foregroundStyle(.secondary)
+            Button("移除索引…", role: .destructive, action: a.removeSelectedFrames).disabled(a.busy)
+          }
           Menu("关联照片") {
             Button("索引照片文件夹…") { a.importFrames() }
             Button("关联文件夹全部照片…") { a.importFrames(all:true) }
@@ -83,7 +88,20 @@ struct ArchiveDetail: View {
           ContentUnavailableView("关联这卷的照片", systemImage:"photo.on.rectangle", description:Text("选择照片文件夹"))
         }
         LazyVGrid(columns:[GridItem(.adaptive(minimum:190),spacing:16)],alignment:.leading,spacing:20) {
-          ForEach(a.detail["frames"].array) { frame in ArchiveFrameCard(a:a,frame:frame) }
+          ForEach(a.detail["frames"].array) { frame in
+            ArchiveFrameCard(a:a,frame:frame, focusGallery: { galleryFocused = true })
+          }
+        }
+        .focusable().focused($galleryFocused).focusEffectDisabled()
+        .onDeleteCommand { a.removeSelectedFrames() }
+        .onKeyPress(characters: CharacterSet(charactersIn: "aA"), phases: .down) { press in
+          guard press.modifiers.contains(.command), !a.busy else { return .ignored }
+          a.selectedFrames = Set(a.detail["frames"].array.map { $0["id"].string }); return .handled
+        }
+        .onKeyPress(.return) {
+          guard a.selectedFrames.count == 1,
+            let frame = a.detail["frames"].array.first(where: { a.selectedFrames.contains($0["id"].string) }) else { return .ignored }
+          a.openFrame(frame); return .handled
         }
       }.padding(24).frame(maxWidth:1200,alignment:.leading).frame(maxWidth:.infinity)
     }
@@ -127,21 +145,37 @@ struct ArchiveFrameCard: View {
   @Environment(WorkbenchState.self) var s
   private var bindings: Bindable<WorkbenchState> { Bindable(s) }
   let frame: J
+  var focusGallery: () -> Void = {}
   var body: some View {
     VStack(alignment:.leading,spacing:8) {
-      Button { a.frameDraft = frame; a.showFrameEditor = true } label: {
-        CachedPhoto(path:a.assetRoot+frame["thumb"].string, size:480).frame(height:150).contentShape(Rectangle())
-      }.buttonStyle(.plain).accessibilityLabel("查看 \(frame["name"].string)")
+      CachedPhoto(path:a.assetRoot+frame["thumb"].string, size:480).frame(height:150)
       Text(frame["name"].string).font(.callout).lineLimit(1).truncationMode(.middle)
       if frame["missing"].bool { Label("原文件缺失，可重新关联",systemImage:"exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
       if frame["rating"].double > 0 { Text(String(repeating:"★",count:min(5,max(0,Int(frame["rating"].double))))).foregroundStyle(.orange) }
       if !frame["notes"].string.isEmpty { Text(frame["notes"].string).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-    }.contextMenu {
-      Button("查看与备注") { a.frameDraft = frame; a.showFrameEditor = true }
+    }
+    .padding(6)
+    .background(a.selectedFrames.contains(frame["id"].string) ? Color.accentColor.opacity(0.15) : .clear)
+    .overlay(Rectangle().stroke(a.selectedFrames.contains(frame["id"].string) ? Color.accentColor : .clear, lineWidth: 2))
+    .contentShape(Rectangle())
+    .onTapGesture(count: 2) { focusGallery(); a.openFrame(frame) }
+    .onTapGesture {
+      focusGallery()
+      let flags = NSEvent.modifierFlags
+      a.selectFrame(frame, extending: flags.contains(.shift), toggling: flags.contains(.command))
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(frame["name"].string)
+    .accessibilityValue(a.selectedFrames.contains(frame["id"].string) ? "已选择" : "未选择")
+    .accessibilityAddTraits(.isButton)
+    .accessibilityAction { focusGallery(); a.selectFrame(frame) }
+    .accessibilityAction(named: "查看详情") { a.openFrame(frame) }
+    .contextMenu {
+      Button("查看详情") { a.openFrame(frame) }
       Button("设为封面") { a.cover(frame:frame["id"].string) }
       Button("在调片中打开") { s.workspace = .develop; s.acceptURLs([URL(fileURLWithPath:frame["path"].string)]) }.disabled(frame["missing"].bool)
       Button("在 Finder 中显示") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath:frame["path"].string)]) }.disabled(frame["missing"].bool)
-      Button("移除关联…", role:.destructive) { a.removeFrame(frame) }
+      Button("移除索引…", role:.destructive) { a.removeFrame(frame) }
     }.disabled(a.busy)
   }
 }
@@ -199,7 +233,7 @@ struct ArchiveFrameEditor: View {
   private var framePreviewPath: String {
     let path = a.frameDraft["path"].string
     let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
-    if ["jpg", "jpeg", "png", "tif", "tiff", "webp", "bmp"].contains(ext), FileManager.default.fileExists(atPath: path) { return path }
+    if ["jpg", "jpeg"].contains(ext), FileManager.default.fileExists(atPath: path) { return path }
     return a.assetRoot + a.frameDraft["thumb"].string
   }
   var body: some View {
