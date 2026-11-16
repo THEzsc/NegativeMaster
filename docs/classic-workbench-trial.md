@@ -20,7 +20,7 @@ Build with a separate application identifier and optional isolated data root:
 NM_CLASSIC_PREVIEW=1 NM_DATA_ROOT="/absolute/trial/data" FilmDecastSwift/build-app.sh "/absolute/NegativeMaster Classic Preview.app"
 ```
 
-The shipped local trial is in `work/classic-trial/NegativeMaster Classic Preview.app`. Its app preferences, presets and archive are isolated from the production app. Normal edits still save XML next to whichever photos the user opens; UI tests used only generated fixtures under `work/classic-trial/photos`.
+The shipped local trial is in `work/classic-trial/NegativeMaster Classic Preview.app`. Its app preferences remain separate. After native testing, Runtime.json was reconnected to the original project data root so the delivered trial uses the existing presets and archive (3 rolls / 66 frames at reconnection). Only automated/UI QA sessions use the isolated data root. Normal edits still save XML next to whichever photos the user opens; UI tests used only generated fixtures under `work/classic-trial/photos`.
 
 ## Verification
 
