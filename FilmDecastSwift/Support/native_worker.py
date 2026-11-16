@@ -223,8 +223,11 @@ def handle(message):
         return apply(gui, DATA_ROOT, body['path'], patch, body['token'], adjustments, film=True)
     if action == 'sync_apply':
         from native_batch import apply
-        from native_sync import patch_for
-        patch = patch_for(body.get('groups'), body.get('source'), gui.DEFAULTS)
+        from native_sync import patch_for, fields_patch, orientation_patch
+        patch = ({'geometry_source':'manual'} if 'operation' in body else (fields_patch(body['fields'], body['source'], adjustments(body['path'])['params'], gui.DEFAULTS)
+                 if body.get('fields') else patch_for(body.get('groups'), body.get('source'), gui.DEFAULTS)))
+        if 'operation' in body:
+            patch = orientation_patch(adjustments(body['path'])['params'], body['operation'])
         return apply(gui, DATA_ROOT, body['path'], patch, body['token'], adjustments, sync=True)
     if action == 'batch_restore':
         from native_batch import restore

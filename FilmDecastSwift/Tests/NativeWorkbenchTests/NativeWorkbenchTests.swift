@@ -270,13 +270,31 @@ final class NativeWorkbenchTests: XCTestCase {
     s.photos = (1...4).map { Photo(path: "/tmp/sync-\($0).ARW", name: "sync-\($0).ARW") }
     s.selected = s.photos[0].path; s.rawOnly = false
     s.checked = [s.photos[0].path, s.photos[2].path]
-    XCTAssertEqual(s.syncTargets, s.photos.dropFirst().map(\.path))
+    XCTAssertEqual(s.syncTargets, [s.photos[2].path])
     s.syncScope = "selected"
     XCTAssertEqual(s.syncTargets, [s.photos[2].path])
     s.search = "sync-1"
     XCTAssertTrue(s.syncTargets.isEmpty)
     s.syncScope = "roll"
-    XCTAssertEqual(s.syncTargets.count, 3)
+    XCTAssertEqual(s.syncTargets.count, 0, "Hidden photos are never implicit sync targets")
+  }
+  @MainActor func testMultiSelectIsNotAutoSyncAndActiveClickKeepsSelection() {
+    let s = WorkbenchState(); s.rawOnly = false
+    s.photos = (1...3).map { Photo(path: "/tmp/classic-\($0).ARW", name: "classic-\($0).ARW") }
+    s.selected = s.photos[0].path; s.checked = Set(s.photos.map(\.path))
+    s.params = .object(["exposure": .number(0), "gamma": .number(1.4)])
+    s.setParam("exposure", .number(0.5))
+    XCTAssertNil(s.pendingAutoBefore)
+    XCTAssertEqual(s.undoStack.count, 1)
+    s.selectPhoto(s.photos[1].path)
+    XCTAssertEqual(s.checked.count, 3)
+    XCTAssertEqual(s.selected, s.photos[1].path)
+    s.autoSync = true
+    s.setParam("exposure", .number(0.8))
+    s.autoSyncTask?.cancel()
+    XCTAssertEqual(s.pendingAutoFields, ["exposure"])
+    XCTAssertEqual(s.pendingAutoTargets.count, 2)
+    XCTAssertEqual(s.pendingAutoBefore?["gamma"], .number(1.4))
   }
   @MainActor func testFilmScopeDefaultsOffAndIgnoresSearchAndSelection() {
     let s = WorkbenchState()

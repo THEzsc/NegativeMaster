@@ -13,3 +13,10 @@ test('plain, command and range selection match filmstrip behavior',()=>{
 test('only bounded confident per-frame gamma recommendations apply',()=>{
  a.deepEqual(M.gammaPatch({parameter_key:'gamma',recommendation:.85,confidence:'high'}),{gamma:.85});for(const value of [NaN,Infinity,.1,3.1])a.equal(M.gammaPatch({parameter_key:'gamma',recommendation:value,confidence:'high'}),null);a.equal(M.gammaPatch({parameter_key:'gamma',recommendation:1,confidence:'none'}),null);
 });
+test('active photo changes inside the selection preserve selected set',()=>{
+ a.deepEqual(M.selection(['a','b','c'],['a','b'],'a','b',false,false),['a','b']);
+});
+test('field diff isolates a single HSL channel and ignores omitted zeroes',()=>{
+ const groups=[{fields:[{id:'exposure'},{id:'gamma'},{id:'hsl.red.h'},{id:'hsl.red.s'}]}];
+ a.deepEqual(M.changedFields({gamma:1.4,hsl:{red:{h:5}}},{gamma:1.4,hsl:{red:{h:8,s:0}}},groups),['hsl.red.h']);
+});

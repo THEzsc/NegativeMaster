@@ -11,9 +11,11 @@ if [[ "$APP_PATH" != *.app ]]; then
   echo "Destination must end in .app" >&2
   exit 1
 fi
+EXPECTED_ID="local.NegativeMaster"
+if [[ "${NM_CLASSIC_PREVIEW:-0}" == "1" ]]; then EXPECTED_ID="local.NegativeMaster.ClassicPreview"; fi
 if [[ -e "$APP_PATH" ]]; then
   EXISTING_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Contents/Info.plist" 2>/dev/null || true)
-  if [[ "$EXISTING_ID" != "local.NegativeMaster" ]]; then
+  if [[ "$EXISTING_ID" != "$EXPECTED_ID" ]]; then
     echo "Destination already exists and is not this application: $APP_PATH" >&2
     exit 1
   fi
@@ -44,13 +46,18 @@ cat > "$APP_PATH/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>2.1</string>
-    <key>CFBundleVersion</key><string>14</string>
+    <key>CFBundleVersion</key><string>15</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict>
 </plist>
 PLIST
+if [[ "${NM_CLASSIC_PREVIEW:-0}" == "1" ]]; then
+  /usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier local.NegativeMaster.ClassicPreview' "$APP_PATH/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c 'Set :CFBundleName NegativeMaster Classic Preview' "$APP_PATH/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName NegativeMaster Classic Preview' "$APP_PATH/Contents/Info.plist"
+fi
 for source in gui.py decast.py sheet_app.py contact_sheet.py film_effects.py film_reference.py platform_support.py archive_app.py archive_index.py film_artwork.py workflow_app.py web_workbench.py conversion_advisor.py; do
   cp "$PROJECT_DIR/$source" "$APP_PATH/Contents/Resources/Engine/$source"
 done
@@ -59,7 +66,7 @@ for folder in data static templates presets; do
 done
 cp "$SOURCE_DIR/Support/native_worker.py" "$SOURCE_DIR/Support/native_preview.py" "$SOURCE_DIR/Support/native_detail.py" "$SOURCE_DIR/Support/native_film.py" "$SOURCE_DIR/Support/native_runtime.py" "$SOURCE_DIR/Support/native_batch.py" "$SOURCE_DIR/Support/native_sync.py" "$SOURCE_DIR/Support/sheet-defaults.json" "$APP_PATH/Contents/Resources/Engine/FilmDecastSwift/Support/"
 "$PYTHON" "$SOURCE_DIR/Support/package_runtime.py" "$APP_PATH/Contents/Resources/Runtime"
-"$PYTHON" - "$PROJECT_DIR" "$APP_PATH/Contents/Resources/Runtime.json" <<'PYCODE'
+"$PYTHON" - "${NM_DATA_ROOT:-$PROJECT_DIR}" "$APP_PATH/Contents/Resources/Runtime.json" <<'PYCODE'
 import json,sys
 from pathlib import Path
 Path(sys.argv[2]).write_text(json.dumps(dict(source=sys.argv[1])))

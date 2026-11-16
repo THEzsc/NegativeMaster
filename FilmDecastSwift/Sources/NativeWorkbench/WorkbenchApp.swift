@@ -33,7 +33,7 @@ import SwiftUI
         Button("保存整卷项目…", action: state.saveProject).keyboardShortcut(
           "s", modifiers: [.command, .shift]
         ).disabled(state.sheetSelection.isEmpty || state.busy)
-        Button("导出…", action: state.exportCurrent).keyboardShortcut("e").disabled(
+        Button("导出…") { if state.workspace == .develop { state.showDevelopExport = true } else { state.exportCurrent() } }.keyboardShortcut("e").disabled(
           state.busy
             || (state.workspace == .develop ? state.preview == nil : state.workspace == .sheet ? state.sheetImage == nil : !state.archive.loaded))
       }

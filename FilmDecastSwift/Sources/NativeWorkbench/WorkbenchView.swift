@@ -27,9 +27,8 @@ struct WorkbenchView: View {
       }
     }
     .frame(minWidth: 1000, minHeight: 700)
-    .onAppear { columnVisibility = s.filmstripBottom && s.workspace == .develop ? .detailOnly : .all }
-    .onChange(of: s.filmstripBottom) { _, bottom in columnVisibility = bottom && s.workspace == .develop ? .detailOnly : .all }
-    .onChange(of: s.workspace) { _, mode in columnVisibility = s.filmstripBottom && mode == .develop ? .detailOnly : .all }
+    .sheet(isPresented: bindings.showSyncDialog) { ClassicSyncSheet().environment(s) }
+    .sheet(isPresented: bindings.showDevelopExport) { ClassicExportSheet().environment(s) }
     .sheet(isPresented: bindings.showRollAutomation) { RollAutomationSheet().environment(s) }
     .sheet(isPresented: bindings.showTransfer) { RollTransferSheet().environment(s) }
     .onDrop(of: ["public.file-url"], isTargeted: nil) { providers in
@@ -131,7 +130,7 @@ struct WorkbenchView: View {
       if s.workspace == .archive { ArchiveBackupButton(a: s.archive) }
       else if s.workspace == .develop {
         Menu {
-          Button("导出当前照片…", action: s.exportCurrent).disabled(s.preview == nil)
+          Button("导出设置…") { s.showDevelopExport = true }.disabled(s.preview == nil)
           Button("整卷导出…") { s.presentRollExport() }
             .disabled(s.filteredPhotos.isEmpty)
           Button("导出所选照片…", action: s.exportBatch).disabled(s.visibleCheckedPhotos.isEmpty)
@@ -220,16 +219,19 @@ struct PhotoSidebar: View {
         }.menuStyle(.borderlessButton).fixedSize().disabled(!s.ready || s.busy)
       }.padding(16)
       if mode == .develop {
+        if !s.filmstripBottom {
         TextField("搜索照片", text: bindings.search).textFieldStyle(.roundedBorder).padding(.horizontal, 12)
           .padding(.bottom, 8)
         Toggle("只显示 RAW", isOn: bindings.rawOnly).toggleStyle(.checkbox)
           .padding(.horizontal, 12).padding(.bottom, 8)
-        PhotoBrowser()
+        }
+        if s.filmstripBottom { ClassicSidebar() } else { PhotoBrowser()
           .overlay {
             if s.filteredPhotos.isEmpty && !s.photos.isEmpty {
               Text("没有符合筛选条件的照片").font(.callout).foregroundStyle(.secondary).padding(20)
             }
           }
+        }
       } else {
         List {
           ForEach(s.sheetPhotos) { p in

@@ -61,9 +61,7 @@ extension WorkbenchState {
   }
   func applyLook(_ look: ToneLook) {
     guard selected != nil, !busy else { return }
-    remember()
-    params = look.applying(to: params)
-    queueRender(); persistSoon()
+    replaceDevelop(look.applying(to: params), title: look.name)
     status = "已应用\(look.name)"
   }
   func analyzeGamma(roll: Bool) {
@@ -88,9 +86,12 @@ extension WorkbenchState {
     }
   }
   func applyGamma() {
+    if pendingAutoBefore != nil { commitAutoSync { self.applyGamma() }; return }
     guard gammaApplicable else { return }
     let report = gammaAnalysis["report"]
-    setParam(report["parameter_key"].string, report["recommendation"])
+    remember("p." + report["parameter_key"].string)
+    params[report["parameter_key"].string] = report["recommendation"]
+    queueRender(); persistSoon()
     analysisParams = params
     status = "已应用 Gamma 建议"
   }

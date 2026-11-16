@@ -12,10 +12,24 @@ struct WorkbenchInspector: View {
         Text(mode == .develop ? "调整" : "排版设置").font(.headline)
         Spacer()
         if mode == .develop {
-          Button("重置", action: s.resetDevelop).buttonStyle(.borderless).disabled(s.selected == nil)
+          Toggle("独显", isOn: bindings.soloPanels).toggleStyle(.checkbox).help("展开一栏时收起其他调整栏")
         }
       }.padding(16)
       if mode == .develop {
+        HistogramView(data: ["r", "g", "b"].map { s.histogram[$0].array.map { Float($0.double) } })
+          .frame(height: 65).padding(.horizontal, 16)
+        HStack {
+          Button(s.selectionTool == "crop" ? "完成裁剪" : "裁剪") {
+            s.selectionTool = s.selectionTool == "crop" ? "" : "crop"
+            if s.selectionTool == "crop" { s.revealDevelopPanel("crop") }
+          }
+          Menu("自动") {
+            Button("裁剪这张", action: s.autoCrop)
+            Button("整卷裁剪…") { s.presentRollAutomation("crop") }
+            Button("逐张估计整卷 Gamma…") { s.presentRollAutomation("gamma") }
+          }
+          Spacer()
+        }.padding(.horizontal, 16).padding(.top, 8).disabled(s.selected == nil || s.busy)
         ScrollViewReader { proxy in
           Form { developForm }.formStyle(.grouped)
             .onChange(of: s.developPanelJump) { _, _ in
@@ -24,6 +38,7 @@ struct WorkbenchInspector: View {
               }
             }
         }
+        ClassicActionBar()
       } else {
         Picker("排版面板", selection: bindings.sheetPane) {
           Text("胶卷与边字").tag("film")
@@ -38,10 +53,7 @@ struct WorkbenchInspector: View {
     }.controlSize(.small)
   }
   @ViewBuilder private var developForm: some View {
-    DevelopPanel("直方图", id: "histogram") {
-      HistogramView(data: ["r", "g", "b"].map { s.histogram[$0].array.map { Float($0.double) } })
-        .frame(height: 75)
-    }
+    if s.selectionTool == "crop" {
     DevelopPanel("裁剪与旋转", id: "crop") {
       HStack {
         Button("左转") { s.rotate(-90) }
@@ -69,6 +81,7 @@ struct WorkbenchInspector: View {
         Button("归零") { s.setParam("level_angle", .number(0)) }
         Button("+0.1°") { s.setParam("level_angle", .number(min(15, s.params["level_angle"].double + 0.1))) }
       }
+    }
     }
     DevelopPanel("基本", id: "light") {
       stringPicker("白平衡", key: "wb", choices: [("gray", "自动"), ("none", "关闭")])
@@ -113,10 +126,7 @@ struct WorkbenchInspector: View {
     DevelopPanel("效果", id: "effects") {
       number("vignette", "晕影", -100...100, 1)
     }
-    DevelopPanel("胶片", id: "film") {
-      Toggle("应用到整卷", isOn: bindings.filmAppliesToRoll)
-        .toggleStyle(.checkbox)
-        .help("将之后修改的胶片类型、预设和药膜面翻拍设置应用到整卷；Gamma 按每张分别估计。")
+    DevelopPanel("胶片反转", id: "film") {
       Toggle("药膜面翻拍", isOn: Binding(get: { s.emulsionMirrored }, set: { s.setEmulsionMirrored($0) }))
         .toggleStyle(.checkbox)
         .help("校正药膜面翻拍的镜像方向；新照片默认开启。")
@@ -125,29 +135,16 @@ struct WorkbenchInspector: View {
         Text("黑白负片").tag("bw")
         Text("正片").tag("positive")
       }
-      Picker("预设", selection: Binding(get: { s.selectedPreset }, set: { s.applyPreset($0) })) {
-        Text("自定义").tag("")
-        ForEach(s.presetNames, id: \.self) { Text($0).tag($0) }
-      }
-      HStack {
-        Button("存为预设…") { s.askName("preset") }
-        Spacer()
-        Button("删除预设", role: .destructive, action: s.deletePreset).disabled(
-          s.selectedPreset.isEmpty)
-      }
       FilmGammaControls()
-    }
-    DevelopPanel("反转与色阶", id: "levels") {
       number("gamma", "亮度 Gamma", 0.6...3, 0.05)
       number("black_pct", "黑点百分位", 0...3, 0.1)
       number("white_pct", "白点百分位", 97...100, 0.1)
-    }
-    DevelopPanel("片基与影调取样", id: "sampling") {
+      DisclosureGroup("片基与影调取样") {
       sampleButton("film_base_rect", "框选片基")
       sampleButton("shadow_rect", "框选暗部")
       sampleButton("highlight_rect", "框选亮部")
-    }
-    DevelopPanel("Negadoctor 冲印", id: "negadoctor") {
+      }
+      DisclosureGroup("Negadoctor 冲印") {
       Toggle("启用 Negadoctor", isOn: boolBinding("negadoctor"))
       if s.params["negadoctor"].bool {
         number("nd_gamma", "纸张反差", 1...8, 0.05)
@@ -158,53 +155,21 @@ struct WorkbenchInspector: View {
         number("nd_softclip", "高光柔和度", 0...1, 0.01)
       }
     }
-    DevelopPanel("自动裁剪", id: "autoCrop") {
-      Button("自动裁剪与校平", action: s.autoCrop)
-      Button("整卷自动裁剪…") { s.presentRollAutomation("crop") }
-      Toggle("参考同卷已调照片", isOn: bindings.useRollReference)
     }
-    NativeWorkflowControls()
-    DevelopPanel("参照匹配", id: "reference") {
+    DevelopPanel("高级", id: "input") {
+      Toggle("参考同卷已调照片", isOn: bindings.useRollReference)
+      DisclosureGroup("参照匹配") {
       Button("选择参照成片…", action: s.pickReference)
       if !s.referenceName.isEmpty {
         Text(s.referenceName).font(.caption).foregroundStyle(.secondary)
         Toggle("启用参照匹配", isOn: boolBinding("use_match")).help("启用后替代部分基础影调调整")
         Button("清除参照", action: s.clearReference)
       }
-    }
-    DevelopPanel("输入", id: "input") {
+      }
       Toggle("载入时重置调整", isOn: bindings.resetOnLoad)
       stringPicker("普通图片编码", key: "input_gamma", choices: [("srgb", "sRGB"), ("linear", "线性")])
       Toggle("关闭相机白平衡", isOn: boolBinding("no_camera_wb"))
       Toggle("关闭 EXIF 自动旋转", isOn: boolBinding("no_autorotate"))
-    }
-    DevelopPanel("同步调整", id: "sync") {
-      SyncAdjustmentsControls()
-      Button("保存照片旁的 XML", action: { s.persistNow(sidecar: true) })
-    }
-    DevelopPanel("导出照片", id: "export") {
-      Picker("格式", selection: bindings.exportFormat) {
-        Text("TIFF").tag("tif")
-        Text("JPEG").tag("jpg")
-        Text("PNG").tag("png")
-      }
-      if s.exportFormat == "tif" {
-        Picker("位深", selection: bindings.exportBits) {
-          Text("16 位").tag(16)
-          Text("8 位").tag(8)
-        }
-      }
-      if s.exportFormat == "jpg" {
-        NumericControl(title: "JPEG 质量", value: bindings.exportQuality, range: 1...100, step: 1)
-      }
-      NumericControl(title: "长边像素 · 0 为原尺寸", value: bindings.exportResize, range: 0...12000, step: 100)
-      Button("导出当前照片…", action: s.exportCurrent).buttonStyle(.borderedProminent)
-      Button("整卷导出 \(s.filteredPhotos.count) 张…") { s.presentRollExport() }
-        .disabled(s.filteredPhotos.isEmpty)
-      Button("导出勾选的 \(s.visibleCheckedPhotos.count) 张…", action: s.exportBatch)
-        .disabled(s.visibleCheckedPhotos.isEmpty)
-      Button("发送到整卷排版…") { s.presentTransfer("sheet") }
-      Button("索引到胶卷库…") { s.presentTransfer("archive") }
     }
   }
   @ViewBuilder private var sheetForm: some View {
@@ -433,6 +398,7 @@ struct WorkbenchInspector: View {
 
 struct NumericControl: View {
   @Environment(\.compactDevelopControls) private var compact
+  @Environment(WorkbenchState.self) private var state
   let title: String
   @Binding var value: Double
   let range: ClosedRange<Double>
@@ -462,7 +428,10 @@ struct NumericControl: View {
     }
   }
   private var slider: some View {
-    Slider(value: $value, in: range, step: step).labelsHidden().accessibilityLabel(title)
+    Slider(value: $value, in: range, step: step, onEditingChanged: { editing in
+      state.adjustmentGesture = editing
+      if !editing && state.pendingAutoBefore != nil { state.commitAutoSync() }
+    }).labelsHidden().accessibilityLabel(title)
   }
   private var valueField: some View {
     TextField(

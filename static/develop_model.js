@@ -17,11 +17,15 @@
     p.geometry_source='manual';return p;
   }
   function selection(paths,selected,anchor,path,shift,toggle){
-    const result=new Set(toggle?selected:[]),i=paths.indexOf(path),j=paths.indexOf(anchor);
+    const result=new Set(toggle||(!shift&&selected.includes(path))?selected:[]),i=paths.indexOf(path),j=paths.indexOf(anchor);
     if(shift&&i>=0&&j>=0)paths.slice(Math.min(i,j),Math.max(i,j)+1).forEach(p=>result.add(p));
     else if(toggle&&result.has(path))result.delete(path);else result.add(path);
     return [...result];
   }
   function gammaPatch(report){return report&&Number.isFinite(report.recommendation)&&['gamma','nd_gamma'].includes(report.parameter_key)&&['high','medium'].includes(report.confidence)&&report.recommendation>=(report.parameter_key==='gamma'?.6:1)&&report.recommendation<=(report.parameter_key==='gamma'?3:8)?{[report.parameter_key]:report.recommendation}:null;}
-  const api={orient,selection,gammaPatch};if(typeof module!=='undefined')module.exports=api;else root.NMDevelopModel=api;
+  function changedFields(before,after,groups){
+    const get=(p,id)=>id.split('.').reduce((v,k)=>v?.[k],p);
+    return groups.flatMap(g=>g.fields||[]).map(f=>f.id).filter(id=>JSON.stringify(get(before,id)??(id.startsWith('hsl.')?0:null))!==JSON.stringify(get(after,id)??(id.startsWith('hsl.')?0:null)));
+  }
+  const api={orient,selection,gammaPatch,changedFields};if(typeof module!=='undefined')module.exports=api;else root.NMDevelopModel=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

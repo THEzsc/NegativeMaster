@@ -19,7 +19,7 @@ if str(SUPPORT) not in sys.path:
     sys.path.insert(0, str(SUPPORT))
 from native_preview import PreviewCache
 from native_batch import snapshot, apply, restore
-from native_sync import catalog, patch_for
+from native_sync import catalog, patch_for, fields_patch, orientation_patch
 from native_film import fresh_params, emulsion_patch
 from native_detail import render_detail
 
@@ -76,7 +76,10 @@ def create_workbench_blueprint(gui):
             kind = b.get('kind', 'batch')
             flags = {}
             if kind == 'sync':
-                patch = patch_for(b.get('groups'), b.get('source'), gui.DEFAULTS)
+                patch = ({'geometry_source':'manual'} if 'operation' in b else (fields_patch(b['fields'], b['source'], adjustments(b['path'])['params'], gui.DEFAULTS)
+                         if b.get('fields') else patch_for(b.get('groups'), b.get('source'), gui.DEFAULTS)))
+                if 'operation' in b:
+                    patch = orientation_patch(adjustments(b['path'])['params'], b['operation'])
                 flags['sync'] = True
             elif kind == 'film':
                 flags['film'] = True

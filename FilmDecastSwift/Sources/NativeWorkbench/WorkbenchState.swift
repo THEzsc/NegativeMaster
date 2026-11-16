@@ -53,7 +53,7 @@ import UniformTypeIdentifiers
   }
   var checked: Set<String> = []
   var selectionAnchor: String?
-  var filmstripBottom = UserDefaults.standard.bool(forKey: "native.filmstripBottom") {
+  var filmstripBottom = UserDefaults.standard.object(forKey: "native.filmstripBottom") == nil ? true : UserDefaults.standard.bool(forKey: "native.filmstripBottom") {
     didSet { UserDefaults.standard.set(filmstripBottom, forKey: "native.filmstripBottom") }
   }
   var thumbnailDone = 0
@@ -133,7 +133,21 @@ import UniformTypeIdentifiers
   var editingBatch: Bool { applyingFilm || applyingSync }
   var syncGroups: [J] = []
   var syncSelected: Set<String> = []
-  var syncScope = "roll"
+  var syncScope = "selected"
+  var autoSync = false
+  var showSyncDialog = false
+  var syncCopyMode = false
+  var copiedAdjustments: J = .null
+  var copiedFields: [String] = []
+  var soloPanels = false
+  var showDevelopExport = false
+  var syncStop = false
+  var pendingAutoBefore: J?
+  var pendingAutoPath: String?
+  var pendingAutoTargets: [String] = []
+  var pendingAutoFields: Set<String> = []
+  var adjustmentGesture = false
+  @ObservationIgnored var autoSyncTask: Task<Void, Never>?
   var syncUndo: [String: String] = [:]
   @ObservationIgnored var syncTask: Task<Void, Never>?
   @ObservationIgnored var filmTask: Task<Void, Never>?
@@ -161,7 +175,9 @@ import UniformTypeIdentifiers
   }
 
   func setDevelopPanel(_ id: String, expanded: Bool) {
-    if expanded { expandedDevelopPanels.insert(id) } else { expandedDevelopPanels.remove(id) }
+    if expanded {
+      if soloPanels && !["histogram", "crop"].contains(id) { expandedDevelopPanels = expandedDevelopPanels.intersection(["histogram", "crop"]) }
+      expandedDevelopPanels.insert(id) } else { expandedDevelopPanels.remove(id) }
     if id == "crop", !expanded, selectionTool == "crop" { selectionTool = "" }
     UserDefaults.standard.set(expandedDevelopPanels.sorted(), forKey: "native.expandedDevelopPanels")
   }
@@ -191,6 +207,7 @@ import UniformTypeIdentifiers
   var sheetFormat = "png"
   var layoutNames: [String] = []
   var selectedLayout = ""
+  var historyRevision = 0
   var canUndo = false
   var canRedo = false
   var draftAvailable = false
@@ -201,8 +218,8 @@ import UniformTypeIdentifiers
   @ObservationIgnored private var sheetTask: Task<Void, Never>?
   @ObservationIgnored private var draftTask: Task<Void, Never>?
   @ObservationIgnored var saveTask: Task<Void, Never>?
-  @ObservationIgnored private var undoStack: [J] = []
-  @ObservationIgnored private var redoStack: [J] = []
+  @ObservationIgnored var undoStack: [J] = []
+  @ObservationIgnored var redoStack: [J] = []
   private var lastEdit = Date.distantPast
   private var editKey = ""
   private var revision = 0
@@ -240,7 +257,7 @@ import UniformTypeIdentifiers
   }
   var snapshot: J {
     .object([
-      "workspace": .string(workspace.rawValue), "params": params, "config": sheetConfig,
+      "path": .string(selected ?? ""), "workspace": .string(workspace.rawValue), "params": params, "config": sheetConfig,
       "cropAspect": .string(cropAspect),
       "stock": .string(stockID), "frames": frames,
       "order": .array(sheetPhotos.map { .number(Double($0.sheetID)) }),
@@ -248,8 +265,8 @@ import UniformTypeIdentifiers
     ])
   }
   func remember(_ key: String = UUID().uuidString) {
-    if key != editKey || Date().timeIntervalSince(lastEdit) > 0.6 {
-      undoStack.append(snapshot)
+    if key != editKey || undoStack.last?["path"].string != (selected ?? "") || Date().timeIntervalSince(lastEdit) > 0.6 {
+      var entry = snapshot; entry["label"] = .string(editTitle(key)); undoStack.append(entry)
       if undoStack.count > 80 { undoStack.removeFirst() }
     }
     lastEdit = Date()
@@ -257,11 +274,18 @@ import UniformTypeIdentifiers
     redoStack.removeAll()
     historyFlags()
   }
-  private func historyFlags() {
+  func historyFlags() {
+    historyRevision += 1
     canUndo = !undoStack.isEmpty
     canRedo = !redoStack.isEmpty
   }
   private func restore(_ s: J) {
+    if !s["path"].string.isEmpty && s["path"].string != selected {
+      persistNow(); selectRevision += 1; renderTask?.cancel(); renderTask = nil; renderEpoch += 1
+      invalidateDetail(resetDemand: true)
+      selected = s["path"].string; parameterPath = selected
+      checked.insert(s["path"].string)
+    }
     workspace = Workspace(rawValue: s["workspace"].string) ?? .develop
     params = s["params"]
     if case .string(let aspect) = s["cropAspect"] { cropAspect = aspect }
@@ -279,16 +303,40 @@ import UniformTypeIdentifiers
     historyFlags()
   }
   func undo() {
+    if pendingAutoBefore != nil { commitAutoSync { self.undo() }; return }
     guard !editingBatch else { return }
+    if undoStack.last?["batch"].array.isEmpty == false { restoreBatchHistory(redo: false); return }
     guard let s = undoStack.popLast() else { return }
-    redoStack.append(snapshot)
-    restore(s)
+    restorePhotoHistory(s, redo: false)
   }
   func redo() {
     guard !editingBatch else { return }
+    if redoStack.last?["batch"].array.isEmpty == false { restoreBatchHistory(redo: true); return }
     guard let s = redoStack.popLast() else { return }
-    undoStack.append(snapshot)
-    restore(s)
+    restorePhotoHistory(s, redo: true)
+  }
+  private func restorePhotoHistory(_ entry: J, redo: Bool) {
+    let path = entry["path"].string
+    if !path.isEmpty && path != selected {
+      persistNow(); let pending = saveTask; busy = true
+      Task {
+        await pending?.value
+        do {
+          let result = try await engine.call(.object(["action": .string("adjustments"), "body": .object(["path": .string(path)])]))
+          var inverse = entry; inverse["params"] = result["params"]
+          if redo { undoStack.append(inverse) } else { redoStack.append(inverse) }
+          restore(entry)
+        } catch {
+          if redo { redoStack.append(entry) } else { undoStack.append(entry) }
+          failure(error)
+        }
+        busy = false; historyFlags()
+      }
+    } else {
+      var inverse = snapshot; inverse["label"] = entry["label"]
+      if redo { undoStack.append(inverse) } else { redoStack.append(inverse) }
+      restore(entry)
+    }
   }
   func failure(_ e: Error) {
     if e is CancellationError { return }
@@ -306,7 +354,7 @@ import UniformTypeIdentifiers
       fields = r["fields"].array.map { ControlField(value: $0) }
       stocks = r["stocks"].array
       syncGroups = r["syncGroups"].array
-      syncSelected = Set(syncGroups.filter { $0["selected"].bool }.map { $0["id"].string })
+      syncSelected = Set(syncGroups.filter { $0["selected"].bool }.flatMap { $0["fields"].array.map { $0["id"].string } })
       presetNames = r["presets"].array.map(\.string)
       if let first = stocks.first { applyStock(first["id"].string, record: false) }
       layoutNames = layouts.object.keys.sorted()
@@ -317,6 +365,13 @@ import UniformTypeIdentifiers
   }
   func setParam(_ key: String, _ value: J) {
     guard !editingBatch else { return }
+    guard params.at(key) != value else { return }
+    if autoSync && !syncTargets.isEmpty || pendingAutoBefore != nil {
+      stageAutoSync(key)
+      params.put(key, value)
+      if ["crop_rect", "level_angle"].contains(key) { params["geometry_source"] = .string("manual") }
+      queueRender(); scheduleAutoSync(); return
+    }
     remember("p." + key)
     params.put(key, value)
     if ["crop_rect", "level_angle"].contains(key) { params["geometry_source"] = .string("manual") }
@@ -363,6 +418,7 @@ import UniformTypeIdentifiers
     acceptURLs([URL(fileURLWithPath: path)])
   }
   func flushBeforeQuit() async {
+    if pendingAutoBefore != nil { commitAutoSync() }
     await filmTask?.value
     await syncTask?.value
     saveTask?.cancel()
@@ -422,7 +478,9 @@ import UniformTypeIdentifiers
     }
   }
   func openFolder(_ u: URL) {
+    if pendingAutoBefore != nil { commitAutoSync { self.openFolder(u) }; return }
     guard !editingBatch else { return }
+    autoSync = false; undoStack = []; redoStack = []; historyFlags()
     invalidateDetail(resetDemand: true)
     stopThumbnailGeneration()
     persistNow()
@@ -461,6 +519,7 @@ import UniformTypeIdentifiers
     }
   }
   func select(_ path: String) {
+    if pendingAutoBefore != nil { commitAutoSync { self.select(path) }; return }
     guard !editingBatch else { return }
     guard selected != path else { return }
     invalidateDetail(resetDemand: true)
@@ -473,8 +532,6 @@ import UniformTypeIdentifiers
     zoom = 1
     selectionTool = ""
     showNegative = false
-    undoStack = []
-    redoStack = []
     historyFlags()
     renderTask?.cancel()
     renderTask = nil
@@ -506,6 +563,7 @@ import UniformTypeIdentifiers
     }
   }
   func removePhotoFromList(_ path: String) {
+    if pendingAutoBefore != nil { commitAutoSync { self.removePhotoFromList(path) }; return }
     guard !busy, !analyzing, photos.contains(where: { $0.path == path }) else { return }
     let visible = filteredPhotos.map(\.path)
     let index = visible.firstIndex(of: path) ?? 0
@@ -562,7 +620,7 @@ import UniformTypeIdentifiers
     return p
   }
   func persistSoon() {
-    guard !editingBatch else { return }
+    guard pendingAutoBefore == nil, !editingBatch else { return }
     saveTask?.cancel()
     guard let path = selected, parameterPath == path else { return }
     let p = params
@@ -579,7 +637,7 @@ import UniformTypeIdentifiers
     }
   }
   func persistNow(sidecar: Bool = true) {
-    guard !editingBatch else { return }
+    guard pendingAutoBefore == nil, !editingBatch else { return }
     saveTask?.cancel()
     guard let path = selected, parameterPath == path else { return }
     let p = params
@@ -668,6 +726,7 @@ import UniformTypeIdentifiers
     guard !editingBatch, delta % 90 == 0 else { return }
     let turns = (delta / 90 % 4 + 4) % 4
     guard turns != 0 else { return }
+    if syncOrientation(.string(turns == 3 ? "ccw" : "cw")) { return }
     remember()
     let operation: DevelopOrientation = turns == 3 ? .counterclockwise : .clockwise
     for _ in 0..<(turns == 3 ? 1 : turns) {
@@ -679,13 +738,15 @@ import UniformTypeIdentifiers
   }
   func mirror(_ axis: String) {
     guard !editingBatch, axis == "h" || axis == "v" else { return }
+    if syncOrientation(.string(axis)) { return }
     remember()
     params = (axis == "h" ? DevelopOrientation.horizontal : .vertical).applying(to: params)
     queueRender()
     persistSoon()
   }
   func autoCrop() {
-    guard let path = selected else { return }
+    if pendingAutoBefore != nil { commitAutoSync { self.autoCrop() }; return }
+    guard let path = selected, !busy else { return }
     busy = true
     var b = params
     b["path"] = .string(path)
@@ -728,11 +789,10 @@ import UniformTypeIdentifiers
       do {
         let r = try await engine.call(.object(["action": .string("wbtemp"), "body": b]))
         guard selected == path, revision == token else { return }
-        remember()
-        params["temp"] = r["temp"]
-        params["tint"] = r["tint"]
-        params["wb_rect"] = .null
-        params["wb_point"] = .null
+        var next = params
+        next["temp"] = r["temp"]; next["tint"] = r["tint"]
+        next["wb_rect"] = .null; next["wb_point"] = .null
+        replaceDevelop(next, title: "白平衡取样")
         queueRender()
         persistSoon()
       } catch { failure(error) }
@@ -740,10 +800,7 @@ import UniformTypeIdentifiers
   }
   func resetDevelop() {
     guard !editingBatch else { return }
-    remember()
-    params = defaults
-    queueRender()
-    persistSoon()
+    replaceDevelop(defaults, title: "重置调整")
   }
   func pickReference() {
     let p = NSOpenPanel()
@@ -782,8 +839,9 @@ import UniformTypeIdentifiers
       do {
         let r = try await engine.api("/api/presets?name=" + escaped(name), method: "GET")
         guard selected == path, selectRevision == selection, !editingBatch else { return }
-        remember()
-        for (k, v) in r["data"].object { params[k] = v }
+        if autoSync && !syncTargets.isEmpty {
+          for (k,v) in r["data"].object { setParam(k,v) }
+        } else { remember(); for (k, v) in r["data"].object { params[k] = v } }
         selectedPreset = name
         queueRender()
         persistSoon()
@@ -805,6 +863,7 @@ import UniformTypeIdentifiers
     if filmAppliesToRoll {
       applyFilmToRoll(.object(["emulsion": .bool(enabled)]))
     } else {
+      if syncOrientation(.bool(enabled)) { return }
       remember()
       params = DevelopOrientation.applyingEmulsion(enabled, to: params)
       gammaAnalysis = .null

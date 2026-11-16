@@ -57,6 +57,7 @@ extension WorkbenchState {
   var automationUndoCount: Int { automationRows.filter { $0.applied && $0.undoID != nil }.count }
 
   func presentRollAutomation(_ kind: String) {
+    if pendingAutoBefore != nil { commitAutoSync { self.presentRollAutomation(kind) }; return }
     guard ready, !busy, !analyzing, workspace == .develop else { return }
     NSApp?.keyWindow?.makeFirstResponder(nil)
     automationKind = kind; automationScope = "visible"; automationPhase = "configure"

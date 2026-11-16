@@ -81,8 +81,26 @@ def apply(gui, root, path, patch, expected, read_adjustments, *, film=False, syn
     except OSError as exc:
         warnings.append('XML 已保存，内部缓存未同步：' + str(exc))
     receipt['after'] = snapshot(gui, path)[2]
+    receipt['after_params'] = read_adjustments(path)['params']
+    receipt['after_records'] = semantic_records(gui, snapshot(gui, path)[1])
     atomic_text(receipt_path, json.dumps(receipt, ensure_ascii=False))
     return dict(ok=True, undo_id=identifier, params=read_adjustments(path)['params'], warnings=warnings)
+
+
+def semantic_records(gui, texts):
+    """Accept harmless serialization changes, but protect both XML and cache metadata."""
+    records = []
+    for index, text in enumerate(texts):
+        if text is None:
+            records.append(None)
+            continue
+        data = gui._xml_to_data(text) if index == 0 else json.loads(text)
+        params = dict(gui.DEFAULTS, **data.get('P', {}))
+        if data.get('cropN'):
+            params['crop_rect'] = [data['cropN'][key] for key in ('x0','y0','x1','y1')]
+        params['geometry_source'] = data.get('geometrySource', 'manual')
+        records.append(dict(params=params, metadata={k:v for k,v in data.items() if k not in ('P','cropN','geometrySource')}))
+    return records
 
 
 def restore(gui, root, identifier, read_adjustments):
@@ -91,12 +109,20 @@ def restore(gui, root, identifier, read_adjustments):
     receipt_path = Path(root) / 'batch_history' / (identifier + '.json')
     receipt = json.loads(receipt_path.read_text())
     path = receipt['path']
-    files, _, token = snapshot(gui, path)
-    if not receipt.get('after') or receipt['after'] != token:
+    files, current_texts, token = snapshot(gui, path)
+    if not receipt.get('after') or (receipt['after'] != token and receipt.get('after_records') != semantic_records(gui, current_texts)):
         raise ValueError('批量处理后照片参数已改变，未覆盖后续调整')
+    inverse = dict(path=path, before=current_texts, after=None)
+    inverse_id = uuid.uuid4().hex
+    inverse_path = Path(root) / 'batch_history' / (inverse_id + '.json')
+    atomic_text(inverse_path, json.dumps(inverse, ensure_ascii=False))
     for file, text in zip(files, receipt['before']):
         if text is None:
             file.unlink(missing_ok=True)
         else:
             atomic_text(file, text)
-    return dict(ok=True, path=path, params=read_adjustments(path)['params'])
+    inverse['after'] = snapshot(gui, path)[2]
+    inverse['after_params'] = read_adjustments(path)['params']
+    inverse['after_records'] = semantic_records(gui, snapshot(gui, path)[1])
+    atomic_text(inverse_path, json.dumps(inverse, ensure_ascii=False))
+    return dict(ok=True, path=path, undo_id=inverse_id, params=inverse['after_params'])

@@ -2338,6 +2338,7 @@ $("dir").addEventListener("keydown",e=>{ if(e.key!=="Enter")return;
 // ---- 载入 + 每张图参数记忆 ----
 let loadSequence=0;
 async function loadFile(path){
+  if(window.NMClassic)await window.NMClassic.flush();
   if(batchBusy){stat("正在批量导出，请先取消或等待完成");return;}
   const sequence=++loadSequence;
   const wasLoaded=loaded;loaded=false;rdirty=false;
@@ -2416,6 +2417,7 @@ function persistSnapshot(snapshot){
 }
 function flushAutosave(){clearTimeout(xmlTimer);const snapshot=pendingSave;pendingSave=null;return persistSnapshot(snapshot);}
 function autosaveXml(){
+  if(window.NMClassic?.ownsSaving)return;
   if(!curFile) return;
   const sig=settingsSig();
   const latest=pendingSave?.path===curFile?pendingSave.sig:(queuedSignatures.get(curFile)||lastSavedSig);
@@ -2611,7 +2613,8 @@ INDEX_HTML = INDEX_HTML.replace('</body>', '<script src="/static/legacy_bridge.j
 INDEX_HTML = INDEX_HTML.replace('</head>', '<link rel="stylesheet" href="/static/workflow.css"><link rel="stylesheet" href="/static/web_parity.css"></head>')
 INDEX_HTML = INDEX_HTML.replace('</body>', '<script src="/static/workflow_model.js"></script>'
                                '<script src="/static/workflow.js"></script>'
-                               '<script src="/static/develop_model.js"></script><script src="/static/web_parity.js"></script></body>')
+                               '<script src="/static/develop_model.js"></script><script src="/static/web_parity.js"></script>'
+                               '<script src="/static/classic_workbench.js"></script></body>')
 INDEX_HTML = INDEX_HTML.replace('<title>胶片去色罩 · 可视化</title>',
                                '<title>调片 · NegativeMaster</title>')
 INDEX_HTML = INDEX_HTML.replace('<h1>胶片去色罩 · 可视化', '<h1>调片设置')

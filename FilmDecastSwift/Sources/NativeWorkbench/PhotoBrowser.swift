@@ -3,6 +3,7 @@ import AppKit
 
 extension WorkbenchState {
   func selectPhoto(_ path: String, extending: Bool = false, toggling: Bool = false) {
+    if pendingAutoBefore != nil { commitAutoSync { self.selectPhoto(path, extending: extending, toggling: toggling) }; return }
     guard !editingBatch else { return }
     let paths = filteredPhotos.map(\.path)
     guard let index = paths.firstIndex(of: path) else { return }
@@ -22,7 +23,7 @@ extension WorkbenchState {
       checked.insert(path)
       selectionAnchor = path
     } else {
-      checked = [path]
+      if !checked.contains(path) { checked = [path] }
       selectionAnchor = path
     }
     select(path)
@@ -72,13 +73,21 @@ struct PhotoBrowser: View {
   var body: some View {
     VStack(spacing: 0) {
       if horizontal {
-        HStack(spacing: 16) {
-          Text("\(s.filteredPhotos.count) 张 · 已选 \(s.visibleCheckedPhotos.count)").font(.caption).monospacedDigit()
-          TextField("搜索照片", text: bindings.search).textFieldStyle(.roundedBorder).frame(width: 180)
-          Toggle("只显示 RAW", isOn: bindings.rawOnly).toggleStyle(.checkbox)
-          Spacer()
-          Button("生成缩略图", action: s.generateThumbnails).disabled(s.thumbnailDone < s.thumbnailTotal)
-          Button { s.filmstripBottom = false } label: { Image(systemName: "sidebar.left") }.help("照片栏移到左侧")
+        HStack(spacing: 10) {
+          Text("\(s.filteredPhotos.count) 张 · 已选 \(s.visibleCheckedPhotos.count)").font(.caption).monospacedDigit().lineLimit(1)
+          TextField("搜索照片", text: bindings.search).textFieldStyle(.roundedBorder).frame(minWidth: 70, idealWidth: 140, maxWidth: 180)
+          ViewThatFits(in: .horizontal) {
+            Toggle("只显示 RAW", isOn: bindings.rawOnly).toggleStyle(.checkbox).fixedSize()
+            EmptyView()
+          }
+          Spacer(minLength: 0)
+          Menu {
+            Button("全选") { s.checked = Set(s.filteredPhotos.map(\.path)) }
+            Button("清空选择") { s.checked = [] }
+            Toggle("只显示 RAW", isOn: bindings.rawOnly)
+            Button("生成缩略图", action: s.generateThumbnails).disabled(s.thumbnailDone < s.thumbnailTotal)
+            Button("照片栏移到左侧") { s.filmstripBottom = false }
+          } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize().help("照片栏选项")
         }.padding(.horizontal, 16).padding(.top, 10)
       }
       ScrollViewReader { proxy in
@@ -139,7 +148,7 @@ struct PhotoBrowser: View {
       .accessibilityValue(active ? "当前照片，已选择" : selected ? "已选择" : "未选择")
       .contextMenu {
         Button("在 Finder 中显示") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: photo.path)]) }
-        Button("只选择这张") { s.selectPhoto(photo.path) }
+        Button("只选择这张") { s.checked = [photo.path]; s.selectPhoto(photo.path) }
         Divider()
         Button("从列表移除", role: .destructive) { s.removePhotoFromList(photo.path) }
           .disabled(s.busy || s.analyzing)

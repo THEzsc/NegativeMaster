@@ -1,5 +1,6 @@
 """Browser parity must retain full exports, scoped edits and original sidecars."""
 import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -65,6 +66,47 @@ class WebWorkbenchTests(unittest.TestCase):
             new=self.post('snapshot',path=path).json
             if _==1:self.assertEqual(new['params'],snap['params'])
             snap=new
+
+    def test_leaf_sync_preserves_hsl_siblings_and_supports_repeated_undo_redo(self):
+        path=str(self.path)
+        self.data['P']['hsl']={'red':{'h':10,'s':20,'l':30},'blue':{'h':40}}
+        sidecar=Path(gui.sidecar_path(path));sidecar.write_text(gui._data_to_xml(self.data,path))
+        before=sidecar.read_bytes()
+        snap=self.post('snapshot',path=path).json
+        r=self.post('apply',path=path,token=snap['token'],kind='sync',fields=['hsl.red.h','exposure'],source={'hsl':{'red':{'h':-25,'s':-90}},'exposure':.2,'gamma':2})
+        self.assertEqual(r.status_code,200,r.json)
+        params=r.json['params']
+        self.assertEqual(params['hsl'],{'red':{'h':-25,'s':20,'l':30},'blue':{'h':40}})
+        self.assertEqual(params['gamma'],1.6)
+        after=sidecar.read_bytes()
+        receipt=r.json['undo_id']
+        for expected in [before,after,before,after]:
+            restored=self.post('undo',undo_id=receipt)
+            self.assertEqual(restored.status_code,200,restored.json)
+            self.assertEqual(sidecar.read_bytes(),expected)
+            receipt=restored.json['undo_id']
+
+    def test_undo_preserves_later_internal_cache_metadata(self):
+        path=str(self.path);snap=self.post('snapshot',path=path).json
+        result=self.post('apply',path=path,token=snap['token'],kind='sync',fields=['exposure'],source={'exposure':.2})
+        self.assertEqual(result.status_code,200,result.json)
+        cache=Path(gui.settings_file(path));data=json.loads(cache.read_text());data['user_note']='keep this later note';cache.write_text(json.dumps(data))
+        before=cache.read_bytes()
+        rejected=self.post('undo',undo_id=result.json['undo_id'])
+        self.assertEqual(rejected.status_code,400)
+        self.assertEqual(cache.read_bytes(),before)
+
+    def test_orientation_operation_preserves_individual_geometry(self):
+        path=str(self.path);snap=self.post('snapshot',path=path).json
+        original=snap['params']
+        for op in ['cw','ccw']:
+            r=self.post('apply',path=path,token=snap['token'],kind='sync',operation=op)
+            self.assertEqual(r.status_code,200,r.json)
+            snap=self.post('snapshot',path=path).json
+        for key in ['crop_rect','rotate','flip','gamma']:
+            if isinstance(original[key],list):
+                for a,b in zip(original[key],snap['params'][key]):self.assertAlmostEqual(a,b)
+            else:self.assertEqual(snap['params'][key],original[key])
 
     def test_bounded_preview_never_becomes_export_source(self):
         path=str(self.path)
