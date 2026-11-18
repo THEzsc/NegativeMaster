@@ -20,6 +20,14 @@ private final class ObservationChanges: @unchecked Sendable {
   }
 }
 final class NativeWorkbenchTests: XCTestCase {
+  func testPortableReleaseRetainsExistingProjectDataLocation() {
+    let home = URL(fileURLWithPath: "/Users/release-user")
+    let config = J.object(["sourceRelativeToHome": .string("Pictures/胶片扫描/去色罩工具")])
+    XCTAssertEqual(RuntimeDataLocation.original(config, fallback: "/bundle", home: home), "/Users/release-user/Pictures/胶片扫描/去色罩工具")
+    XCTAssertEqual(RuntimeDataLocation.original(.object(["source": .string("/existing/project")]), fallback: "/bundle", home: home), "/existing/project")
+    XCTAssertEqual(RuntimeDataLocation.original(nil, fallback: "/bundle", home: home), "/bundle")
+  }
+
   @MainActor func testArchiveSingleSelectionRangeAndDetailsAreSeparate() {
     let a = ArchiveState()
     let frames: [J] = (1...4).map { .object(["id": .string("frame-\($0)")]) }

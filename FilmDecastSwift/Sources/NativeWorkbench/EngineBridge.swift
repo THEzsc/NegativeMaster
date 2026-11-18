@@ -5,6 +5,16 @@ struct WorkbenchError: LocalizedError {
   var errorDescription: String? { message }
 }
 
+enum RuntimeDataLocation {
+  static func original(_ configuration: J?, fallback: String, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> String {
+    if let relative = configuration?["sourceRelativeToHome"].string, !relative.isEmpty {
+      return home.appendingPathComponent(relative).path
+    }
+    if let source = configuration?["source"].string, !source.isEmpty { return source }
+    return fallback
+  }
+}
+
 /// A serial, persistent local worker. Images never leave the machine; no HTTP listener.
 private final class WorkerConnection {
   private let background: Bool
@@ -52,7 +62,7 @@ private final class WorkerConnection {
     env.removeValue(forKey: "PYTHONPATH")
     if python == bundledPython { env["PYTHONHOME"] = bundledRuntime?.path }
     // Keep saved adjustments and presets beside the original project across app updates.
-    let original = runtime?["source"].string ?? root.path
+    let original = RuntimeDataLocation.original(runtime, fallback: root.path)
     if let configured = env["NM_DATA_ROOT"], !configured.isEmpty {
       // Honor an explicit data root, including isolated verification sessions.
     } else if FileManager.default.fileExists(atPath: original + "/presets") {

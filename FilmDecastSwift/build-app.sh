@@ -67,9 +67,11 @@ done
 cp "$SOURCE_DIR/Support/native_worker.py" "$SOURCE_DIR/Support/native_preview.py" "$SOURCE_DIR/Support/native_detail.py" "$SOURCE_DIR/Support/native_film.py" "$SOURCE_DIR/Support/native_runtime.py" "$SOURCE_DIR/Support/native_batch.py" "$SOURCE_DIR/Support/native_sync.py" "$SOURCE_DIR/Support/sheet-defaults.json" "$APP_PATH/Contents/Resources/Engine/FilmDecastSwift/Support/"
 "$PYTHON" "$SOURCE_DIR/Support/package_runtime.py" "$APP_PATH/Contents/Resources/Runtime"
 "$PYTHON" - "${NM_DATA_ROOT:-$PROJECT_DIR}" "$APP_PATH/Contents/Resources/Runtime.json" <<'PYCODE'
-import json,sys
+import json,sys,os
 from pathlib import Path
-Path(sys.argv[2]).write_text(json.dumps(dict(source=sys.argv[1])))
+config = (dict(sourceRelativeToHome="Pictures/胶片扫描/去色罩工具")
+          if os.environ.get("NM_RELEASE_PACKAGE") == "1" else dict(source=sys.argv[1]))
+Path(sys.argv[2]).write_text(json.dumps(config))
 PYCODE
 mkdir -p "$SOURCE_DIR/.build/AppIcon.iconset"
 swift "$SOURCE_DIR/Support/make-icon.swift" "$SOURCE_DIR/.build/AppIcon.iconset"
